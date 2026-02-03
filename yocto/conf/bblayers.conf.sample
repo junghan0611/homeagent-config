@@ -1,0 +1,29 @@
+# HomeAgent Yocto Layer Configuration
+# Copy to build/conf/bblayers.conf after oe-init-build-env
+
+# POKY_BBLAYERS_CONF_VERSION is increased each time build/conf/bblayers.conf
+# changes incompatibly
+POKY_BBLAYERS_CONF_VERSION = "2"
+
+BBPATH = "${TOPDIR}"
+BBFILES ?= ""
+
+# Adjust SOURCES to your actual path
+SOURCES = "${TOPDIR}/../sources"
+
+BBLAYERS ?= " \
+  ${SOURCES}/poky/meta \
+  ${SOURCES}/poky/meta-poky \
+  ${SOURCES}/poky/meta-yocto-bsp \
+  \
+  ${SOURCES}/meta-openembedded/meta-oe \
+  ${SOURCES}/meta-openembedded/meta-python \
+  ${SOURCES}/meta-openembedded/meta-networking \
+  ${SOURCES}/meta-openembedded/meta-multimedia \
+  \
+  ${SOURCES}/meta-raspberrypi \
+  \
+  ${SOURCES}/meta-clang \
+  \
+  ${SOURCES}/meta-flutter \
+  "

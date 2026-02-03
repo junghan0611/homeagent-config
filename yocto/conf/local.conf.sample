@@ -1,0 +1,73 @@
+# HomeAgent Yocto Build Configuration
+# Copy to build/conf/local.conf after oe-init-build-env
+
+# Machine: Raspberry Pi 5
+MACHINE = "raspberrypi5"
+
+# Distro features
+DISTRO_FEATURES:append = " systemd wifi bluetooth"
+DISTRO_FEATURES_BACKFILL_CONSIDERED:append = " sysvinit"
+VIRTUAL-RUNTIME_init_manager = "systemd"
+VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
+
+# OpenGL ES / Wayland
+DISTRO_FEATURES:append = " opengl wayland"
+
+# Thread/Matter support
+DISTRO_FEATURES:append = " ipv6"
+
+# Flutter support (meta-clang)
+CLANGSDK = "1"
+
+# Parallel build settings (adjust to your system)
+BB_NUMBER_THREADS ?= "8"
+PARALLEL_MAKE ?= "-j 8"
+
+# Download/cache directories (persistent)
+DL_DIR ?= "${TOPDIR}/../downloads"
+SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"
+
+# SDK target (for cross-compilation)
+SDKMACHINE = "x86_64"
+
+# Extra packages for development
+IMAGE_INSTALL:append = " \
+    openssh \
+    openssh-sftp-server \
+    nano \
+    htop \
+    "
+
+# OpenThread Border Router
+IMAGE_INSTALL:append = " \
+    ot-br-posix \
+    "
+
+# Flutter development (optional - large)
+# IMAGE_INSTALL:append = " packagegroup-flutter-sdk-deps"
+
+# Mesa for RPi5 GPU
+IMAGE_INSTALL:append = " \
+    libegl-mesa \
+    libgles2-mesa \
+    "
+
+# Kernel modules
+IMAGE_INSTALL:append = " \
+    kernel-modules \
+    "
+
+# Firmware
+IMAGE_INSTALL:append = " \
+    linux-firmware-rpidistro-bcm43455 \
+    bluez-firmware-rpidistro-bcm4345c0-hcd \
+    "
+
+# SD card image format
+IMAGE_FSTYPES = "wic.bz2 wic.bmap"
+
+# License compliance
+LICENSE_FLAGS_ACCEPTED = "synaptics-killswitch"
+
+# Extra disk space (MB)
+IMAGE_ROOTFS_EXTRA_SPACE = "1048576"

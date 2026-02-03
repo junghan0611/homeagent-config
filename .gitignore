@@ -1,0 +1,61 @@
+# Yocto build artifacts
+yocto/build/
+yocto/downloads/
+yocto/sstate-cache/
+*.wic
+*.wic.bz2
+*.wic.gz
+
+# Go
+go/bin/
+go/pkg/
+
+# Zig
+zig/zig-cache/
+zig/zig-out/
+zig-cache/
+zig-out/
+
+# Flutter
+flutter/.dart_tool/
+flutter/.packages
+flutter/build/
+flutter/.flutter-plugins
+flutter/.flutter-plugins-dependencies
+flutter/pubspec.lock
+
+# AI models (large files)
+models/*.onnx
+models/*.tflite
+!models/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nix
+result
+result-*
+
+# Logs
+*.log
+logs/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Beads internal (keep issues.jsonl)
+.beads/*.db
+.beads/*.db-journal
+.beads/*.db-wal
+.beads/*.db-shm

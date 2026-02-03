@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # HomeAgent Yocto Layer Setup Script
 #
 # Usage: ./setup-layers.sh [--link]

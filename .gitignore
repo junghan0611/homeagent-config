@@ -6,6 +6,13 @@ yocto/sstate-cache/
 *.wic.bz2
 *.wic.gz
 
+# Yocto sources (cloned by setup-layers.sh)
+yocto/sources/poky/
+yocto/sources/meta-openembedded/
+yocto/sources/meta-raspberrypi
+yocto/sources/meta-clang/
+yocto/sources/meta-flutter
+
 # Go
 go/bin/
 go/pkg/
@@ -59,3 +66,12 @@ logs/
 .beads/*.db-journal
 .beads/*.db-wal
 .beads/*.db-shm
+.beads/.local_version
+.beads/config.yaml
+.beads/metadata.json
+
+# direnv
+.direnv/
+
+# Agent shell
+.agent-shell/

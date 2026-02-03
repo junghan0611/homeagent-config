@@ -75,19 +75,32 @@
 
           multiPkgs = pkgs: [ pkgs.zlib ];
 
+          # 호스트 NixOS PATH 유지 (home은 쓰기 가능하게)
+          extraBwrapArgs = [
+            "--ro-bind /nix /nix"
+            "--bind /home /home"
+          ];
+
           runScript = pkgs.writeShellScript "homeagent-yocto-init" ''
+            # 호스트 NixOS 도구 PATH 추가 (FHS /usr/bin 우선, 호스트 도구 뒤에)
+            export PATH="/usr/bin:/usr/sbin:$PATH:$HOME/.local/bin:/etc/profiles/per-user/$USER/bin"
+
             echo "============================================"
-            echo "  HomeAgent Yocto Build Environment"
+            echo "  HomeAgent Yocto Build Environment (FHS)"
             echo "============================================"
             echo ""
-            echo "Quick Start:"
-            echo "  1. cd yocto/sources && ./setup-layers.sh"
-            echo "  2. source poky/oe-init-build-env ../build"
-            echo "  3. bitbake core-image-weston"
+            echo "Yocto 빌드:"
+            echo "  cd yocto"
+            echo "  source sources/poky/oe-init-build-env build"
+            echo "  bitbake core-image-weston"
             echo ""
-            echo "Target: Raspberry Pi 5"
-            echo "Layers: poky, meta-raspberrypi, meta-openembedded,"
-            echo "        meta-clang"
+            echo "SD 카드 플래싱:"
+            echo "  bmaptool copy <image>.wic.bz2 /dev/sdX"
+            echo ""
+            echo "시리얼 콘솔:"
+            echo "  picocom -b 115200 /dev/ttyUSB0"
+            echo ""
+            echo "Target: Raspberry Pi 5 (scarthgap)"
             echo "============================================"
 
             exec bash "$@"
@@ -98,7 +111,7 @@
         packages.default = fhsEnv;
 
         devShells = {
-          # Yocto 빌드 환경 (FHS 격리)
+          # Yocto 빌드 환경 (direnv용 - FHS 진입 안내)
           default = pkgs.mkShell {
             name = "homeagent-yocto";
 
@@ -113,10 +126,16 @@
             ];
 
             shellHook = ''
-              if [[ -z "$IN_HOMEAGENT_FHS" ]]; then
-                export IN_HOMEAGENT_FHS=1
-                exec ${fhsEnv}/bin/homeagent-yocto
-              fi
+              echo "============================================"
+              echo "  HomeAgent Yocto Build Environment"
+              echo "============================================"
+              echo ""
+              echo "Yocto 빌드는 FHS 환경이 필요합니다:"
+              echo "  nix run"
+              echo ""
+              echo "개발 환경 (Zig/Go/Flutter):"
+              echo "  nix develop .#dev"
+              echo "============================================"
             '';
           };
 

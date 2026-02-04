@@ -112,22 +112,39 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ## 권장 구성
 
+### Option A: Hailo-8/8L (scarthgap LTS)
+
 ```
 Yocto Branch: scarthgap (5.0 LTS)
 ├── poky                    : scarthgap
 ├── meta-openembedded       : scarthgap
 ├── meta-raspberrypi        : scarthgap
 ├── meta-clang              : scarthgap
-├── meta-hailo              : hailo8-scarthgap ← NEW!
-│   ├── meta-hailo-accelerator (PCIe 드라이버)
-│   ├── meta-hailo-libhailort (HailoRT 4.23.0)
-│   └── meta-hailo-tappas (TAPPAS 5.1.0)
-└── meta-flutter            : scarthgap (커뮤니티) 또는 kirkstone (Sony + 패치)
+├── meta-hailo              : hailo8-scarthgap
+│   └── HailoRT 4.23.0, TAPPAS 5.1.0
+└── meta-flutter            : scarthgap (커뮤니티)
 
-Kernel: 6.6 LTS
-Machine: raspberrypi5
-Distro Features: systemd, wayland, opengl, ipv6
+Kernel: 6.6 LTS | Machine: raspberrypi5
 ```
+
+### Option B: Hailo-10H GenAI (kirkstone)
+
+```
+Yocto Branch: kirkstone (4.0)
+├── poky                    : kirkstone
+├── meta-openembedded       : kirkstone
+├── meta-raspberrypi        : kirkstone (RPi5 지원 ✅)
+├── meta-clang              : kirkstone
+├── meta-hailo              : kirkstone-v5.2.0
+│   └── HailoRT 5.2.0, TAPPAS 5.2.0, GenAI ✅
+└── meta-flutter            : kirkstone (Sony)
+
+Kernel: 6.1 | Machine: raspberrypi5
+```
+
+**선택 기준:**
+- Vision AI만 필요 → **Option A** (LTS, 안정적)
+- GenAI (LLM/VLM/Voice) 필요 → **Option B** (Hailo-10H 필수)
 
 ---
 
@@ -151,13 +168,15 @@ Distro Features: systemd, wayland, opengl, ipv6
 
 ### meta-hailo (Yocto 레이어)
 
-| 항목 | 값 |
-|------|-----|
-| **GitHub** | https://github.com/hailo-ai/meta-hailo |
-| **브랜치** | hailo8-scarthgap |
-| **HailoRT** | 4.23.0 |
-| **TAPPAS** | 5.1.0 |
-| **호환** | scarthgap ✅ |
+| 칩셋 | 브랜치 | HailoRT | Yocto | RPi5 |
+|------|--------|---------|-------|------|
+| **Hailo-8/8L** | `hailo8-scarthgap` | 4.23.0 | scarthgap ✅ | ✅ |
+| **Hailo-10H** | `kirkstone-v5.2.0` | 5.2.0 | kirkstone ⚠️ | ✅ |
+
+**⚠️ Hailo-10H 사용 시 주의:**
+- Hailo-10H (AI HAT+ 2)는 **kirkstone 브랜치만 지원**
+- meta-raspberrypi kirkstone에서 RPi5 지원 ✅
+- GenAI (LLM/VLM) 사용하려면 kirkstone으로 빌드 필요
 
 **레이어 구성:**
 ```
@@ -166,6 +185,8 @@ meta-hailo/
 ├── meta-hailo-libhailort    # HailoRT, pyHailoRT, GStreamer
 └── meta-hailo-tappas        # TAPPAS 프레임워크
 ```
+
+**GitHub**: https://github.com/hailo-ai/meta-hailo
 
 ### hailo-apps (AI 앱)
 

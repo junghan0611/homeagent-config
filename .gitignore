@@ -75,3 +75,4 @@ logs/
 
 # Agent shell
 .agent-shell/
+yocto/sources/meta-hailo

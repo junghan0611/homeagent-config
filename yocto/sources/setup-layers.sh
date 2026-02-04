@@ -7,8 +7,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-YOCTO_BRANCH="scarthgap"  # Yocto 5.0 LTS
-HAILO_BRANCH="hailo8-scarthgap"  # Hailo-8/10H PCIe 가속기
+YOCTO_BRANCH="kirkstone"  # Yocto 4.0 (Hailo-10H GenAI 지원)
+HAILO_BRANCH="kirkstone-v5.2.0"  # Hailo-10H (HailoRT 5.2.0, GenAI)
 
 # 기존 클론 위치 (심볼릭 링크용)
 EXISTING_META_RPI="/home/junghan/repos/3rd/meta-raspberrypi"

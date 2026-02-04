@@ -4,8 +4,8 @@
 # Machine: Raspberry Pi 5
 MACHINE = "raspberrypi5"
 
-# Distro features
-DISTRO_FEATURES:append = " systemd wifi bluetooth"
+# Distro features (usrmerge: scarthgap systemd 필수)
+DISTRO_FEATURES:append = " systemd wifi bluetooth pam usrmerge"
 DISTRO_FEATURES_BACKFILL_CONSIDERED:append = " sysvinit"
 VIRTUAL-RUNTIME_init_manager = "systemd"
 VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
@@ -15,9 +15,6 @@ DISTRO_FEATURES:append = " opengl wayland"
 
 # Thread/Matter support
 DISTRO_FEATURES:append = " ipv6"
-
-# Flutter support (meta-clang)
-CLANGSDK = "1"
 
 # Parallel build settings (adjust to your system)
 BB_NUMBER_THREADS ?= "8"
@@ -30,21 +27,19 @@ SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"
 # SDK target (for cross-compilation)
 SDKMACHINE = "x86_64"
 
+# SSH: openssh 사용 (dropbear 대신)
+EXTRA_IMAGE_FEATURES += "ssh-server-openssh"
+IMAGE_FEATURES:remove = "ssh-server-dropbear"
+BAD_RECOMMENDATIONS += "packagegroup-core-ssh-dropbear dropbear"
+
 # Extra packages for development
 IMAGE_INSTALL:append = " \
-    openssh \
-    openssh-sftp-server \
     nano \
     htop \
     "
 
-# OpenThread Border Router
-IMAGE_INSTALL:append = " \
-    ot-br-posix \
-    "
-
-# Flutter development (optional - large)
-# IMAGE_INSTALL:append = " packagegroup-flutter-sdk-deps"
+# OpenThread Border Router (Phase 2에서 활성화)
+# IMAGE_INSTALL:append = " ot-br-posix"
 
 # Mesa for RPi5 GPU
 IMAGE_INSTALL:append = " \

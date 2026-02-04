@@ -46,6 +46,14 @@ IMAGE_INSTALL:append = " \
     shell-config \
     "
 
+# Zigbee2MQTT + dependencies
+IMAGE_INSTALL:append = " \
+    nodejs \
+    nodejs-npm \
+    mosquitto \
+    mosquitto-clients \
+    "
+
 # OpenThread Border Router (Phase 2에서 활성화)
 # IMAGE_INSTALL:append = " ot-br-posix"
 

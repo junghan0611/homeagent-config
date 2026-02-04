@@ -22,7 +22,7 @@ help() {
     echo "Usage: ./run.sh <command> [args]"
     echo ""
     echo -e "${GREEN}개발 환경:${NC}"
-    echo "  shell           Yocto FHS 빌드 환경 진입 (nix run)"
+    echo "  shell           Yocto FHS 빌드 환경 진입 (nix develop --impure)"
     echo "  status          레이어 브랜치 상태 확인"
     echo ""
     echo -e "${GREEN}레이어 설정:${NC}"
@@ -54,7 +54,7 @@ help() {
 cmd_shell() {
     echo -e "${GREEN}[SHELL]${NC} Yocto FHS 빌드 환경 진입..."
     cd "$SCRIPT_DIR"
-    nix run
+    nix develop --impure
 }
 
 cmd_status() {
@@ -93,7 +93,7 @@ cmd_bb() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix run . -- -c "./run.sh bb $target"
+        exec nix develop --impure --command "./run.sh bb $target"
     fi
     echo -e "${GREEN}[BUILD]${NC} bitbake $target"
     cd "$BUILD_DIR"
@@ -109,7 +109,7 @@ cmd_bb_clean() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix run . -- -c "./run.sh bb $target"
+        exec nix develop --impure --command "./run.sh bb $target"
     fi
     cd "$BUILD_DIR"
     source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
@@ -120,7 +120,7 @@ cmd_bb_resume() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix run . -- -c "./run.sh bb-resume"
+        exec nix develop --impure --command "./run.sh bb-resume"
     fi
     echo -e "${GREEN}[RESUME]${NC} 이전 빌드 계속..."
     cd "$BUILD_DIR"

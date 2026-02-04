@@ -25,5 +25,11 @@ BBLAYERS ?= " \
   \
   ${SOURCES}/meta-clang \
   \
-  ${SOURCES}/meta-flutter \
+  ${SOURCES}/meta-hailo/meta-hailo-accelerator \
+  ${SOURCES}/meta-hailo/meta-hailo-libhailort \
+  ${SOURCES}/meta-hailo/meta-hailo-tappas \
   "
+
+# Note: meta-flutter (Sony)는 kirkstone 기반이라 scarthgap과 호환성 이슈 있음
+# Flutter 필요 시 별도 검증 후 추가
+# ${SOURCES}/meta-flutter \

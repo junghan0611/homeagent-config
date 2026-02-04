@@ -8,10 +8,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YOCTO_BRANCH="scarthgap"  # Yocto 5.0 LTS
+HAILO_BRANCH="hailo8-scarthgap"  # Hailo-8/10H PCIe 가속기
 
 # 기존 클론 위치 (심볼릭 링크용)
 EXISTING_META_RPI="/home/junghan/repos/3rd/meta-raspberrypi"
 EXISTING_META_FLUTTER="/home/junghan/repos/3rd/meta-flutter-sony"
+EXISTING_META_HAILO="/home/junghan/repos/3rd/meta-hailo"
 
 echo "============================================"
 echo "  HomeAgent Yocto Layer Setup"
@@ -40,6 +42,15 @@ setup_link() {
     else
         echo "  [WARN] meta-flutter-sony not found, will clone"
         git clone https://github.com/sony/meta-flutter.git -b kirkstone meta-flutter
+    fi
+
+    # meta-hailo
+    if [ -d "$EXISTING_META_HAILO" ]; then
+        ln -sfn "$EXISTING_META_HAILO" meta-hailo
+        echo "  - meta-hailo -> $EXISTING_META_HAILO"
+    else
+        echo "  [WARN] meta-hailo not found, will clone"
+        git clone https://github.com/hailo-ai/meta-hailo.git -b ${HAILO_BRANCH}
     fi
 }
 
@@ -86,6 +97,15 @@ setup_clone() {
         echo "  [WARN] meta-flutter-sony is kirkstone based, may need patches for ${YOCTO_BRANCH}"
     else
         echo "  - meta-flutter exists, skipping"
+    fi
+
+    # meta-hailo (Hailo-8/10H PCIe 가속기)
+    # HailoRT, TAPPAS, GStreamer 플러그인 제공
+    if [ ! -d "meta-hailo" ] && [ ! -L "meta-hailo" ]; then
+        echo "  - Cloning meta-hailo..."
+        git clone https://github.com/hailo-ai/meta-hailo.git -b ${HAILO_BRANCH}
+    else
+        echo "  - meta-hailo exists, skipping"
     fi
 }
 

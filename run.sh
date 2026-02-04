@@ -29,9 +29,11 @@ help() {
     echo "  layers          레이어 클론/링크 (setup-layers.sh)"
     echo "  layers --link   기존 클론 심볼릭 링크"
     echo ""
-    echo -e "${GREEN}빌드:${NC}"
-    echo "  build [target]  Yocto 빌드 (기본: core-image-weston)"
-    echo "  clean           빌드 캐시 정리"
+    echo -e "${GREEN}빌드 (FHS 환경 내에서):${NC}"
+    echo "  bb [target]     bitbake 빌드 (기본: core-image-weston)"
+    echo "  bb-clean [target] 클린 빌드 (tmp-glibc 삭제 후 빌드)"
+    echo "  bb-resume       이전 빌드 계속"
+    echo "  clean           빌드 캐시 전체 정리 (tmp-glibc, cache, sstate)"
     echo ""
     echo -e "${GREEN}이슈 관리 (br):${NC}"
     echo "  issues          이슈 목록"
@@ -42,9 +44,10 @@ help() {
     echo "  commit          커밋 (br sync 포함)"
     echo ""
     echo "Examples:"
-    echo "  ./run.sh shell              # FHS 환경 진입 후 bitbake"
+    echo "  ./run.sh shell              # FHS 환경 진입"
+    echo "  ./run.sh bb                 # (FHS 내) 빌드"
+    echo "  ./run.sh bb-clean           # (FHS 내) 클린 빌드"
     echo "  ./run.sh status             # 레이어 브랜치 확인"
-    echo "  ./run.sh build              # core-image-weston 빌드"
     echo ""
 }
 
@@ -80,15 +83,49 @@ cmd_layers() {
     ./setup-layers.sh "$@"
 }
 
-cmd_build() {
+# FHS 환경 체크 (HOMEAGENT_FHS 환경 변수)
+in_fhs() {
+    [[ "${HOMEAGENT_FHS:-}" == "1" ]]
+}
+
+cmd_bb() {
     local target="${1:-core-image-weston}"
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run . -- -c "./run.sh bb $target"
+    fi
     echo -e "${GREEN}[BUILD]${NC} bitbake $target"
-    echo -e "${YELLOW}[INFO]${NC} FHS 환경에서 실행해야 합니다:"
-    echo ""
-    echo "  cd $BUILD_DIR"
-    echo "  source ../sources/poky/oe-init-build-env ."
-    echo "  bitbake $target"
-    echo ""
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake "$target"
+}
+
+cmd_bb_clean() {
+    local target="${1:-core-image-weston}"
+    echo -e "${GREEN}[CLEAN BUILD]${NC} bitbake $target (클린)"
+    echo -e "${YELLOW}[INFO]${NC} tmp-glibc 삭제 중..."
+    rm -rf "${BUILD_DIR}/tmp-glibc" 2>/dev/null || true
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run . -- -c "./run.sh bb $target"
+    fi
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake "$target"
+}
+
+cmd_bb_resume() {
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run . -- -c "./run.sh bb-resume"
+    fi
+    echo -e "${GREEN}[RESUME]${NC} 이전 빌드 계속..."
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake
 }
 
 cmd_clean() {
@@ -132,9 +169,16 @@ case "${1:-help}" in
         shift
         cmd_layers "$@"
         ;;
-    build)
+    bb)
         shift
-        cmd_build "$@"
+        cmd_bb "$@"
+        ;;
+    bb-clean)
+        shift
+        cmd_bb_clean "$@"
+        ;;
+    bb-resume)
+        cmd_bb_resume
         ;;
     clean)
         cmd_clean

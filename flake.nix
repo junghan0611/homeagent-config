@@ -35,8 +35,10 @@
             pkgs.binutils
             pkgs.patch
             pkgs.perl
-            pkgs.python3
-            pkgs.python3Packages.pexpect
+            # Python 3.11 (kirkstone은 distutils 필요, 3.12+에서 제거됨)
+            pkgs.python311
+            pkgs.python311Packages.pexpect
+            pkgs.python311Packages.setuptools
             pkgs.cpio
             pkgs.unzip
             pkgs.bzip2
@@ -82,6 +84,8 @@
           ];
 
           runScript = pkgs.writeShellScript "homeagent-yocto-init" ''
+            # FHS 환경 표시 (run.sh에서 체크)
+            export HOMEAGENT_FHS=1
             # 호스트 NixOS 도구 PATH 추가 (FHS /usr/bin 우선, 호스트 도구 뒤에)
             export PATH="/usr/bin:/usr/sbin:$PATH:$HOME/.local/bin:/etc/profiles/per-user/$USER/bin"
 
@@ -100,7 +104,7 @@
             echo "시리얼 콘솔:"
             echo "  picocom -b 115200 /dev/ttyUSB0"
             echo ""
-            echo "Target: Raspberry Pi 5 (scarthgap)"
+            echo "Target: Raspberry Pi 5 (scarthgap + Hailo-8/8L)"
             echo "============================================"
 
             exec bash "$@"

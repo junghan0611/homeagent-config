@@ -32,6 +32,10 @@ EXTRA_IMAGE_FEATURES += "ssh-server-openssh"
 IMAGE_FEATURES:remove = "ssh-server-dropbear"
 BAD_RECOMMENDATIONS += "packagegroup-core-ssh-dropbear dropbear"
 
+# Root password: 기본 "homeagent" (첫 로그인 후 변경 권장)
+INHERIT += "extrausers"
+EXTRA_USERS_PARAMS = "usermod -P homeagent root;"
+
 # Extra packages for development
 IMAGE_INSTALL:append = " \
     nano \

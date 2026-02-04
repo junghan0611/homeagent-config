@@ -13,20 +13,16 @@ S = "${WORKDIR}"
 inherit allarch
 
 do_install() {
-    # Root home
+    # Root home only
+    # Note: /etc/skel은 base-files와 충돌하므로 제외
+    # HomeAgent는 별도 'agent' 계정으로 동작 예정 (제한된 권한)
+    # 운영 계정 설정은 별도 레시피로 관리
     install -d ${D}${ROOT_HOME}
     install -m 0644 ${WORKDIR}/bashrc ${D}${ROOT_HOME}/.bashrc
     install -m 0644 ${WORKDIR}/vimrc ${D}${ROOT_HOME}/.vimrc
-
-    # Skeleton for new users
-    install -d ${D}${sysconfdir}/skel
-    install -m 0644 ${WORKDIR}/bashrc ${D}${sysconfdir}/skel/.bashrc
-    install -m 0644 ${WORKDIR}/vimrc ${D}${sysconfdir}/skel/.vimrc
 }
 
 FILES:${PN} = " \
     ${ROOT_HOME}/.bashrc \
     ${ROOT_HOME}/.vimrc \
-    ${sysconfdir}/skel/.bashrc \
-    ${sysconfdir}/skel/.vimrc \
 "

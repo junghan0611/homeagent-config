@@ -39,6 +39,10 @@ help() {
     echo "  issues          이슈 목록"
     echo "  issue <id>      이슈 상세"
     echo ""
+    echo -e "${GREEN}이미지:${NC}"
+    echo "  image           빌드된 이미지 정보"
+    echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
+    echo ""
     echo -e "${GREEN}Git:${NC}"
     echo "  diff            변경사항 확인"
     echo "  commit          커밋 (br sync 포함)"
@@ -48,6 +52,8 @@ help() {
     echo "  ./run.sh bb                 # (FHS 내) 빌드"
     echo "  ./run.sh bb-clean           # (FHS 내) 클린 빌드"
     echo "  ./run.sh status             # 레이어 브랜치 확인"
+    echo "  ./run.sh image              # 빌드된 이미지 확인"
+    echo "  ./run.sh flash /dev/sda     # SD 카드 플래싱"
     echo ""
 }
 
@@ -154,6 +160,52 @@ cmd_commit() {
     git -C "$SCRIPT_DIR" status
 }
 
+IMAGE_DIR="${BUILD_DIR}/tmp-glibc/deploy/images/raspberrypi5"
+IMAGE_NAME="core-image-weston-raspberrypi5.rootfs.wic.bz2"
+
+cmd_image() {
+    echo -e "${CYAN}=== 빌드 이미지 정보 ===${NC}"
+    if [[ -f "${IMAGE_DIR}/${IMAGE_NAME}" ]]; then
+        ls -lh "${IMAGE_DIR}/${IMAGE_NAME}"
+        echo ""
+        echo -e "${GREEN}플래싱:${NC} ./run.sh flash /dev/sdX"
+    else
+        echo -e "${YELLOW}[INFO]${NC} 이미지가 없습니다. 빌드를 먼저 실행하세요."
+        echo "  ./run.sh bb"
+    fi
+}
+
+cmd_flash() {
+    local device="$1"
+    if [[ -z "$device" ]]; then
+        echo -e "${RED}[ERROR]${NC} 디바이스를 지정하세요"
+        echo "  예: ./run.sh flash /dev/sda"
+        echo ""
+        echo -e "${CYAN}현재 블록 디바이스:${NC}"
+        lsblk -d -o NAME,SIZE,MODEL | grep -v loop
+        exit 1
+    fi
+    if [[ ! -f "${IMAGE_DIR}/${IMAGE_NAME}" ]]; then
+        echo -e "${RED}[ERROR]${NC} 이미지가 없습니다: ${IMAGE_NAME}"
+        echo "  빌드를 먼저 실행하세요: ./run.sh bb"
+        exit 1
+    fi
+    if [[ ! -b "$device" ]]; then
+        echo -e "${RED}[ERROR]${NC} 블록 디바이스가 아닙니다: $device"
+        exit 1
+    fi
+    echo -e "${YELLOW}[WARNING]${NC} $device 의 모든 데이터가 삭제됩니다!"
+    echo -e "이미지: ${IMAGE_NAME}"
+    read -p "계속하시겠습니까? (y/N) " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "취소됨"
+        exit 0
+    fi
+    echo -e "${GREEN}[FLASH]${NC} bmaptool로 플래싱 중..."
+    sudo bmaptool copy "${IMAGE_DIR}/${IMAGE_NAME}" "$device"
+    echo -e "${GREEN}[DONE]${NC} 플래싱 완료. SD 카드를 분리하세요."
+}
+
 # 메인
 case "${1:-help}" in
     help|--help|-h|"")
@@ -194,6 +246,12 @@ case "${1:-help}" in
         ;;
     commit)
         cmd_commit
+        ;;
+    image)
+        cmd_image
+        ;;
+    flash)
+        cmd_flash "$2"
         ;;
     *)
         echo -e "${RED}[ERROR]${NC} 알 수 없는 명령: $1"

@@ -60,6 +60,8 @@ logs/
 .env.*
 *.pem
 *.key
+.sshkey/
+.current-device-ip
 
 # Beads internal (keep issues.jsonl)
 .beads/*.db

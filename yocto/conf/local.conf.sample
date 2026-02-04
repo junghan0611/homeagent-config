@@ -37,6 +37,8 @@ IMAGE_INSTALL:append = " \
     nano \
     vim \
     htop \
+    ssh-keys \
+    shell-config \
     "
 
 # OpenThread Border Router (Phase 2에서 활성화)

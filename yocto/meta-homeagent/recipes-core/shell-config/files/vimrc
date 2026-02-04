@@ -1,0 +1,42 @@
+" HomeAgent RPi5 Vim Configuration
+
+" UTF-8 / Korean support
+set encoding=utf-8
+set fileencoding=utf-8
+set fileencodings=utf-8,euc-kr,cp949
+
+" Basic settings
+set nocompatible
+set backspace=indent,eol,start
+set history=100
+set ruler
+set showcmd
+set showmatch
+set incsearch
+set hlsearch
+
+" Indentation
+set autoindent
+set smartindent
+set tabstop=4
+set shiftwidth=4
+set expandtab
+
+" Display
+set number
+set cursorline
+set laststatus=2
+set wildmenu
+
+" No backup files
+set nobackup
+set noswapfile
+
+" Syntax highlighting
+syntax on
+filetype plugin indent on
+
+" Color scheme (if available)
+if &t_Co > 2 || has("gui_running")
+    set t_Co=256
+endif

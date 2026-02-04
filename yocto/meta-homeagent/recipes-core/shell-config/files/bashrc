@@ -1,0 +1,36 @@
+# HomeAgent RPi5 Shell Configuration
+
+# Terminal fallback (ghostty -> xterm-256color)
+case "$TERM" in
+    xterm-ghostty|*-ghostty)
+        export TERM=xterm-256color
+        ;;
+esac
+
+# UTF-8 / Korean support
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# History
+export HISTSIZE=1000
+export HISTFILESIZE=2000
+export HISTCONTROL=ignoredups:ignorespace
+
+# Prompt
+PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+# Aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# Color support
+if [ -x /usr/bin/dircolors ]; then
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+fi
+
+# Path
+export PATH="$PATH:/usr/local/bin"

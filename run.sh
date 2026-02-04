@@ -42,6 +42,11 @@ help() {
     echo -e "${GREEN}이미지:${NC}"
     echo "  image           빌드된 이미지 정보"
     echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
+    echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
+    echo ""
+    echo -e "${GREEN}디바이스:${NC}"
+    echo "  ssh             RPi5 SSH 접속"
+    echo "  set-ip <ip>     디바이스 IP 설정"
     echo ""
     echo -e "${GREEN}Git:${NC}"
     echo "  diff            변경사항 확인"
@@ -54,6 +59,7 @@ help() {
     echo "  ./run.sh status             # 레이어 브랜치 확인"
     echo "  ./run.sh image              # 빌드된 이미지 확인"
     echo "  ./run.sh flash /dev/sda     # SD 카드 플래싱"
+    echo "  ./run.sh deploy 192.168.0.118  # 원격 플래싱"
     echo ""
 }
 
@@ -206,6 +212,86 @@ cmd_flash() {
     echo -e "${GREEN}[DONE]${NC} 플래싱 완료. SD 카드를 분리하세요."
 }
 
+cmd_deploy() {
+    local host="$1"
+    local remote_device="${2:-/dev/sdb}"
+    if [[ -z "$host" ]]; then
+        echo -e "${RED}[ERROR]${NC} 호스트를 지정하세요"
+        echo "  예: ./run.sh deploy 192.168.0.118"
+        echo "  예: ./run.sh deploy 192.168.0.118 /dev/sdc"
+        exit 1
+    fi
+    if [[ ! -f "${IMAGE_DIR}/${IMAGE_NAME}" ]]; then
+        echo -e "${RED}[ERROR]${NC} 이미지가 없습니다: ${IMAGE_NAME}"
+        echo "  빌드를 먼저 실행하세요: ./run.sh bb"
+        exit 1
+    fi
+    local bmap_file="${IMAGE_DIR}/${IMAGE_NAME%.bz2}.bmap"
+
+    echo -e "${GREEN}[DEPLOY]${NC} 원격 배포: $host -> $remote_device"
+    echo ""
+
+    # 이미지 전송
+    echo -e "${CYAN}[1/3]${NC} 이미지 전송 중..."
+    rsync -avhL --progress "${IMAGE_DIR}/${IMAGE_NAME}" "$host:/tmp/"
+    if [[ -f "$bmap_file" ]]; then
+        rsync -avhL "${bmap_file}" "$host:/tmp/"
+    fi
+
+    # 원격 디바이스 확인
+    echo ""
+    echo -e "${CYAN}[2/3]${NC} 원격 디바이스 확인..."
+    ssh "$host" "lsblk $remote_device" || {
+        echo -e "${RED}[ERROR]${NC} 디바이스를 찾을 수 없습니다: $remote_device"
+        exit 1
+    }
+
+    echo ""
+    echo -e "${YELLOW}[WARNING]${NC} $host:$remote_device 의 모든 데이터가 삭제됩니다!"
+    read -p "계속하시겠습니까? (y/N) " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "취소됨"
+        exit 0
+    fi
+
+    # 플래싱
+    echo ""
+    echo -e "${CYAN}[3/3]${NC} 플래싱 중..."
+    ssh "$host" "nix-shell -p bmaptool --run 'sudo bmaptool copy /tmp/${IMAGE_NAME} $remote_device'"
+
+    echo ""
+    echo -e "${GREEN}[DONE]${NC} 원격 플래싱 완료. SD 카드를 분리하세요."
+}
+
+SSH_KEY="${SCRIPT_DIR}/.sshkey/id_rsa_sks_gateway"
+DEVICE_IP_FILE="${SCRIPT_DIR}/.current-device-ip"
+
+cmd_ssh() {
+    if [[ ! -f "$DEVICE_IP_FILE" ]]; then
+        echo -e "${RED}[ERROR]${NC} 디바이스 IP가 설정되지 않았습니다."
+        echo "  ./run.sh set-ip <ip>"
+        exit 1
+    fi
+    local ip=$(cat "$DEVICE_IP_FILE")
+    if [[ ! -f "$SSH_KEY" ]]; then
+        echo -e "${YELLOW}[INFO]${NC} SSH 키 없음, 기본 인증 사용"
+        ssh root@"$ip"
+    else
+        ssh -i "$SSH_KEY" root@"$ip"
+    fi
+}
+
+cmd_set_ip() {
+    local ip="$1"
+    if [[ -z "$ip" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  예: ./run.sh set-ip 192.168.0.163"
+        exit 1
+    fi
+    echo "$ip" > "$DEVICE_IP_FILE"
+    echo -e "${GREEN}[DONE]${NC} 디바이스 IP 설정: $ip"
+}
+
 # 메인
 case "${1:-help}" in
     help|--help|-h|"")
@@ -252,6 +338,15 @@ case "${1:-help}" in
         ;;
     flash)
         cmd_flash "$2"
+        ;;
+    deploy)
+        cmd_deploy "$2" "$3"
+        ;;
+    ssh)
+        cmd_ssh
+        ;;
+    set-ip)
+        cmd_set_ip "$2"
         ;;
     *)
         echo -e "${RED}[ERROR]${NC} 알 수 없는 명령: $1"

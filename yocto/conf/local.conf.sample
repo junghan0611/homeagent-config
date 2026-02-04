@@ -35,6 +35,7 @@ BAD_RECOMMENDATIONS += "packagegroup-core-ssh-dropbear dropbear"
 # Extra packages for development
 IMAGE_INSTALL:append = " \
     nano \
+    vim \
     htop \
     "
 

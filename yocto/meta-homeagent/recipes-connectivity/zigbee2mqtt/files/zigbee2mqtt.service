@@ -1,0 +1,16 @@
+[Unit]
+Description=Zigbee2MQTT Bridge
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/zigbee2mqtt
+ExecStart=/usr/bin/node /opt/zigbee2mqtt/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

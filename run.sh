@@ -208,7 +208,12 @@ cmd_flash() {
         exit 0
     fi
     echo -e "${GREEN}[FLASH]${NC} bmaptool로 플래싱 중..."
-    sudo bmaptool copy "${IMAGE_DIR}/${IMAGE_NAME}" "$device"
+    if command -v bmaptool &>/dev/null; then
+        sudo bmaptool copy "${IMAGE_DIR}/${IMAGE_NAME}" "$device"
+    else
+        # bmaptool이 없으면 nix-shell로 실행
+        nix-shell -p bmaptool --run "sudo bmaptool copy '${IMAGE_DIR}/${IMAGE_NAME}' '$device'"
+    fi
     echo -e "${GREEN}[DONE]${NC} 플래싱 완료. SD 카드를 분리하세요."
 }
 

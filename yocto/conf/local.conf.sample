@@ -34,7 +34,8 @@ BAD_RECOMMENDATIONS += "packagegroup-core-ssh-dropbear dropbear"
 
 # Root password: 기본 "homeagent" (첫 로그인 후 변경 권장)
 INHERIT += "extrausers"
-EXTRA_USERS_PARAMS = "usermod -P homeagent root;"
+# 암호화된 패스워드 사용 (openssl passwd -6 -salt homeagent homeagent)
+EXTRA_USERS_PARAMS = "usermod -p '\$6\$homeagent\$TzrgPYw/S2Sx4cVt9FbdKL1niRzCtEAvzz6SKq42DTz6DWZiEefWDbiP1l1F942/4a/tu1gSiqywpEUIo.O/p.' root;"
 
 # Extra packages for development
 IMAGE_INSTALL:append = " \

@@ -50,9 +50,19 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 
 | 구성요소 | 사양 |
 |----------|------|
-| 메인 보드 | Raspberry Pi 5 |
+| 메인 보드 | Raspberry Pi 5 (8GB 권장) |
 | Thread RCP | USB Thread Controller |
-| NPU (옵션) | Hailo-8 M.2 (26 TOPS) |
+| NPU (옵션) | Hailo AI HAT+ 시리즈 |
+
+### Hailo AI 가속기 옵션
+
+| 제품 | 칩셋 | 성능 | 특징 |
+|------|------|------|------|
+| **AI Kit** | Hailo-8L | 13 TOPS (INT8) | 컴팩트, $70 |
+| **AI HAT+** | Hailo-8 | 26 TOPS (INT8) | 표준, $70 |
+| **AI HAT+ 2** | Hailo-10H | 40 TOPS (INT4) | **GenAI (LLM/VLM)**, 8GB RAM, $110 |
+
+**권장**: AI HAT+ 2 (Hailo-10H) - 음성 어시스턴트, VLM 등 GenAI 지원
 
 ---
 
@@ -62,10 +72,11 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 
 | 구성요소 | 역할 |
 |----------|------|
-| Yocto Project | 커스텀 Linux 배포판 빌드 |
+| Yocto Project | 커스텀 Linux 배포판 빌드 (Scarthgap 5.0 LTS) |
 | meta-raspberrypi | RPi5 BSP |
 | meta-flutter | Flutter Embedded Linux (Sony) |
-| meta-hailo | Hailo-8 M.2 NPU 지원 |
+| meta-hailo | Hailo AI HAT+ (8/8L/10H) - HailoRT, TAPPAS |
+| hailo-apps | 20+ AI 앱 (Detection, Pose, LLM, VLM, Voice) |
 | Wayland/Weston | 디스플레이 서버 |
 
 ### Layer 2: Go Core (kd-wallpad-app 재사용)

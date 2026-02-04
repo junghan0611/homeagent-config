@@ -118,12 +118,64 @@ Yocto Branch: scarthgap (5.0 LTS)
 ├── meta-openembedded       : scarthgap
 ├── meta-raspberrypi        : scarthgap
 ├── meta-clang              : scarthgap
+├── meta-hailo              : hailo8-scarthgap ← NEW!
+│   ├── meta-hailo-accelerator (PCIe 드라이버)
+│   ├── meta-hailo-libhailort (HailoRT 4.23.0)
+│   └── meta-hailo-tappas (TAPPAS 5.1.0)
 └── meta-flutter            : scarthgap (커뮤니티) 또는 kirkstone (Sony + 패치)
 
 Kernel: 6.6 LTS
 Machine: raspberrypi5
 Distro Features: systemd, wayland, opengl, ipv6
 ```
+
+---
+
+## Hailo AI 가속기
+
+### 지원 모델
+
+| 모델 | 성능 | 인터페이스 | 용도 |
+|------|------|-----------|------|
+| **Hailo-8** | 26 TOPS (INT8) | M.2 / PCIe | AI HAT+ |
+| **Hailo-8L** | 13 TOPS (INT8) | M.2 | AI Kit (컴팩트) |
+| **Hailo-10H** | 40 TOPS (INT4) | M.2 / PCIe | AI HAT+ 2 (**GenAI 지원**) |
+
+### Raspberry Pi AI HAT+ 시리즈
+
+| 제품 | 칩셋 | RAM | GenAI | 가격대 |
+|------|------|-----|-------|--------|
+| **AI HAT+** | Hailo-8 (26 TOPS) | - | ❌ | $70 |
+| **AI HAT+ 2** | Hailo-10H (40 TOPS) | 8GB | ✅ LLM/VLM | $110 |
+| **AI Kit** | Hailo-8L (13 TOPS) | - | ❌ | $70 |
+
+### meta-hailo (Yocto 레이어)
+
+| 항목 | 값 |
+|------|-----|
+| **GitHub** | https://github.com/hailo-ai/meta-hailo |
+| **브랜치** | hailo8-scarthgap |
+| **HailoRT** | 4.23.0 |
+| **TAPPAS** | 5.1.0 |
+| **호환** | scarthgap ✅ |
+
+**레이어 구성:**
+```
+meta-hailo/
+├── meta-hailo-accelerator   # PCIe 드라이버, 펌웨어
+├── meta-hailo-libhailort    # HailoRT, pyHailoRT, GStreamer
+└── meta-hailo-tappas        # TAPPAS 프레임워크
+```
+
+### hailo-apps (AI 앱)
+
+| 카테고리 | 앱 | Hailo-8/8L | Hailo-10H |
+|----------|-----|-----------|-----------|
+| **Vision** | Detection, Pose, Segmentation, Face, Depth, OCR | ✅ | ✅ |
+| **GenAI** | LLM Chat, VLM Chat, Whisper, Voice Assistant | ❌ | ✅ |
+| **통합** | Ollama (Open WebUI), Agent Tools | ❌ | ✅ |
+
+**GitHub**: https://github.com/hailo-ai/hailo-apps
 
 ---
 
@@ -134,3 +186,7 @@ Distro Features: systemd, wayland, opengl, ipv6
 - [meta-openembedded](https://github.com/openembedded/meta-openembedded)
 - [ot-br-posix recipe (scarthgap)](https://git.openembedded.org/meta-openembedded/tree/meta-networking/recipes-connectivity/openthread/ot-br-posix_git.bb?h=scarthgap)
 - [Raspberry Pi OS Release Notes](https://www.raspberrypi.com/software/operating-systems/)
+- [meta-hailo](https://github.com/hailo-ai/meta-hailo)
+- [hailo-apps](https://github.com/hailo-ai/hailo-apps)
+- [hailo-rpi5-examples](https://github.com/hailo-ai/hailo-rpi5-examples)
+- [Raspberry Pi AI HAT+](https://www.raspberrypi.com/products/ai-hat-plus/)

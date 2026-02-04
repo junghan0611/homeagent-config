@@ -18,12 +18,12 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 │  ├── UI: 대시보드, 디바이스 제어, AI 시각화                     │
 │  └── FFI → Go Core / Zig Core                                   │
 │                                                                 │
-│  Go Core (kd-wallpad-app 코드 재사용)                           │
+│  Go Core                                                        │
 │  ├── HA API 호환 레이어                                         │
 │  ├── EdgeAI Runtime (ONNX/TFLite)                               │
 │  └── 컨텍스트 엔진, 패턴 학습                                   │
 │                                                                 │
-│  Zig Core (sks-hub-zig 템플릿)                                  │
+│  Zig Core (zigbee-hub 템플릿)                                  │
 │  ├── Matter Controller + Device                                 │
 │  ├── OTBR (Thread Border Router)                                │
 │  ├── Zigbee Bridge (옵션)                                       │
@@ -226,16 +226,6 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 - [ ] Go Core EdgeAI Runtime
 - [ ] Flutter UI 개발
 - [ ] 풀패키지 Yocto 이미지 배포
-
----
-
-## 관련 프로젝트
-
-| 프로젝트 | 역할 |
-|----------|------|
-| [kd-wallpad-app](file:///home/junghan/repos/gh/kd-wallpad-app/) | Go + Flutter 앱 베이스 |
-| [sks-hub-zig](file:///home/junghan/repos/work/sks-hub-zig/) | Zig 상태머신 템플릿 |
-| [kyungdong-rockchip](file:///home/junghan/repos/work/kyungdong-rockchip/) | Matter/Thread 경험 |
 
 ---
 

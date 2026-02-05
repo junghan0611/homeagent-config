@@ -368,8 +368,20 @@ ZIGBEE2MQTT_CONFIG_PERMIT_JOIN=false
 
 ```bash
 # /etc/default/otbr-agent
-OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800 trel://eth0"
+# 주의: backbone interface는 실제 네트워크 인터페이스로 설정 (eth0이 DOWN이면 eth1 사용)
+OTBR_AGENT_OPTS="-I wpan0 -B eth1 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800 trel://eth1"
 OTBR_NO_AUTO_ATTACH=1
+```
+
+### Matter Commissioning 진단 흐름
+
+```
+1. SDK 호환성 확인 → glib, libatomic 등 시스템 라이브러리 버전
+2. BLE 커미셔닝 → Linux: BlueZ OK / Android: 네이티브 필수
+3. Thread 조인 → ot-ctl neighbor table에 child 있는지
+4. SRP 등록 → ot-ctl srp server host / srp server service
+5. mDNS publish → avahi-browse (Linux) / NsdManager (Android)
+6. CASE operational discovery → 여기까지 와야 커미셔닝 완료
 ```
 
 ---
@@ -384,7 +396,8 @@ OTBR_NO_AUTO_ATTACH=1
 | OTBR v0.3.0 | done | 있음 (meta-oe) | Thread leader, ch14 |
 | OTBR 설정 오버라이드 | pending | **필요** | /etc/default/otbr-agent |
 | Thread RCP 동글 | done | - | ZBDongle-E v2.5.3 |
-| chip-tool | in progress | 불필요 (테스트용) | Docker 크로스 컴파일 |
+| chip-tool v1.4.0.0 | **BLE~Thread OK, CASE 블로커** | 불필요 (테스트용) | glib 해결, SRP/mDNS 디버깅 필요 |
+| avahi-utils | **필요** | **필요** | mDNS 디버깅 도구 (avahi-browse) |
 | python-matter-server | pending | **필요** | pip + chip-wheels |
 | matterbridge | pending | **필요** | npm (zigbee2mqtt 패턴) |
 | HomeAgent Go | pending | **필요** | 단일 바이너리 |

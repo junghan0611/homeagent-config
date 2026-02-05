@@ -160,84 +160,112 @@ ZBDongle-E #2 ──→ Thread RCP (ot-rcp)     ──→ OTBR ──→ Matter 
 [Matter 디바이스] ←── Thread ──→ [OTBR/RPi5]
                                       │
                               python-matter-server
-                              (fabric, 이벤트 구독)
+                              (fabric, 이벤트 구독, HA의 공식 Matter 컨트롤러)
                                       │
-                                  WebSocket API
+                                  WebSocket API (ws://localhost:5580/ws)
                                       │
-                              검증 스크립트 (Python)
-                                      │
-                               mosquitto_pub → MQTT
+                              HomeAgent Go (구독 + MQTT publish)
 ```
 
-- HA의 공식 Matter 컨트롤러 (home-assistant-libs/python-matter-server)
-- Fabric 관리, 디바이스 commissioning, attribute 구독
-- WebSocket으로 실시간 이벤트 수신
-- **검증 목적**: Matter 디바이스 이벤트가 어떤 형태로 오는지 확인
-- RPi5 Python 3.12 사용 가능
+- HA의 공식 Matter 컨트롤러 ([python-matter-server](https://github.com/home-assistant-libs/python-matter-server))
+- 내부: Python → ctypes → chip-wheels(C++ SDK) — **무거운 작업은 C++**
+- Fabric 관리, commissioning, attribute subscribe, 이벤트 스트리밍
+- RPi5 8GB에서 성능 이슈 없음 (HA가 RPi4 4GB에서도 운영)
+- **Yocto 레시피로 패키징** → SD 재플래시해도 유지
 
 ```bash
-# 설치 (RPi5에서)
-pip install python-matter-server
-
-# 실행
-matter-server --storage-path /opt/matter-server/data
+# Yocto 설치 (레시피화 필요)
+# python-matter-server + chip-wheels (aarch64 pre-built)
+# systemd 서비스로 자동 시작
 
 # WebSocket 이벤트 구독
 # ws://localhost:5580/ws → start_listening → 모든 노드 이벤트 수신
 ```
 
-### Phase 3: HomeAgent Matter Agent (최종 목표)
+### Phase 3: matterbridge 연동 (양방향 브릿지)
 
 ```
-[Matter 디바이스] ←── Thread ──→ [OTBR/RPi5]
-                                      │
-                              HomeAgent Go Service
-                              ├── matter-agent (Go)
-                              │   - connectedhomeip SDK 바인딩
-                              │   - Fabric 관리
-                              │   - Attribute 구독
-                              │   - MQTT publish
-                              ├── zigbee-agent (zigbee2mqtt 래퍼)
-                              └── constitutional-ai
-                                      │
-                                   MQTT Broker
+┌─────────────────────────────────────────────────────────────┐
+│                        RPi5 서비스 스택                       │
+│                                                              │
+│  python-matter-server          matterbridge                  │
+│  (Matter → 읽기/제어)          (Zigbee → Matter 노출)         │
+│       │                              │                       │
+│       │ WebSocket                    │ matter.js              │
+│       │                              │                       │
+│  ┌────┴──────────────────────────────┴────┐                 │
+│  │              MQTT Broker               │                  │
+│  │             (mosquitto)                │                  │
+│  └────┬──────────────────────────────┬────┘                 │
+│       │                              │                       │
+│  zigbee2mqtt                    HomeAgent Go                 │
+│  (Zigbee → MQTT)               (AI + 제어)                   │
+└───────┴──────────────────────────────┴───────────────────────┘
 ```
 
-- python-matter-server의 동작을 Go로 재구현
-- connectedhomeip의 chip-tool 코드를 참고하여 Go 바인딩
-- 오프라인 동작: 클라우드 없이 Thread 메시 네트워크 내에서 완결
-- MQTT topic: `matter/<node_id>/<cluster>/<attribute>`
+- [matterbridge](https://github.com/Luligu/matterbridge): matter.js 기반, Node.js (이미 설치됨)
+- Zigbee 디바이스를 Apple Home / Google Home에 Matter로 노출
+- `npm install -g matterbridge` → 512MB 메모리로 동작
+- **Yocto 레시피로 패키징** (zigbee2mqtt와 동일한 npm 패턴)
+
+### 서비스 역할 정리
+
+| 서비스 | 방향 | 역할 | 런타임 |
+|--------|------|------|--------|
+| zigbee2mqtt | Zigbee → MQTT | Zigbee 디바이스 데이터 수집 | Node.js |
+| python-matter-server | Matter → WebSocket | Matter 디바이스 제어/구독 | Python + C++ |
+| matterbridge | MQTT → Matter | Zigbee를 Matter 생태계에 노출 | Node.js |
+| mosquitto | 중앙 | 메시지 브로커 | C |
+| HomeAgent Go | MQTT → AI | Constitutional AI 판단/제어 | Go |
+
+### 왜 Go 재구현 안 하나?
+
+- python-matter-server 내부 = C++ SDK wrapper → Python은 껍데기
+- RPi5 8GB에서 Python 오버헤드 무시 가능 (~100MB)
+- 재구현 비용 (수 개월) vs 그대로 사용 (즉시) → **ROI 불리**
+- 필요시 HomeAgent Go가 WebSocket으로 연동하면 충분
+- Node.js도 이미 zigbee2mqtt 때문에 존재 → matterbridge 추가 비용 0
 
 ---
 
 ## 오프라인 Thread/Matter 스택
 
-### RPi5 단독 동작 구조
+### RPi5 단독 동작 구조 (Yocto 이미지 내 서비스)
 
 ```
-┌──────────────────────────────────────────────┐
-│                   RPi5                        │
-│                                               │
-│  ┌─────────────┐  ┌──────────────────────┐   │
-│  │   OTBR      │  │  Matter Controller   │   │
-│  │  (Thread    │  │  (python-matter →    │   │
-│  │   Border    │  │   Go agent)          │   │
-│  │   Router)   │  │                      │   │
-│  └──────┬──────┘  └──────────┬───────────┘   │
-│         │ wpan0              │                │
-│         │                    │                │
-│  ┌──────┴──────┐      ┌─────┴──────┐        │
-│  │ Thread RCP  │      │ MQTT Broker │        │
-│  │ ZBDongle-E  │      │ (mosquitto) │        │
-│  │ /dev/ttyUSB │      └─────┬──────┘        │
-│  └─────────────┘            │                │
-│                       ┌─────┴──────┐         │
-│                       │ HomeAgent  │         │
-│                       │ (Go + AI)  │         │
-│                       └────────────┘         │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                        RPi5 (Yocto)                       │
+│                                                           │
+│  systemd services (모두 Yocto 레시피로 패키징):              │
+│                                                           │
+│  ┌────────────┐ ┌───────────────────┐ ┌──────────────┐   │
+│  │  otbr-agent│ │python-matter-server│ │ matterbridge │   │
+│  │  (Thread)  │ │(Matter Controller) │ │(Zigbee→Matter)│  │
+│  └─────┬──────┘ └────────┬──────────┘ └──────┬───────┘   │
+│        │                 │ WebSocket          │           │
+│  ┌─────┴──────┐          │              ┌────┴─────┐     │
+│  │Thread RCP  │    ┌─────┴──────┐       │zigbee2mqtt│    │
+│  │ZBDongle-E  │    │ mosquitto  │       │(Zigbee)   │    │
+│  │/dev/ttyUSB1│    │ (MQTT)     │←──────┤/dev/ttyUSB0│   │
+│  └────────────┘    └─────┬──────┘       └───────────┘    │
+│                          │                                │
+│                    ┌─────┴──────┐                         │
+│                    │ HomeAgent  │                         │
+│                    │ (Go + AI)  │                         │
+│                    └────────────┘                         │
+└──────────────────────────────────────────────────────────┘
          ↕ (선택적)
-    외부 네트워크 / Master Agent
+    외부 네트워크 / A2A Master Agent
+```
+
+### Yocto 레시피 구조
+
+```
+meta-homeagent/recipes-connectivity/
+├── zigbee2mqtt/          # done (npm, systemd)
+├── python-matter-server/ # todo (pip, chip-wheels, systemd)
+├── matterbridge/         # todo (npm, systemd)
+└── otbr-config/          # todo (bbappend, /etc/default/otbr-agent)
 ```
 
 ### 오프라인 요구사항
@@ -323,17 +351,18 @@ OTBR_NO_AUTO_ATTACH=1
 
 ## 검증 현황
 
-| 항목 | 상태 | 비고 |
-|------|:----:|------|
-| MQTT Broker (mosquitto) | done | systemd 서비스 |
-| zigbee2mqtt v1.42.0 | done | ember adapter, Tuya TS0201 페어링 |
-| HA Autodiscovery | done | homeassistant/sensor/*/config 발행 확인 |
-| OTBR v0.3.0 | done | Thread leader, ch14 |
-| Thread RCP 동글 | done | ZBDongle-E v2.5.3, /dev/ttyUSB |
-| chip-tool 빌드 | in progress | Docker 크로스 컴파일 |
-| chip-tool commissioning | pending | Matter 디바이스 페어링 |
-| python-matter-server | pending | Phase 2 검증 |
-| Go matter-agent | pending | Phase 3 최종 목표 |
+| 항목 | 상태 | Yocto 레시피 | 비고 |
+|------|:----:|:----------:|------|
+| MQTT Broker (mosquitto) | done | 있음 | systemd 서비스 |
+| zigbee2mqtt v1.42.0 | done | 있음 | ember adapter, Tuya TS0201 |
+| HA Autodiscovery | done | - | homeassistant/sensor/*/config |
+| OTBR v0.3.0 | done | 있음 (meta-oe) | Thread leader, ch14 |
+| OTBR 설정 오버라이드 | pending | **필요** | /etc/default/otbr-agent |
+| Thread RCP 동글 | done | - | ZBDongle-E v2.5.3 |
+| chip-tool | in progress | 불필요 (테스트용) | Docker 크로스 컴파일 |
+| python-matter-server | pending | **필요** | pip + chip-wheels |
+| matterbridge | pending | **필요** | npm (zigbee2mqtt 패턴) |
+| HomeAgent Go | pending | **필요** | 단일 바이너리 |
 
 ---
 
@@ -352,11 +381,22 @@ OTBR_NO_AUTO_ATTACH=1
 
 ## 로드맵
 
-1. [x] zigbee2mqtt + MQTT Autodiscovery 검증
-2. [x] OTBR + Thread 네트워크 형성
-3. [ ] chip-tool Matter commissioning 검증
-4. [ ] python-matter-server 동작 확인 (WebSocket 이벤트 구조 파악)
-5. [ ] python-matter-server → MQTT publish 브릿지 스크립트
-6. [ ] Go matter-agent 재구현 (python-matter-server 참고)
-7. [ ] Constitutional AI Layer - MQTT 엔티티 기반 판단
-8. [ ] A2A Protocol - Master Agent 연동
+### 완료
+1. [x] zigbee2mqtt + MQTT Autodiscovery 검증 (v1.42.0, Tuya TS0201)
+2. [x] OTBR + Thread 네트워크 형성 (leader, ch14)
+3. [x] Thread RCP 플래시 (ZBDongle-E v2.5.3)
+
+### 진행중
+4. [ ] chip-tool 크로스 컴파일 + Matter commissioning 검증
+5. [ ] OTBR 설정 Yocto 레시피화 (otbr-config bbappend)
+
+### 다음
+6. [ ] python-matter-server Yocto 레시피 (pip + chip-wheels)
+7. [ ] python-matter-server 동작 확인 (WebSocket 이벤트 구조)
+8. [ ] matterbridge Yocto 레시피 (npm, zigbee2mqtt 패턴)
+9. [ ] HomeAgent Go → python-matter-server WebSocket 연동
+10. [ ] Yocto rootfs 확장 (서비스 추가에 따른 디스크 확보)
+
+### 최종
+11. [ ] Constitutional AI Layer - MQTT 엔티티 기반 판단
+12. [ ] A2A Protocol - Master Agent 연동

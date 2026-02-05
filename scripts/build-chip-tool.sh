@@ -120,10 +120,23 @@ EOF
         cp "$binary" "$OUTPUT_DIR/chip-tool"
         chmod +x "$OUTPUT_DIR/chip-tool"
 
+        # sysroot에서 번들 라이브러리 추출 (Yocto에 없을 수 있는 것들)
+        echo -e "${CYAN}[LIB]${NC} 번들 라이브러리 추출..."
+        mkdir -p "$OUTPUT_DIR/lib"
+        local sysroot_lib="/opt/ubuntu-22.04.1-aarch64-sysroot/lib/aarch64-linux-gnu"
+        local bundle_libs="libatomic.so.1"
+        for lib in $bundle_libs; do
+            docker run --rm "$DOCKER_IMAGE" \
+                cat "${sysroot_lib}/${lib}" > "$OUTPUT_DIR/lib/${lib}" 2>/dev/null \
+                && echo "  추출: ${lib}" || echo "  건너뜀: ${lib}"
+        done
+
         echo ""
         echo -e "${GREEN}[OK]${NC} 빌드 완료! (${minutes}m ${seconds}s)"
         echo -e "  바이너리: ${OUTPUT_DIR}/chip-tool"
+        echo -e "  라이브러리: ${OUTPUT_DIR}/lib/"
         ls -lh "$OUTPUT_DIR/chip-tool"
+        ls -lh "$OUTPUT_DIR/lib/" 2>/dev/null || true
         file "$OUTPUT_DIR/chip-tool"
         echo ""
         echo "배포: ./scripts/deploy-chip-tool.sh [IP]"

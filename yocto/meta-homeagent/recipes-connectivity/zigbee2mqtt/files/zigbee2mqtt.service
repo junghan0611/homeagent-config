@@ -6,11 +6,16 @@ Wants=mosquitto.service
 [Service]
 Type=simple
 WorkingDirectory=/opt/zigbee2mqtt
+EnvironmentFile=-/etc/default/zigbee2mqtt
 ExecStart=/usr/bin/node /opt/zigbee2mqtt/index.js
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+
+# Security hardening
+User=root
+Group=root
 
 [Install]
 WantedBy=multi-user.target

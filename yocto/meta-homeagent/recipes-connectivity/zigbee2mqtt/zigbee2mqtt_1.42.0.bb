@@ -6,6 +6,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=1ebbd3e34237af26da5dc08a4e440464"
 
 SRC_URI = "git://github.com/Koenkk/zigbee2mqtt.git;branch=master;protocol=https \
            file://zigbee2mqtt.service \
+           file://zigbee2mqtt.default \
            file://configuration.yaml \
           "
 SRCREV = "1.42.0"
@@ -35,6 +36,10 @@ do_install() {
     install -d ${D}${sysconfdir}/zigbee2mqtt
     install -m 0644 ${WORKDIR}/configuration.yaml ${D}${sysconfdir}/zigbee2mqtt/
 
+    # Environment variables file
+    install -d ${D}${sysconfdir}/default
+    install -m 0644 ${WORKDIR}/zigbee2mqtt.default ${D}${sysconfdir}/default/zigbee2mqtt
+
     # Systemd service
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/zigbee2mqtt.service ${D}${systemd_system_unitdir}/
@@ -43,5 +48,6 @@ do_install() {
 FILES:${PN} = " \
     /opt/zigbee2mqtt \
     ${sysconfdir}/zigbee2mqtt \
+    ${sysconfdir}/default/zigbee2mqtt \
     ${systemd_system_unitdir}/zigbee2mqtt.service \
 "

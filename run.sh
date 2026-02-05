@@ -45,7 +45,7 @@ help() {
     echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
     echo ""
     echo -e "${GREEN}디바이스:${NC}"
-    echo "  ssh             RPi5 SSH 접속"
+    echo "  ssh [IP] [cmd]  RPi5 SSH 접속/명령 실행"
     echo "  set-ip <ip>     디바이스 IP 설정"
     echo ""
     echo -e "${GREEN}Git:${NC}"
@@ -268,21 +268,58 @@ cmd_deploy() {
     echo -e "${GREEN}[DONE]${NC} 원격 플래싱 완료. SD 카드를 분리하세요."
 }
 
-SSH_KEY="${SCRIPT_DIR}/.sshkey/id_rsa_sks_gateway"
+SSH_KEY="${SCRIPT_DIR}/.sshkey/id_ed25519"
 DEVICE_IP_FILE="${SCRIPT_DIR}/.current-device-ip"
+SSH_OPTS="-o StrictHostKeyChecking=no -o LogLevel=ERROR"
+
+get_device_ip() {
+    local arg_ip="$1"
+    # 인자가 IP 형식이면 사용
+    if [[ "$arg_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$arg_ip"
+        return
+    fi
+    # 저장된 IP 사용
+    if [[ -f "$DEVICE_IP_FILE" ]]; then
+        cat "$DEVICE_IP_FILE"
+    else
+        echo ""
+    fi
+}
 
 cmd_ssh() {
-    if [[ ! -f "$DEVICE_IP_FILE" ]]; then
+    local first_arg="$1"
+    local IP CMD
+
+    # 첫 번째 인자가 IP 형식이면 IP로 사용
+    if [[ "$first_arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IP="$first_arg"
+        shift
+        CMD="$*"
+    else
+        IP=$(get_device_ip)
+        CMD="$*"
+    fi
+
+    if [[ -z "$IP" ]]; then
         echo -e "${RED}[ERROR]${NC} 디바이스 IP가 설정되지 않았습니다."
         echo "  ./run.sh set-ip <ip>"
+        echo "  또는: ./run.sh ssh 192.168.0.163 [cmd]"
         exit 1
     fi
-    local ip=$(cat "$DEVICE_IP_FILE")
-    if [[ ! -f "$SSH_KEY" ]]; then
-        echo -e "${YELLOW}[INFO]${NC} SSH 키 없음, 기본 인증 사용"
-        ssh root@"$ip"
+
+    # SSH 옵션 결정
+    local ssh_opts="$SSH_OPTS"
+    if [[ -f "$SSH_KEY" ]]; then
+        ssh_opts="-i $SSH_KEY $SSH_OPTS"
+    fi
+
+    if [[ -z "$CMD" ]]; then
+        # 인터랙티브 모드
+        ssh $ssh_opts root@"$IP"
     else
-        ssh -i "$SSH_KEY" root@"$ip"
+        # 명령 실행 모드
+        ssh $ssh_opts root@"$IP" "$CMD"
     fi
 }
 
@@ -348,7 +385,8 @@ case "${1:-help}" in
         cmd_deploy "$2" "$3"
         ;;
     ssh)
-        cmd_ssh
+        shift
+        cmd_ssh "$@"
         ;;
     set-ip)
         cmd_set_ip "$2"

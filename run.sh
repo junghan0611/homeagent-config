@@ -46,6 +46,7 @@ help() {
     echo ""
     echo -e "${GREEN}디바이스:${NC}"
     echo "  ssh [IP] [cmd]  RPi5 SSH 접속/명령 실행"
+    echo "  setup-key [IP]  SSH 공개키 최초 등록 (비밀번호 입력)"
     echo "  set-ip <ip>     디바이스 IP 설정"
     echo ""
     echo -e "${GREEN}Git:${NC}"
@@ -274,12 +275,10 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o LogLevel=ERROR"
 
 get_device_ip() {
     local arg_ip="$1"
-    # 인자가 IP 형식이면 사용
     if [[ "$arg_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "$arg_ip"
         return
     fi
-    # 저장된 IP 사용
     if [[ -f "$DEVICE_IP_FILE" ]]; then
         cat "$DEVICE_IP_FILE"
     else
@@ -287,11 +286,87 @@ get_device_ip() {
     fi
 }
 
+check_ssh_key() {
+    # 1. 로컬 키 존재 확인
+    if [[ ! -f "$SSH_KEY" ]]; then
+        echo -e "${RED}[ERROR]${NC} SSH 키 없음: $SSH_KEY"
+        echo "  키 생성: ssh-keygen -t ed25519 -f $SSH_KEY -C homeagent-deploy"
+        exit 1
+    fi
+
+    # 2. 권한 확인 (600 필요)
+    local perms
+    perms=$(stat -c %a "$SSH_KEY" 2>/dev/null || stat -f %Lp "$SSH_KEY")
+    if [[ "$perms" != "600" && "$perms" != "400" ]]; then
+        chmod 600 "$SSH_KEY"
+        echo -e "${YELLOW}[INFO]${NC} SSH 키 권한 수정됨 (600)"
+    fi
+}
+
+# SSH 공개키 최초 등록 (비밀번호 입력 필요)
+cmd_setup_key() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  ./run.sh setup-key 192.168.0.163"
+        exit 1
+    fi
+
+    check_ssh_key
+
+    local PUBKEY="${SSH_KEY}.pub"
+
+    echo -e "${YELLOW}========================================${NC}"
+    echo -e "${YELLOW}  SSH 공개키 설정${NC}"
+    echo -e "${YELLOW}========================================${NC}"
+    echo "대상: $IP"
+    echo ""
+
+    # 공개키 존재 확인/생성
+    if [[ ! -f "$PUBKEY" ]]; then
+        echo -e "${YELLOW}[INFO]${NC} 공개키 생성 중..."
+        ssh-keygen -y -f "$SSH_KEY" >"$PUBKEY" 2>/dev/null
+        if [[ ! -f "$PUBKEY" ]]; then
+            echo -e "${RED}[ERROR]${NC} 공개키 생성 실패"
+            exit 1
+        fi
+    fi
+
+    # 이미 키가 등록되어 있는지 확인
+    if ssh -i "$SSH_KEY" $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=3 root@"$IP" "echo ok" &>/dev/null; then
+        echo -e "${GREEN}[OK]${NC} SSH 키 이미 등록됨"
+        return 0
+    fi
+
+    # known_hosts 초기화 (이전 키 충돌 방지)
+    echo -e "${YELLOW}[INFO]${NC} known_hosts 초기화..."
+    ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP" 2>/dev/null || true
+
+    echo -e "${YELLOW}[INFO]${NC} 비밀번호 입력 필요 (기본: homeagent)"
+    echo ""
+
+    # 수동 복사 (OpenSSH)
+    cat "$PUBKEY" | ssh \
+        -o StrictHostKeyChecking=no \
+        root@"$IP" \
+        "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+
+    # 확인
+    if ssh -i "$SSH_KEY" $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=3 root@"$IP" "echo ok" &>/dev/null; then
+        echo ""
+        echo -e "${GREEN}[OK]${NC} SSH 키 등록 완료!"
+        echo "  이제 비밀번호 없이 접속 가능: ./run.sh ssh"
+    else
+        echo -e "${RED}[ERROR]${NC} SSH 키 등록 실패"
+        echo "  수동 확인: ssh root@$IP 'cat ~/.ssh/authorized_keys'"
+        exit 1
+    fi
+}
+
 cmd_ssh() {
     local first_arg="$1"
     local IP CMD
 
-    # 첫 번째 인자가 IP 형식이면 IP로 사용
     if [[ "$first_arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         IP="$first_arg"
         shift
@@ -308,18 +383,12 @@ cmd_ssh() {
         exit 1
     fi
 
-    # SSH 옵션 결정
-    local ssh_opts="$SSH_OPTS"
-    if [[ -f "$SSH_KEY" ]]; then
-        ssh_opts="-i $SSH_KEY $SSH_OPTS"
-    fi
+    check_ssh_key
 
     if [[ -z "$CMD" ]]; then
-        # 인터랙티브 모드
-        ssh $ssh_opts root@"$IP"
+        ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP"
     else
-        # 명령 실행 모드
-        ssh $ssh_opts root@"$IP" "$CMD"
+        ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "$CMD"
     fi
 }
 
@@ -387,6 +456,9 @@ case "${1:-help}" in
     ssh)
         shift
         cmd_ssh "$@"
+        ;;
+    setup-key)
+        cmd_setup_key "$2"
         ;;
     set-ip)
         cmd_set_ip "$2"

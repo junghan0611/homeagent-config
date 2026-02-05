@@ -154,6 +154,31 @@ ZBDongle-E #2 ──→ Thread RCP (ot-rcp)     ──→ OTBR ──→ Matter 
 - commissioning, cluster read/write, subscribe 가능
 - 한계: CLI 도구, 지속적 구독 어려움
 
+#### chip-tool 크로스 컴파일 (재현 정보)
+
+```bash
+# 빌드 스크립트
+./scripts/build-chip-tool.sh all   # clone + build
+
+# 핵심 파라미터
+CHIP_VERSION="v1.4.0.0"           # v1.5.0.1은 glib 2.80 필요 → Yocto 비호환
+DOCKER_IMAGE="ghcr.io/project-chip/chip-build-crosscompile:81"
+BUILD_TARGET="linux-arm64-chip-tool-clang"
+```
+
+| SDK 버전 | Docker 태그 | sysroot | glib | Yocto 호환 |
+|----------|------------|---------|------|:----------:|
+| v1.5.0.1 | 177 | ubuntu-24.04-aarch64 | 2.80 | X (`g_once_init_enter_pointer` 누락) |
+| **v1.4.0.0** | **81** | **ubuntu-22.04.1-aarch64** | **2.72** | **O** (Yocto scarthgap glib 2.78) |
+
+```bash
+# 배포
+./scripts/deploy-chip-tool.sh [RPi5_IP]   # scp → /opt/chip-tool/
+
+# RPi5에서 실행
+/opt/chip-tool/chip-tool pairing code-thread <node-id> hex:<dataset> <setup-code>
+```
+
 ### Phase 2: python-matter-server 검증 (다음)
 
 ```
@@ -375,7 +400,7 @@ OTBR_NO_AUTO_ATTACH=1
 - [python-matter-server](https://github.com/home-assistant-libs/python-matter-server)
 - [matterbridge-zigbee2mqtt](https://github.com/Luligu/matterbridge-zigbee2mqtt)
 - [canonical/matter-mqtt-bridge](https://github.com/canonical/matter-mqtt-bridge) (반대 방향: MQTT→Matter)
-- [connectedhomeip](https://github.com/project-chip/connectedhomeip) (Matter SDK v1.5.0.1)
+- [connectedhomeip](https://github.com/project-chip/connectedhomeip) (Matter SDK v1.4.0.0, v1.5.0.1은 glib 2.80 필요)
 
 ---
 

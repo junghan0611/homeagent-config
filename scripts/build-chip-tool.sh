@@ -21,10 +21,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 MATTER_DIR="${PROJECT_DIR}/matter"
 CHIP_SRC="${MATTER_DIR}/connectedhomeip"
-CHIP_VERSION="v1.5.0.1"
+CHIP_VERSION="v1.4.0.0"
 BUILD_TARGET="linux-arm64-chip-tool-clang"
 OUTPUT_DIR="${MATTER_DIR}/bin"
-DOCKER_IMAGE="ghcr.io/project-chip/chip-build-crosscompile:177"
+# tag 81 = Ubuntu 22.04 sysroot (glib 2.72) → Yocto Scarthgap glib 2.78 호환
+# tag 177 = Ubuntu 24.04 sysroot (glib 2.80) → Scarthgap 비호환 (g_once_init_enter_pointer 누락)
+DOCKER_IMAGE="ghcr.io/project-chip/chip-build-crosscompile:81"
 
 cmd_clone() {
     if [[ -d "$CHIP_SRC" ]]; then

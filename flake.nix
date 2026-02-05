@@ -17,6 +17,9 @@
           extraPkgs = with pkgs; [
             bmaptool
             picocom
+            minicom
+            lrzsz
+            python3Packages.pyspinel  # OpenThread NCP/RCP 인터페이스
             ripgrep
             fd
             jq

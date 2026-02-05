@@ -44,6 +44,9 @@ help() {
     echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
     echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
     echo ""
+    echo -e "${GREEN}펌웨어:${NC}"
+    echo "  flash-rcp [dev] ZBDongle-E Thread RCP 펌웨어 플래시"
+    echo ""
     echo -e "${GREEN}디바이스:${NC}"
     echo "  ssh [IP] [cmd]  RPi5 SSH 접속/명령 실행"
     echo "  setup-key [IP]  SSH 공개키 최초 등록 (비밀번호 입력)"
@@ -462,6 +465,10 @@ case "${1:-help}" in
         ;;
     set-ip)
         cmd_set_ip "$2"
+        ;;
+    flash-rcp)
+        shift
+        "${SCRIPT_DIR}/scripts/flash-thread-rcp.sh" "$@"
         ;;
     *)
         echo -e "${RED}[ERROR]${NC} 알 수 없는 명령: $1"

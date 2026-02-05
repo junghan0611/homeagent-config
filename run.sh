@@ -44,8 +44,10 @@ help() {
     echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
     echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
     echo ""
-    echo -e "${GREEN}펌웨어:${NC}"
+    echo -e "${GREEN}펌웨어/Matter:${NC}"
     echo "  flash-rcp [dev] ZBDongle-E Thread RCP 펌웨어 플래시"
+    echo "  build-chip-tool  chip-tool 크로스 컴파일 (Docker)"
+    echo "  deploy-chip-tool [IP]  chip-tool RPi5 배포"
     echo ""
     echo -e "${GREEN}디바이스:${NC}"
     echo "  ssh [IP] [cmd]  RPi5 SSH 접속/명령 실행"
@@ -469,6 +471,14 @@ case "${1:-help}" in
     flash-rcp)
         shift
         "${SCRIPT_DIR}/scripts/flash-thread-rcp.sh" "$@"
+        ;;
+    build-chip-tool)
+        shift
+        "${SCRIPT_DIR}/scripts/build-chip-tool.sh" "$@"
+        ;;
+    deploy-chip-tool)
+        shift
+        "${SCRIPT_DIR}/scripts/deploy-chip-tool.sh" "$@"
         ;;
     *)
         echo -e "${RED}[ERROR]${NC} 알 수 없는 명령: $1"

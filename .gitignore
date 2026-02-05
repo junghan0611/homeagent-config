@@ -13,6 +13,10 @@ yocto/sources/meta-raspberrypi
 yocto/sources/meta-clang/
 yocto/sources/meta-flutter
 
+# Matter (connectedhomeip ~10GB, chip-tool ~113MB)
+matter/connectedhomeip/
+matter/bin/
+
 # Go
 go/bin/
 go/pkg/

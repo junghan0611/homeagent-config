@@ -54,8 +54,8 @@ IMAGE_INSTALL:append = " \
     mosquitto-clients \
     "
 
-# OpenThread Border Router (Phase 2에서 활성화)
-# IMAGE_INSTALL:append = " ot-br-posix"
+# OpenThread Border Router + Matter 검증
+IMAGE_INSTALL:append = " ot-br-posix avahi-daemon"
 
 # Mesa for RPi5 GPU
 IMAGE_INSTALL:append = " \

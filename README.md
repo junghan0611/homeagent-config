@@ -175,7 +175,7 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 | hailo-apps | 20+ AI 앱 (Detection, Pose, LLM, VLM, Voice) |
 | Wayland/Weston | 디스플레이 서버 |
 
-### Layer 2: Go Core (kd-wallpad-app 재사용)
+### Layer 2: Go Service
 
 | 구성요소 | 역할 |
 |----------|------|
@@ -183,16 +183,16 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 | EdgeAI Runtime | ONNX/TFLite 추론 엔진 |
 | Context Engine | 상황 인식 (home, away, sleep) |
 | Automation | 패턴 학습, 규칙 자동 생성 |
-| FFI Bridge | Flutter dart:ffi 연동 |
+| FFI Bridge | Zig Core 연동 |
 
-### Layer 3: Zig Core (sks-hub-zig 템플릿)
+### Layer 3: Zig Core
 
 | 구성요소 | 역할 |
 |----------|------|
 | State Machine | 결정론적 100ms 루프, 순수 함수 전이 |
 | Matter SDK | Controller + Device 구현 |
 | OTBR | Thread Border Router |
-| FFI Layer | C/Go/Flutter 연동 |
+| FFI Layer | C/Go 연동 |
 
 ### Layer 4: Flutter UI (meta-flutter)
 
@@ -303,16 +303,18 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 
 ## 로드맵
 
-### Phase 1: Yocto 기반 구축 (현재)
+### Phase 1: Yocto 기반 구축 ✅
 
 - [x] flake.nix 개발 환경 (nix-environments 기반)
 - [x] RPi5 Yocto 빌드 성공 (scarthgap 5.0 LTS)
 - [x] 부팅 및 Weston 동작 확인
 - [x] SSH 접속 (ssh-keys 레시피)
 - [x] run.sh CLI (빌드/배포/SSH 통합)
-- [x] zigbee2mqtt 레시피 준비
+- [x] nodejs 20.18 + mosquitto 설치
+- [x] ZBDongle-E 인식 (/dev/ttyUSB0)
+- [ ] zigbee2mqtt 설정 및 동작 확인
 - [ ] OTBR (ot-br-posix) 동작 확인
-- [ ] meta-flutter 통합 → Flutter 앱 표시
+- [ ] meta-flutter 통합
 
 ### Phase 2: Matter/Thread 통합
 

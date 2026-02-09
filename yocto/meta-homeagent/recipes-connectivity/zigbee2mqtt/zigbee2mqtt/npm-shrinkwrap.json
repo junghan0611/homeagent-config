@@ -1,0 +1,17 @@
+{
+  "_comment": "PLACEHOLDER: Replace with devtool-generated npm-shrinkwrap.json",
+  "_instructions": [
+    "Run inside NixOS FHS environment:",
+    "  ./run.sh shell",
+    "  source sources/poky/oe-init-build-env build",
+    "  devtool add 'npm://registry.npmjs.org;package=zigbee2mqtt;version=2.8.0'",
+    "Then copy the generated file:",
+    "  cp build/workspace/recipes/zigbee2mqtt/zigbee2mqtt/npm-shrinkwrap.json \\",
+    "     yocto/meta-homeagent/recipes-connectivity/zigbee2mqtt/zigbee2mqtt/"
+  ],
+  "name": "zigbee2mqtt",
+  "version": "2.8.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {}
+}

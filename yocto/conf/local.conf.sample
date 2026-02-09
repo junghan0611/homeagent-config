@@ -46,15 +46,18 @@ IMAGE_INSTALL:append = " \
     shell-config \
     "
 
-# Zigbee2MQTT + dependencies
+# Zigbee2MQTT (inherit npm handles nodejs RDEPENDS)
 IMAGE_INSTALL:append = " \
-    nodejs \
+    zigbee2mqtt \
     nodejs-npm \
     mosquitto \
     mosquitto-clients \
     "
 
-# OpenThread Border Router + Matter 검증
+# Matter controller (matterjs-server via WebSocket :5580)
+IMAGE_INSTALL:append = " matterjs-server"
+
+# OpenThread Border Router + mDNS
 IMAGE_INSTALL:append = " ot-br-posix avahi-daemon avahi-utils"
 
 # 런타임 패키지 관리 (opkg)

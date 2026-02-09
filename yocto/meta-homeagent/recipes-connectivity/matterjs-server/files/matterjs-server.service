@@ -1,0 +1,20 @@
+[Unit]
+Description=OHF Matter Server (matter.js)
+After=network-online.target ot-br-posix.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/matterjs-server
+ExecStart=/usr/bin/node /usr/lib/node_modules/matter-server/dist/esm/MatterServer.js \
+    --storage-path ${STORAGE_PATH} \
+    --port ${WS_PORT}
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

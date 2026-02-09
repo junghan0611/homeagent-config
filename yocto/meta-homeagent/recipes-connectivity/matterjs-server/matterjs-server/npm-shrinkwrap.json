@@ -1,0 +1,17 @@
+{
+  "_comment": "PLACEHOLDER: Replace with devtool-generated npm-shrinkwrap.json",
+  "_instructions": [
+    "Run inside NixOS FHS environment:",
+    "  ./run.sh shell",
+    "  source sources/poky/oe-init-build-env build",
+    "  devtool add 'npm://registry.npmjs.org;package=matter-server;version=0.3.5'",
+    "Then copy the generated file:",
+    "  cp build/workspace/recipes/matter-server/matter-server/npm-shrinkwrap.json \\",
+    "     yocto/meta-homeagent/recipes-connectivity/matterjs-server/matterjs-server/"
+  ],
+  "name": "matter-server",
+  "version": "0.3.5",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {}
+}

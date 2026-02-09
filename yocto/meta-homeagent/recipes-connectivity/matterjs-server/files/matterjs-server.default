@@ -1,0 +1,11 @@
+# OHF Matter Server Environment Configuration
+# /etc/default/matterjs-server
+
+# Storage path for Matter fabric data
+STORAGE_PATH=/var/lib/matterjs-server
+
+# WebSocket API port (Go HomeAgent connects here)
+WS_PORT=5580
+
+# Log level: info, debug, warn, error
+LOG_LEVEL=info

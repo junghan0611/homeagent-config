@@ -74,6 +74,19 @@ VC4DTBO ?= "vc4-kms-v3d"
 - OTBR_WEB=ON 빌드 시 npm 타임아웃 (Web UI 비활성화 권장)
 - RCP 펌웨어 버전 호환성 확인 필요
 
+## RCP 정보
+  - USB포트: RPi5 블루(USB3) 포트에 연결 (전원 부족 시 CP210x 타임아웃 발생)
+  - 펌웨어: SL-OPENTHREAD/2.5.3.0_GitHub-1fceb225b; EFR32; Jun 27 2025
+  - EUI64: 08b95ffffeb52ac1
+  - Spinel API: v10
+  - Baudrate: 460800, no flow control
+  - Spinel URL: `spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800`
+
+## Matter Commissioning 검증 완료 (2026-02-09)
+  - Eve 도어센서: BLE→PASE→NOC→Thread→SRP→mDNS→CASE→CommissioningComplete ✅
+  - BooleanState 클러스터 데이터 읽기 성공
+  - chip-tool v1.4.0.0 + `--bypass-attestation-verifier true`
+
 ---
 
 ## meta-flutter-sony

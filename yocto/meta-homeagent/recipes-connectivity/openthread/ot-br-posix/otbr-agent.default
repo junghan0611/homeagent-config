@@ -1,0 +1,6 @@
+# HomeAgent OTBR Agent Configuration
+# RPi5: eth1 (USB-Ethernet), ttyUSB0 (Thread RCP ZBDongle-E)
+
+# Options to pass to otbr-agent
+OTBR_AGENT_OPTS="-I wpan0 -B eth1 spinel+hdlc+uart:///dev/ttyUSB0?b460800 trel://eth1"
+OTBR_NO_AUTO_ATTACH=1

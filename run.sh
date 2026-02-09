@@ -45,6 +45,11 @@ help() {
     echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
     echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
     echo ""
+    echo -e "${GREEN}npm 레시피 (FHS 환경 내에서):${NC}"
+    echo "  npm-shrinkwrap <pkg> devtool로 npm-shrinkwrap.json 생성"
+    echo "                       pkg: zigbee2mqtt | matterjs-server"
+    echo "  npm-build <pkg>     bitbake 빌드 검증"
+    echo ""
     echo -e "${GREEN}Go 앱:${NC}"
     echo "  go-build        Go 크로스 컴파일 (aarch64 정적 바이너리)"
     echo "  go-deploy [IP]  RPi5에 배포"
@@ -79,7 +84,7 @@ help() {
 cmd_shell() {
     echo -e "${GREEN}[SHELL]${NC} Yocto FHS 빌드 환경 진입..."
     cd "$SCRIPT_DIR"
-    nix develop --impure
+    nix develop
 }
 
 cmd_status() {
@@ -118,7 +123,7 @@ cmd_bb() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix develop --impure --command "./run.sh bb $target"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb $target"
     fi
     echo -e "${GREEN}[BUILD]${NC} bitbake $target"
     cd "$BUILD_DIR"
@@ -136,7 +141,7 @@ cmd_bb_cmd() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 실행..."
         cd "$SCRIPT_DIR"
-        exec nix develop --impure --command "./run.sh bb-cmd $*"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-cmd $*"
     fi
     echo -e "${GREEN}[BITBAKE]${NC} bitbake $*"
     cd "$BUILD_DIR"
@@ -152,7 +157,7 @@ cmd_bb_clean() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix develop --impure --command "./run.sh bb $target"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-clean $target"
     fi
     cd "$BUILD_DIR"
     source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
@@ -163,7 +168,7 @@ cmd_bb_resume() {
     if ! in_fhs; then
         echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
         cd "$SCRIPT_DIR"
-        exec nix develop --impure --command "./run.sh bb-resume"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-resume"
     fi
     echo -e "${GREEN}[RESUME]${NC} 이전 빌드 계속..."
     cd "$BUILD_DIR"
@@ -422,6 +427,124 @@ cmd_ssh() {
     fi
 }
 
+META_DIR="${YOCTO_DIR}/meta-homeagent/recipes-connectivity"
+
+# npm 패키지명 → 레시피 디렉토리 매핑
+_npm_recipe_info() {
+    local pkg="$1"
+    case "$pkg" in
+        zigbee2mqtt)
+            NPM_NAME="zigbee2mqtt"
+            NPM_VERSION="2.8.0"
+            RECIPE_DIR="${META_DIR}/zigbee2mqtt"
+            SHRINKWRAP_DIR="${RECIPE_DIR}/zigbee2mqtt"
+            ;;
+        matterjs-server)
+            NPM_NAME="matter-server"
+            NPM_VERSION="0.3.5"
+            RECIPE_DIR="${META_DIR}/matterjs-server"
+            SHRINKWRAP_DIR="${RECIPE_DIR}/matterjs-server"
+            ;;
+        *)
+            echo -e "${RED}[ERROR]${NC} 알 수 없는 패키지: $pkg"
+            echo "  지원: zigbee2mqtt, matterjs-server"
+            exit 1
+            ;;
+    esac
+}
+
+cmd_npm_shrinkwrap() {
+    local pkg="$1"
+    if [[ -z "$pkg" ]]; then
+        echo -e "${RED}[ERROR]${NC} 패키지를 지정하세요"
+        echo "  ./run.sh npm-shrinkwrap zigbee2mqtt"
+        echo "  ./run.sh npm-shrinkwrap matterjs-server"
+        exit 1
+    fi
+
+    _npm_recipe_info "$pkg"
+
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 실행..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh npm-shrinkwrap $pkg"
+    fi
+
+    echo -e "${GREEN}[NPM-SHRINKWRAP]${NC} devtool로 ${NPM_NAME}@${NPM_VERSION} shrinkwrap 생성..."
+
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+
+    # 기존 workspace에 있으면 제거 후 재생성
+    if devtool status 2>/dev/null | grep -q "$NPM_NAME"; then
+        echo -e "${YELLOW}[INFO]${NC} 기존 workspace 제거..."
+        devtool reset "$NPM_NAME" 2>/dev/null || true
+    fi
+
+    echo -e "${CYAN}[1/3]${NC} devtool add 실행 (npm registry에서 다운로드)..."
+    devtool add "npm://registry.npmjs.org;package=${NPM_NAME};version=${NPM_VERSION}"
+
+    local GENERATED="workspace/recipes/${NPM_NAME}/${NPM_NAME}/npm-shrinkwrap.json"
+    if [[ ! -f "$GENERATED" ]]; then
+        echo -e "${RED}[ERROR]${NC} shrinkwrap 생성 실패: $GENERATED"
+        exit 1
+    fi
+
+    echo -e "${CYAN}[2/3]${NC} shrinkwrap 복사..."
+    cp "$GENERATED" "$SHRINKWRAP_DIR/npm-shrinkwrap.json"
+    local lines
+    lines=$(wc -l < "$SHRINKWRAP_DIR/npm-shrinkwrap.json")
+    echo -e "${GREEN}[OK]${NC} ${SHRINKWRAP_DIR}/npm-shrinkwrap.json (${lines} lines)"
+
+    # devtool에서 생성한 레시피의 LIC_FILES_CHKSUM도 확인
+    echo -e "${CYAN}[3/3]${NC} LIC_FILES_CHKSUM 확인..."
+    local generated_bb="workspace/recipes/${NPM_NAME}/${NPM_NAME}_${NPM_VERSION}.bb"
+    if [[ -f "$generated_bb" ]]; then
+        local lic_line
+        lic_line=$(grep "LIC_FILES_CHKSUM" "$generated_bb" || true)
+        if [[ -n "$lic_line" ]]; then
+            echo -e "${CYAN}[INFO]${NC} devtool 생성 레시피의 LIC_FILES_CHKSUM:"
+            echo "  $lic_line"
+            echo "  → 기존 레시피와 비교해서 필요시 업데이트하세요"
+        fi
+    fi
+
+    echo -e "${GREEN}[DONE]${NC} ${pkg} npm-shrinkwrap.json 생성 완료"
+
+    # workspace 정리
+    devtool reset "$NPM_NAME" 2>/dev/null || true
+}
+
+cmd_npm_build() {
+    local pkg="$1"
+    if [[ -z "$pkg" ]]; then
+        echo -e "${RED}[ERROR]${NC} 패키지를 지정하세요"
+        echo "  ./run.sh npm-build zigbee2mqtt"
+        echo "  ./run.sh npm-build matterjs-server"
+        exit 1
+    fi
+
+    _npm_recipe_info "$pkg"
+
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh npm-build $pkg"
+    fi
+
+    # placeholder 체크
+    if grep -q "PLACEHOLDER" "$SHRINKWRAP_DIR/npm-shrinkwrap.json" 2>/dev/null; then
+        echo -e "${RED}[ERROR]${NC} npm-shrinkwrap.json이 placeholder입니다"
+        echo "  먼저 실행: ./run.sh npm-shrinkwrap $pkg"
+        exit 1
+    fi
+
+    echo -e "${GREEN}[NPM-BUILD]${NC} bitbake $pkg..."
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake "$pkg"
+}
+
 cmd_go_build() {
     echo -e "${GREEN}[GO-BUILD]${NC} aarch64 정적 바이너리 빌드..."
     cd "$SCRIPT_DIR/go"
@@ -559,6 +682,12 @@ case "${1:-help}" in
         ;;
     set-ip)
         cmd_set_ip "$2"
+        ;;
+    npm-shrinkwrap)
+        cmd_npm_shrinkwrap "$2"
+        ;;
+    npm-build)
+        cmd_npm_build "$2"
         ;;
     go-build)
         cmd_go_build

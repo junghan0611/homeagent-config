@@ -31,6 +31,7 @@ help() {
     echo ""
     echo -e "${GREEN}빌드 (FHS 환경 내에서):${NC}"
     echo "  bb [target]     bitbake 빌드 (기본: core-image-weston)"
+    echo "  bb-cmd <args>   bitbake 명령 직접 실행 (예: -c cleansstate ncurses-native)"
     echo "  bb-clean [target] 클린 빌드 (tmp-glibc 삭제 후 빌드)"
     echo "  bb-resume       이전 빌드 계속"
     echo "  clean           빌드 캐시 전체 정리 (tmp-glibc, cache, sstate)"
@@ -117,6 +118,24 @@ cmd_bb() {
     cd "$BUILD_DIR"
     source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
     bitbake "$target"
+}
+
+cmd_bb_cmd() {
+    if [[ $# -eq 0 ]]; then
+        echo -e "${RED}[ERROR]${NC} bitbake 인자를 지정하세요"
+        echo "  예: ./run.sh bb-cmd -c cleansstate ncurses-native parted-native"
+        echo "  예: ./run.sh bb-cmd -e nodejs"
+        exit 1
+    fi
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 실행..."
+        cd "$SCRIPT_DIR"
+        exec nix develop --impure --command "./run.sh bb-cmd $*"
+    fi
+    echo -e "${GREEN}[BITBAKE]${NC} bitbake $*"
+    cd "$BUILD_DIR"
+    source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake "$@"
 }
 
 cmd_bb_clean() {
@@ -426,6 +445,10 @@ case "${1:-help}" in
     bb)
         shift
         cmd_bb "$@"
+        ;;
+    bb-cmd)
+        shift
+        cmd_bb_cmd "$@"
         ;;
     bb-clean)
         shift

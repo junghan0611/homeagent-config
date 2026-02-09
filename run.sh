@@ -45,6 +45,12 @@ help() {
     echo "  flash <device>  SD 카드 플래싱 (예: /dev/sda)"
     echo "  deploy <host>   원격 호스트로 이미지 전송 후 플래싱"
     echo ""
+    echo -e "${GREEN}Go 앱:${NC}"
+    echo "  go-build        Go 크로스 컴파일 (aarch64 정적 바이너리)"
+    echo "  go-deploy [IP]  RPi5에 배포"
+    echo "  go-test [IP]    RPi5 health check 테스트"
+    echo "  go-dev [args]   로컬 개발 실행"
+    echo ""
     echo -e "${GREEN}펌웨어/Matter:${NC}"
     echo "  flash-rcp [dev] ZBDongle-E Thread RCP 펌웨어 플래시"
     echo "  build-chip-tool  chip-tool 크로스 컴파일 (Docker)"
@@ -416,6 +422,69 @@ cmd_ssh() {
     fi
 }
 
+cmd_go_build() {
+    echo -e "${GREEN}[GO-BUILD]${NC} aarch64 정적 바이너리 빌드..."
+    cd "$SCRIPT_DIR/go"
+    local ver
+    ver=$(git -C "$SCRIPT_DIR" describe --tags --always --dirty 2>/dev/null || echo "dev")
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+      go build -ldflags="-s -w -X main.version=${ver}" \
+      -o bin/homeagent ./cmd/homeagent
+    echo -e "${GREEN}[DONE]${NC} go/bin/homeagent ($(ls -lh bin/homeagent | awk '{print $5}'))"
+    file bin/homeagent
+}
+
+cmd_go_deploy() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  ./run.sh go-deploy 192.168.0.163"
+        exit 1
+    fi
+
+    local BIN="$SCRIPT_DIR/go/bin/homeagent"
+    if [[ ! -f "$BIN" ]]; then
+        echo -e "${YELLOW}[INFO]${NC} 바이너리 없음, 빌드 먼저 실행..."
+        cmd_go_build
+    fi
+
+    check_ssh_key
+
+    echo -e "${GREEN}[GO-DEPLOY]${NC} $IP 에 배포..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "mkdir -p /opt/homeagent"
+    scp -i "$SSH_KEY" $SSH_OPTS "$BIN" root@"$IP":/opt/homeagent/homeagent
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "chmod +x /opt/homeagent/homeagent"
+
+    echo -e "${CYAN}[VERIFY]${NC} 버전 확인:"
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "/opt/homeagent/homeagent -version"
+    echo -e "${GREEN}[DONE]${NC} 배포 완료"
+}
+
+cmd_go_test() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  ./run.sh go-test 192.168.0.163"
+        exit 1
+    fi
+
+    check_ssh_key
+
+    echo -e "${GREEN}[GO-TEST]${NC} $IP health check..."
+    local result
+    result=$(ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "wget -qO- http://localhost:8080/healthz" 2>&1) || {
+        echo -e "${RED}[FAIL]${NC} health check 실패 (서버가 실행 중인지 확인)"
+        echo "  시작: ./run.sh ssh $IP '/opt/homeagent/homeagent &'"
+        exit 1
+    }
+    echo -e "${GREEN}[OK]${NC} $result"
+}
+
+cmd_go_dev() {
+    cd "$SCRIPT_DIR/go"
+    go run ./cmd/homeagent "$@"
+}
+
 cmd_set_ip() {
     local ip="$1"
     if [[ -z "$ip" ]]; then
@@ -490,6 +559,19 @@ case "${1:-help}" in
         ;;
     set-ip)
         cmd_set_ip "$2"
+        ;;
+    go-build)
+        cmd_go_build
+        ;;
+    go-deploy)
+        cmd_go_deploy "$2"
+        ;;
+    go-test)
+        cmd_go_test "$2"
+        ;;
+    go-dev)
+        shift
+        cmd_go_dev "$@"
         ;;
     flash-rcp)
         shift

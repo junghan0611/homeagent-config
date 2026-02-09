@@ -40,11 +40,18 @@
         # nix develop로 FHS 환경 진입
         devShells.default = yoctoShell;
 
-        # 개발용 (Zig/Go/Flutter)
+        # 개발용 (Go + Node.js)
         devShells.dev = pkgs.mkShell {
           name = "homeagent-dev";
-          packages = with pkgs; [ zig zls go gopls flutter just ripgrep fd ];
-          shellHook = ''echo "HomeAgent Dev Environment"'';
+          packages = with pkgs; [
+            go gopls          # Go 컨트롤러
+            nodejs_20         # matter.js / z2m 개발
+            just              # 태스크 러너
+            ripgrep fd        # 검색
+          ];
+          shellHook = ''
+            echo "HomeAgent Dev: Go $(go version | cut -d' ' -f3) / Node $(node -v)"
+          '';
         };
       }
     );

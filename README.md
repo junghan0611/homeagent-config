@@ -1,6 +1,6 @@
 # HomeAgent Config
 
-RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전트 플랫폼
+RPi5 + Yocto + Go + Node.js + Matter + Edge AI 오픈소스 홈에이전트 플랫폼
 
 **OpenHome Foundation 기여를 위한 완전 오픈소스 프로젝트**
 
@@ -17,49 +17,73 @@ RPi5 + Yocto + Go + Flutter + Zig + Matter + Edge AI 오픈소스 홈에이전�
 │  Master Agent ←──A2A Protocol──→ HomeAgent ←───→ User           │
 │  (Cloud/PC)        (승인 기반)     (Edge)       (Human)         │
 └─────────────────────────┬───────────────────────────────────────┘
-                          │ CLI / API (에이전트 직관 튜닝, retry)
+                          │ CLI / API
 ┌─────────────────────────┴───────────────────────────────────────┐
-│                     Go Service Layer                            │
-│  ├── HA API 호환 레이어 (검증된 인터페이스)                     │
+│                Go Service Layer (컨트롤러)                       │
+│  ├── HA API 호환 레이어 (WebSocket/REST)                        │
 │  ├── EdgeAI Runtime (ONNX/TFLite)                               │
-│  ├── MQTT 브릿지 (zigbee2mqtt 연동)                             │
+│  ├── State Machine (결정론적 상태 전이, Go 내부 패키지)          │
+│  ├── MQTT 클라이언트 (zigbee2mqtt 연동)                         │
+│  ├── Matter 클라이언트 (matterjs-server WebSocket :5580)        │
 │  └── 배포: 단일 바이너리                                        │
 └─────────────────────────┬───────────────────────────────────────┘
-                          │ FFI / IPC
+                          │ MQTT / WebSocket
 ┌─────────────────────────┴───────────────────────────────────────┐
-│                     Zig Core (State Machine)                    │
-│  ├── 결정론적 100ms 루프, 순수 함수 전이                        │
-│  ├── Matter Controller + Device                                 │
-│  ├── Thread Border Router                                       │
-│  └── 배포: 단일 바이너리                                        │
+│               Node.js Protocol Layer (프로토콜 엔진)             │
+│  ├── zigbee2mqtt       Zigbee 디바이스 (3000+ 지원)             │
+│  ├── matterjs-server   Matter 컨트롤러 (matter.js 기반)         │
+│  ├── matterbridge      비-Matter → Matter 브릿지 (옵션)         │
+│  └── 단일 런타임: Node.js 20+                                   │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
 ┌─────────────────────────┴───────────────────────────────────────┐
-│                     Network Layer (검증 우선)                   │
-│  ├── zigbee2mqtt (ZBDongle-E) - 3000+ 디바이스                  │
-│  ├── OTBR (Thread RCP)                                          │
-│  └── MQTT Broker (mosquitto)                                    │
+│               System Infrastructure (C/C++)                     │
+│  ├── mosquitto         MQTT 브로커                              │
+│  ├── otbr-agent        Thread Border Router (RCP)               │
+│  └── avahi-daemon      mDNS/DNS-SD                              │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
 ┌─────────────────────────┴───────────────────────────────────────┐
 │                     Yocto Linux (RPi5)                          │
-│  ├── meta-raspberrypi (BSP)                                     │
-│  ├── meta-homeagent (커스텀 레이어)                             │
+│  ├── meta-raspberrypi (BSP, scarthgap 5.0 LTS)                 │
+│  ├── meta-homeagent (커스텀 레이어: OTBR, 패키지 설정)          │
 │  ├── meta-hailo (Edge AI NPU, 옵션)                             │
-│  └── Wayland/Weston + 동적 데이터 뷰어                          │
+│  └── Kernel 6.6 LTS                                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### 런타임 스택 (2026-02-09 확정)
+
+```
+RPi5 (Yocto scarthgap) — HomeAgent 허브
+├── Go       HomeAgent (컨트롤러, AI 판단, 상태머신, A2A)
+├── Node.js  matterjs-server + zigbee2mqtt + matterbridge (프로토콜 엔진)
+├── C/C++    mosquitto, otbr-agent, avahi-daemon (시스템 인프라)
+└── (없음)   Python — 허브에서는 사용하지 않음
+
+소형 디바이스 (Zig 펌웨어)
+├── Zig      센서/액추에이터 펌웨어 (Thread/Matter 엔드포인트)
+│            EFR32, nRF, ESP32 등 MCU 타겟
+│            런타임 없음, 결정론적, 저전력
+└── 역할     에이전트에 연결되는 말단 컨트롤러
+             (자체 제작 센서, 릴레이, 디스플레이 등)
+```
+
+**언어별 역할:**
+- **Go (허브 컨트롤러)**: Matter/Zigbee는 I/O-bound → goroutine + channel 적합. Thread 라디오 250kbps가 물리적 병목이므로 GC 일시정지 무의미
+- **Node.js (프로토콜 엔진)**: HA 2026.2에서 C++ SDK → matter.js 전환. C++ SDK 안정성 문제 (크래시, 재시작 실패) 때문에 순수 JS가 오히려 안정적
+- **Zig (소형 디바이스)**: 런타임 없음 + C ABI 호환 + 크로스 컴파일 → MCU 펌웨어 최적. HomeAgent에 Thread/Matter로 연결되는 자체 센서/컨트롤러 제작용
 
 ### 개발 전략: 검증 우선
 
 ```
-1. Network Layer    zigbee2mqtt + MQTT로 실제 디바이스 검증
+1. System Infra     zigbee2mqtt + MQTT + OTBR로 실제 디바이스 검증 ✅
         ↓
-2. HA 호환성        검증된 데이터로 Home Assistant API 호환 확보
+2. Matter 검증      chip-tool → matterjs-server로 Matter 디바이스 연동
         ↓
-3. Zig/Go Core      검증된 인터페이스 기반으로 코어 구현
+3. Go Controller    검증된 프로토콜 위에 컨트롤러 구현
         ↓
-4. Agent Layer      A2A 프로토콜, CLI/API 에이전트 튜닝
+4. Agent Layer      A2A 프로토콜, Constitutional AI, CLI/API
 ```
 
 > *하드웨어 검증에 시간 쓰지 않는다. 검증된 오픈소스로 데이터 확보 후 코어 구현.*
@@ -172,8 +196,20 @@ constitution.md (정체성)     context.json (환경)
 | 구성요소 | 사양 |
 |----------|------|
 | 메인 보드 | Raspberry Pi 5 (8GB 권장) |
-| Thread RCP | USB Thread Controller |
+| Zigbee NCP | ZBDongle-E (USB, zigbee2mqtt용) |
+| Thread RCP | ZBDongle-E (USB3 블루포트, OTBR용) |
 | NPU (옵션) | Hailo AI HAT+ 시리즈 |
+| 전원 | 5V/5A USB-C (동글 안정성 필수) |
+
+### 듀얼 동글 구성
+
+```
+RPi5 USB Ports
+├── USB2 (검정)  ZBDongle-E #1  →  zigbee2mqtt (Zigbee NCP)
+└── USB3 (파랑)  ZBDongle-E #2  →  otbr-agent (Thread RCP)
+```
+
+> 전원 부족 시 CP210x 타임아웃 발생. 5V/5A 이상 전원 공급기 필수.
 
 ### Hailo AI 가속기 옵션
 
@@ -194,38 +230,47 @@ constitution.md (정체성)     context.json (환경)
 | 구성요소 | 역할 |
 |----------|------|
 | Yocto Project | 커스텀 Linux 배포판 빌드 (Scarthgap 5.0 LTS) |
-| meta-raspberrypi | RPi5 BSP |
-| meta-flutter | Flutter Embedded Linux (Sony) |
+| meta-raspberrypi | RPi5 BSP (Kernel 6.6 LTS) |
+| meta-homeagent | OTBR 설정, 패키지 커스텀, opkg |
 | meta-hailo | Hailo AI HAT+ (8/8L/10H) - HailoRT, TAPPAS |
-| hailo-apps | 20+ AI 앱 (Detection, Pose, LLM, VLM, Voice) |
-| Wayland/Weston | 디스플레이 서버 |
 
-### Layer 2: Go Service
+### Layer 2: System Infrastructure (C/C++)
 
 | 구성요소 | 역할 |
 |----------|------|
-| HA API 호환 | WebSocket/REST 클라이언트 |
+| mosquitto | MQTT 브로커 |
+| otbr-agent | Thread Border Router (RCP over UART) |
+| avahi-daemon | mDNS/DNS-SD (Matter 디스커버리) |
+
+### Layer 3: Node.js Protocol Engine
+
+| 구성요소 | 역할 |
+|----------|------|
+| zigbee2mqtt | Zigbee 디바이스 제어 (3000+ 지원, MQTT 퍼블리시) |
+| matterjs-server | Matter 컨트롤러 (matter.js 기반, WebSocket :5580) |
+| matterbridge | 비-Matter 디바이스를 Matter로 노출 (옵션, Apple/Google Home 연동) |
+
+### Layer 4: Go Controller (HomeAgent)
+
+| 구성요소 | 역할 |
+|----------|------|
+| HA API 호환 | WebSocket/REST 클라이언트 (HA 생태계 호환) |
+| State Machine | 결정론적 상태 전이 (Go 내부 패키지) |
 | EdgeAI Runtime | ONNX/TFLite 추론 엔진 |
 | Context Engine | 상황 인식 (home, away, sleep) |
-| Automation | 패턴 학습, 규칙 자동 생성 |
-| FFI Bridge | Zig Core 연동 |
+| MQTT Client | zigbee2mqtt 데이터 소비 |
+| Matter Client | matterjs-server WebSocket 연동 |
+| A2A Server | Agent2Agent 프로토콜 엔드포인트 |
 
-### Layer 3: Zig Core
+### Zig: 소형 디바이스 펌웨어
 
-| 구성요소 | 역할 |
-|----------|------|
-| State Machine | 결정론적 100ms 루프, 순수 함수 전이 |
-| Matter SDK | Controller + Device 구현 |
-| OTBR | Thread Border Router |
-| FFI Layer | C/Go 연동 |
-
-### Layer 4: Flutter UI (meta-flutter)
+허브가 아닌 **말단 디바이스**에 사용:
 
 | 구성요소 | 역할 |
 |----------|------|
-| Flutter eLinux | Sony meta-flutter, Wayland 네이티브 |
-| 대시보드 | Matter 디바이스 제어/모니터링 |
-| AI 인터랙션 | 컨텍스트 표시, 예측 제안 |
+| Thread 엔드포인트 | Matter over Thread 센서/액추에이터 |
+| 타겟 MCU | EFR32, nRF52/53, ESP32 |
+| 특징 | 런타임 없음, C ABI 호환, 결정론적, 저전력 |
 
 **핵심 인사이트**: 소프트센서(MLP/LSTM)는 CPU만으로 충분 (0.01-0.1 TOPS).
 NPU는 음성/비전 등 서비스 확장성을 위한 것.
@@ -238,44 +283,39 @@ NPU는 음성/비전 등 서비스 확장성을 위한 것.
 homeagent-config/
 ├── AGENTS.md                 # 에이전트 지침
 ├── README.md                 # 프로젝트 개요 (이 파일)
+├── VERSION.md                # 버전 매트릭스 (Yocto/RPi5/Hailo 호환성)
 ├── flake.nix                 # Nix 개발 환경
+├── run.sh                    # 빌드/배포/SSH 통합 CLI
 │
 ├── docs/                     # 문서
-│   ├── ARCHITECTURE.md       # 아키텍처 설계
-│   └── VISION.md             # 프로젝트 비전
+│   ├── A2A.md                # A2A 프로토콜, Constitutional AI, 런타임 스택
+│   ├── MQTT-HA.md            # Matter/HA 호환 아키텍처
+│   ├── TARGET_DEVICE.md      # 타겟 디바이스 정보
+│   ├── YOCTO-OFFLINE-FIRST.md  # Yocto 오프라인 빌드 전략
+│   └── ZIGBEE2MQTT_UPSTREAM_GUIDE.md  # z2m 업스트림 가이드
 │
 ├── yocto/                    # Yocto 빌드 환경
 │   ├── meta-homeagent/       # 커스텀 레이어
-│   │   ├── recipes-core/     # 코어 패키지
-│   │   ├── recipes-flutter/  # Flutter 앱 레시피
-│   │   └── recipes-ai/       # AI 런타임 레시피
-│   ├── conf/                 # 빌드 설정
-│   └── scripts/              # 빌드 스크립트
+│   │   ├── conf/             # 레이어 설정
+│   │   ├── recipes-core/     # 코어 패키지 (ssh-keys, opkg 설정)
+│   │   └── recipes-connectivity/  # OTBR bbappend (eth1, ttyUSB0, 460800)
+│   ├── conf/                 # 빌드 설정 (local.conf, bblayers.conf)
+│   └── sources/              # 레이어 소스 (심볼릭 링크)
 │
-├── go/                       # Go Core
-│   ├── pkg/
-│   │   ├── ha/               # HA API 호환
-│   │   ├── edgeai/           # EdgeAI 런타임
-│   │   └── bridge/           # Flutter FFI
-│   └── go.mod
+├── matter/                   # Matter 도구
+│   ├── bin/                  # chip-tool 바이너리 + 런타임 라이브러리
+│   └── connectedhomeip/     # chip-tool 빌드 환경 (Docker)
 │
-├── zig/                      # Zig Core
-│   ├── src/
-│   │   ├── config_as_ssot.zig
-│   │   ├── types/
-│   │   ├── core/
-│   │   └── matter/
-│   └── build.zig
+├── firmware/                 # 펌웨어
+│   └── zbdonglee/            # ZBDongle-E RCP 펌웨어
 │
-├── flutter/                  # Flutter UI
-│   ├── lib/
-│   │   ├── features/
-│   │   └── core/ffi/
-│   └── pubspec.yaml
+├── scripts/                  # 유틸리티 스크립트
+│   ├── build-chip-tool.sh    # chip-tool 크로스 컴파일 (v1.4.0.0)
+│   ├── deploy-chip-tool.sh   # RPi5에 chip-tool 배포
+│   └── flash-thread-rcp.sh   # Thread RCP 펌웨어 플래싱
 │
-└── models/                   # AI 모델
-    ├── context.onnx
-    └── intent.tflite
+└── .beads/                   # 이슈 트래커 (beads_rust)
+    └── issues.jsonl
 ```
 
 ---
@@ -311,7 +351,7 @@ cp ../conf/bblayers.conf.sample conf/bblayers.conf
 ### 4. 빌드
 
 ```bash
-# 기본 이미지 (Weston + OTBR)
+# 기본 이미지 (Weston + OTBR + mosquitto + Node.js)
 bitbake core-image-weston
 
 # 결과물
@@ -328,30 +368,48 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 
 ## 로드맵
 
-### Phase 1: Yocto 기반 구축 ✅
+### Phase 1: Yocto 기반 + 프로토콜 검증 ✅
 
 - [x] flake.nix 개발 환경 (nix-environments 기반)
 - [x] RPi5 Yocto 빌드 성공 (scarthgap 5.0 LTS)
 - [x] 부팅 및 Weston 동작 확인
 - [x] SSH 접속 (ssh-keys 레시피)
 - [x] run.sh CLI (빌드/배포/SSH 통합)
-- [x] nodejs 20.18 + mosquitto 설치
-- [x] ZBDongle-E 인식 (/dev/ttyUSB0)
+- [x] Node.js 20 + mosquitto 설치
+- [x] ZBDongle-E 듀얼 동글 인식 (Zigbee NCP + Thread RCP)
+- [x] OTBR (ot-br-posix) 동작 확인 (Thread Leader, SRP server)
+- [x] chip-tool v1.4.0.0 크로스 컴파일 + 배포
+- [x] **Matter commissioning 전체 흐름 검증** (2026-02-09)
+  - BLE → PASE → NOC → Thread → SRP → mDNS → CASE → CommissioningComplete
+  - Eve 도어센서 BooleanState 데이터 읽기 성공
 - [ ] zigbee2mqtt 설정 및 동작 확인
-- [ ] OTBR (ot-br-posix) 동작 확인
-- [ ] meta-flutter 통합
 
-### Phase 2: Matter/Thread 통합
+### Phase 2: matterjs-server + HA 호환
 
-- [ ] Thread RCP USB 연결 검증
-- [ ] Matter Controller (Zig)
-- [ ] Software Matter Device
+- [ ] matterjs-server Yocto 레시피 작성
+- [ ] matterjs-server WebSocket API 검증
+- [ ] zigbee2mqtt 2.8.0 업그레이드
+- [ ] npmsw 오프라인 빌드 환경 구축
+- [ ] HA API 호환 레이어 프로토타입 (Go)
 
-### Phase 3: AI + 앱 통합
+### Phase 3: AI + 에이전트 통합
 
-- [ ] Go Core EdgeAI Runtime
-- [ ] Flutter UI 개발
+- [ ] Go HomeAgent 컨트롤러 프로토타입
+- [ ] EdgeAI Runtime (Hailo + ONNX/TFLite)
+- [ ] A2A 프로토콜 구현
+- [ ] Constitutional AI 판단 프레임워크
 - [ ] 풀패키지 Yocto 이미지 배포
+
+---
+
+## 문서
+
+| 문서 | 내용 |
+|------|------|
+| [VERSION.md](VERSION.md) | Yocto/RPi5/Hailo 버전 매트릭스, RCP 정보, Matter 검증 기록 |
+| [docs/A2A.md](docs/A2A.md) | A2A 프로토콜, Constitutional AI, 런타임 스택 결정 근거 |
+| [docs/MQTT-HA.md](docs/MQTT-HA.md) | Matter/HA 호환 아키텍처, matterjs-server 전환 배경 |
+| [docs/TARGET_DEVICE.md](docs/TARGET_DEVICE.md) | 타겟 디바이스 상세 정보 |
 
 ---
 

@@ -17,19 +17,6 @@ br close <id>        # 완료
 br sync --flush-only # JSONL 동기화
 ```
 
-### 현재 이슈
-
-```
-○ bd-21k - Yocto 빌드 환경 구축          ← 시작점
-○ bd-21o - Go Core 설정
-○ bd-o2i - Zig Core 템플릿화
-○ bd-2a0 - Flutter eLinux 빌드 검증
-○ bd-34t - Matter/Thread 통합
-○ bd-2wc - Hailo-8 M.2 NPU 지원
-```
-
----
-
 ## 에이전트 원칙
 
 ### 마음가짐
@@ -50,9 +37,9 @@ br sync --flush-only # JSONL 동기화
 
 | 금지 | 허용 | 이유 |
 |------|------|------|
-| core/types에서 스레드 생성 | io/에서만 스레드 | 상태머신 결정론 |
-| 콜백에서 HubState 직접 변경 | 콜백은 Event 생산만 | 단방향 흐름 |
+| 프로토콜 엔진에서 상태 직접 변경 | Go 컨트롤러만 상태 관리 | 단방향 흐름 |
 | 클라우드 의존 로직 | 온디바이스 우선 | Data Privacy |
+| 허브에서 Python 사용 | Go + Node.js만 사용 | 런타임 단순화 |
 
 ---
 
@@ -60,9 +47,7 @@ br sync --flush-only # JSONL 동기화
 
 | 프로젝트 | 위치 | 활용 |
 |----------|------|------|
-| kd-wallpad-app | `/home/junghan/repos/gh/kd-wallpad-app/` | Go Core, Flutter FFI |
-| sks-hub-zig | `/home/junghan/repos/work/sks-hub-zig/` | Zig 상태머신 |
-| kyungdong-rockchip | `/home/junghan/repos/work/kyungdong-rockchip/` | Matter/Thread |
+| kyungdong-rockchip | `/home/junghan/repos/work/kyungdong-rockchip/` | Matter/Thread 참고 |
 
 ---
 

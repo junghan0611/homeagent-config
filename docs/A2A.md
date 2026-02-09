@@ -6,6 +6,7 @@ Agent2Agent Protocol 적용 검토 문서
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-02-09 | 런타임 스택 확정: Go(컨트롤러) + Node.js(프로토콜) + Zig(소형 디바이스 펌웨어) |
 | 2026-02-05 | Constitutional AI 섹션 추가, 증류 개념 구체화 |
 | 2026-02-04 | 첫 문서 작성, 오픈소스 클론 (~/repos/3rd/A2A) |
 
@@ -98,11 +99,11 @@ Constitution 기반:
 ### 구현 구조
 
 ```
-HomeAgent/
+HomeAgent (RPi5, Go 단일 바이너리)
 ├── constitution.md      # 정체성 + 원칙 (사람이 작성)
 ├── context.json         # 배포 환경 (요양원/가정/사무실)
 ├── local_llm/           # 오프라인 추론 (Hailo + 경량 모델)
-└── state_machine/       # Zig 코어 (결정론적 실행)
+└── statemachine/        # Go 내부 패키지 (결정론적 상태 전이)
 ```
 
 같은 HomeAgent 코드가:
@@ -111,6 +112,28 @@ HomeAgent/
 - 사무실에선 **"시설 관리 에이전트"**
 
 로 작동한다.
+
+### 런타임 스택 (2026-02-09 확정)
+
+```
+RPi5 (Yocto scarthgap) — HomeAgent 허브
+├── Go       HomeAgent (컨트롤러, AI 판단, 상태머신, A2A)
+├── Node.js  matterjs-server + zigbee2mqtt + matterbridge (프로토콜 엔진)
+├── C/C++    mosquitto, otbr-agent (시스템 인프라)
+└── (없음)   Python, Zig — 허브에서는 사용하지 않음
+
+소형 디바이스 (Zig 펌웨어)
+├── Zig      센서/액추에이터 펌웨어 (Thread/Matter 엔드포인트)
+│            EFR32, nRF, ESP32 등 MCU 타겟
+│            런타임 없음, 결정론적, 저전력
+└── 역할     에이전트에 연결되는 말단 컨트롤러
+             (자체 제작 센서, 릴레이, 디스플레이 등)
+```
+
+**언어별 역할 분담 근거:**
+- **Go (허브 컨트롤러)**: Matter/Zigbee는 I/O-bound 워크로드 → goroutine + channel이 적합. GC 일시정지는 IoT 허브 수준에서 무의미 (Thread 라디오 250kbps가 물리적 병목)
+- **Node.js (프로토콜 엔진)**: HA 2026.2에서 C++ SDK(chip-wheels) → matter.js 전환. 이유: C++ SDK는 임베디드 디바이스용 설계, 컨트롤러 안정성 문제 (Endpoint pool full 크래시, 서버 재시작 실패). 순수 JS가 오히려 안정적
+- **Zig (소형 디바이스)**: 런타임 없음 + C ABI 호환 + 크로스 컴파일 우수 → MCU 펌웨어에 최적. HomeAgent에 Thread/Matter로 연결되는 자체 센서/컨트롤러 제작 시 사용
 
 ---
 
@@ -221,12 +244,12 @@ Master Agent: (증류된 정보로 추론) → Human에게 적절한 응답
 ## TODO
 
 - [ ] A2A spec 상세 검토
-- [ ] Python SDK 테스트
-- [ ] Go/Zig 구현 가능성 검토
+- [ ] Go SDK 기반 A2A 프로토타입
 - [ ] HomeAgent agent.json 스키마 설계
 - [ ] Constitutional AI 원칙 프레임워크 설계
 - [ ] context.json 스키마 정의 (가정/요양원/사무실)
 - [ ] Hailo-10H + 경량 LLM 기반 로컬 추론 검증
+- [ ] Zig 소형 디바이스 프로토타입 (Thread 센서 엔드포인트)
 
 ## 참고
 

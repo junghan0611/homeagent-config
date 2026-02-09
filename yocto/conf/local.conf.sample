@@ -55,7 +55,10 @@ IMAGE_INSTALL:append = " \
     "
 
 # OpenThread Border Router + Matter 검증
-IMAGE_INSTALL:append = " ot-br-posix avahi-daemon"
+IMAGE_INSTALL:append = " ot-br-posix avahi-daemon avahi-utils"
+
+# 런타임 패키지 관리 (opkg)
+EXTRA_IMAGE_FEATURES += "package-management"
 
 # Mesa for RPi5 GPU
 IMAGE_INSTALL:append = " \

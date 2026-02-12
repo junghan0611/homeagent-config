@@ -341,7 +341,7 @@ BUILD_TARGET="linux-arm64-chip-tool-clang"
 meta-homeagent/recipes-connectivity/
 ├── openthread/              # done (bbappend: eth1/ttyUSB0/460800)
 ├── zigbee2mqtt/             # done (npm, systemd)
-├── matterjs-server/         # todo (npm, systemd)
+├── matterjs-server/         # done (npm, systemd, WS :5580)
 ├── matterbridge/            # todo (npm, systemd)
 └── homeagent/               # todo (Go 단일 바이너리, systemd)
 ```
@@ -454,7 +454,7 @@ OTBR_NO_AUTO_ATTACH=1
 | Thread RCP 동글 | ✅ | - | ZBDongle-E v2.5.3, 460800 baud |
 | avahi-utils | ✅ | 있음 | avahi-browse 0.8 |
 | chip-tool v1.4.0.0 | ✅ | 불필요 (테스트용) | commissioning + 데이터 읽기 완료 |
-| **matterjs-server** | **다음** | **필요** | npm, Node.js 22, systemd |
+| **matterjs-server** | **레시피 완료** | **있음** | npm, Node.js 22, systemd, WS :5580 |
 | **matterbridge** | 이후 | **필요** | npm, Zigbee→Matter 노출 |
 | **HomeAgent Go** | 이후 | **필요** | 단일 바이너리, WS + MQTT 연동 |
 
@@ -490,7 +490,7 @@ OTBR_NO_AUTO_ATTACH=1
 6. [x] chip-tool 크로스 컴파일 + Matter commissioning 전체 검증
 
 ### 다음 (Phase 2)
-7. [ ] matterjs-server Yocto 레시피 (npm, Node.js 22, systemd)
+7. [x] matterjs-server Yocto 레시피 (npm, Node.js 22, systemd)
 8. [ ] matterjs-server → Eve 센서 commissioning 검증
 9. [ ] HomeAgent Go → matterjs-server WebSocket 연동 프로토타입
 10. [ ] Matter 이벤트 → MQTT HA Autodiscovery publish

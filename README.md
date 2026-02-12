@@ -298,7 +298,7 @@ homeagent-config/
 │   ├── meta-homeagent/       # 커스텀 레이어
 │   │   ├── conf/             # 레이어 설정
 │   │   ├── recipes-core/     # 코어 패키지 (ssh-keys, opkg 설정)
-│   │   └── recipes-connectivity/  # OTBR bbappend (eth1, ttyUSB0, 460800)
+│   │   └── recipes-connectivity/  # OTBR bbappend, zigbee2mqtt, matterjs-server
 │   ├── conf/                 # 빌드 설정 (local.conf, bblayers.conf)
 │   └── sources/              # 레이어 소스 (심볼릭 링크)
 │
@@ -386,7 +386,7 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 
 ### Phase 2: matterjs-server + HA 호환
 
-- [ ] matterjs-server Yocto 레시피 작성
+- [x] matterjs-server Yocto 레시피 작성 (v0.3.5, npm-shrinkwrap, systemd)
 - [ ] matterjs-server WebSocket API 검증
 - [ ] zigbee2mqtt 2.8.0 업그레이드
 - [ ] npmsw 오프라인 빌드 환경 구축

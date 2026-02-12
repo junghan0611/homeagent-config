@@ -111,12 +111,20 @@ meta-homeagent/
 ├── conf/
 │   └── layer.conf
 └── recipes-connectivity/
-    └── zigbee2mqtt/
-        ├── zigbee2mqtt_2.4.0.bb        # inherit npm
-        ├── zigbee2mqtt_%.bbappend      # systemd 등 추가 설정
-        └── zigbee2mqtt/
-            ├── npm-shrinkwrap.json     # devtool로 생성
-            └── zigbee2mqtt.service     # systemd 서비스
+    ├── zigbee2mqtt/
+    │   ├── zigbee2mqtt_2.4.0.bb        # inherit npm
+    │   ├── zigbee2mqtt_%.bbappend      # systemd 등 추가 설정
+    │   └── zigbee2mqtt/
+    │       ├── npm-shrinkwrap.json     # devtool로 생성
+    │       └── zigbee2mqtt.service     # systemd 서비스
+    └── matterjs-server/
+        ├── matterjs-server_0.3.5.bb    # inherit npm
+        ├── matterjs-server_%.bbappend  # systemd + 환경 변수
+        ├── matterjs-server/
+        │   └── npm-shrinkwrap.json     # devtool로 생성
+        └── files/
+            ├── matterjs-server.service # systemd 서비스
+            └── matterjs-server.default # 환경 변수 (/etc/default/)
 ```
 
 ## 신규 레시피 체크리스트

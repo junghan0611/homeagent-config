@@ -20,7 +20,7 @@ func Load() *Config {
 	return &Config{
 		HTTPAddr:    envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
 		MQTTBroker:  envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
-		MatterWSURL: envOr("HOMEAGENT_MATTER_WS", "ws://localhost:8047"),
+		MatterWSURL: envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
 	}
 }
 

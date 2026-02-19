@@ -118,41 +118,44 @@ bmaptool 사용 (Nix에서 자동 설치).
 
 reflash 후 다음 서비스가 **자동으로** 구성됨:
 
-| 서비스 | 설정 | 자동 |
-|--------|------|:----:|
-| otbr-agent | eth0 backbone, ttyUSB0, 460800 baud | ✅ |
-| otbr-srp-enable | SRP server 자동 활성화 | ✅ |
-| avahi-daemon | mDNS/DNS-SD | ✅ |
-| openssh | SSH 서버 | ✅ |
-| opkg | 런타임 패키지 관리자 | ✅ |
+| 서비스 | 설정 | 자동 | 순서 |
+|--------|------|:----:|:----:|
+| otbr-agent | eth0 backbone, ttyUSB0, 460800 baud | ✅ | 1 |
+| otbr-thread-init | Thread dataset 생성 + 네트워크 시작 | ✅ | 2 |
+| otbr-srp-enable | SRP server 자동 활성화 | ✅ | 3 |
+| avahi-daemon | mDNS/DNS-SD | ✅ | - |
+| openssh | SSH 서버 | ✅ | - |
+| opkg | 런타임 패키지 관리자 | ✅ | - |
+
+부팅 체인: `otbr-agent` → `otbr-thread-init` → `otbr-srp-enable`
 
 ### 수동 작업 필요 항목
 
 ```bash
-# SSH 키 재등록 (reflash 후 호스트키 변경)
+# SSH 키 재등록 (reflash 후 호스트키 변경, 유일한 수동 작업)
 ./run.sh setup-key
-
-# Thread 네트워크 생성 (첫 부팅 시 1회)
-ot-ctl dataset init new
-ot-ctl dataset commit active
-ot-ctl ifconfig up
-ot-ctl thread start
-# 8초 대기 후 leader 확인
-ot-ctl state                          # → leader
-
-# SRP server 재활성화 (Thread 시작 후 상태 리셋됨)
-systemctl restart otbr-srp-enable
-ot-ctl srp server state               # → running
 ```
+
+> Thread 네트워크 생성과 SRP 활성화는 **부팅 시 자동**으로 수행됨.
+> 수동 실행이 필요한 경우: `./run.sh thread-init`
 
 ## 7. 검증
 
 ```bash
-# SSH 접속 후 RPi5에서 실행:
+./run.sh ssh
+
+# RPi5에서 확인:
 ot-ctl state                  # → leader
-ot-ctl srp server state       # → running (자동 enable됨)
+ot-ctl srp server state       # → running
+systemctl status otbr-thread-init   # → active (exited)
+systemctl status otbr-srp-enable    # → active (exited)
 avahi-browse -apt              # → _meshcop._udp 등 확인
-systemctl status otbr-agent   # → active (running)
+```
+
+또는 호스트에서 원커맨드:
+
+```bash
+./run.sh thread-init          # Thread + SRP 상태 확인 및 초기화
 ```
 
 ## 8. Matter Commissioning (chip-tool)
@@ -185,10 +188,10 @@ chip-tool booleanstate read state-value <node-id> 1
 
 ```
 git clone → (./run.sh layers) → ./run.sh bb → ./run.sh flash
-→ 부팅 → ./run.sh setup-key → ./run.sh ssh
-→ Thread 네트워크 생성 → SRP 자동 → Matter commissioning 준비 완료
+→ 부팅 → ./run.sh setup-key → 끝 (Thread + SRP 자동)
 
 재빌드 시: ./run.sh bb → ./run.sh flash → ./run.sh setup-key → 끝
+bbappend 수정 시: bb-cmd -c cleansstate <recipe> → bb → flash → setup-key → 끝
 ```
 
 ## 트러블슈팅

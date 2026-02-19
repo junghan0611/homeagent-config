@@ -1,7 +1,7 @@
 [Unit]
 Description=Enable OTBR SRP Server
-After=otbr-agent.service
-Requires=otbr-agent.service
+After=otbr-thread-init.service
+Requires=otbr-thread-init.service
 
 [Service]
 Type=oneshot

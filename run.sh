@@ -65,6 +65,7 @@ help() {
     echo "  ssh [IP] [cmd]  RPi5 SSH 접속/명령 실행"
     echo "  setup-key [IP]  SSH 공개키 최초 등록 (비밀번호 입력)"
     echo "  set-ip <ip>     디바이스 IP 설정"
+    echo "  thread-init [IP] Thread 네트워크 초기화 + SRP 활성화"
     echo ""
     echo -e "${GREEN}Git:${NC}"
     echo "  diff            변경사항 확인"
@@ -608,6 +609,29 @@ cmd_go_dev() {
     go run ./cmd/homeagent "$@"
 }
 
+cmd_thread_init() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  ./run.sh thread-init 192.168.0.163"
+        exit 1
+    fi
+
+    check_ssh_key
+
+    echo -e "${CYAN}[THREAD]${NC} Thread 네트워크 초기화 + SRP 활성화..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'REMOTE_EOF'
+# Thread init + SRP enable 원커맨드
+/usr/sbin/otbr-thread-init.sh
+systemctl restart otbr-srp-enable.service
+echo ""
+echo "=== 최종 상태 ==="
+echo -n "Thread: "; ot-ctl state 2>&1 | sed -n '1p' | tr -d '\r'
+echo -n "SRP:    "; ot-ctl srp server state 2>&1 | sed -n '1p' | tr -d '\r'
+echo -n "avahi:  "; systemctl is-active avahi-daemon
+REMOTE_EOF
+}
+
 cmd_set_ip() {
     local ip="$1"
     if [[ -z "$ip" ]]; then
@@ -682,6 +706,9 @@ case "${1:-help}" in
         ;;
     set-ip)
         cmd_set_ip "$2"
+        ;;
+    thread-init)
+        cmd_thread_init "$2"
         ;;
     npm-shrinkwrap)
         cmd_npm_shrinkwrap "$2"

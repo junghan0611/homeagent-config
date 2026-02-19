@@ -1,0 +1,12 @@
+[Unit]
+Description=Initialize Thread Network (first boot)
+After=otbr-agent.service
+Requires=otbr-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/otbr-thread-init.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

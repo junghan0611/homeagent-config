@@ -64,12 +64,26 @@ IMAGE_ROOTFS_EXTRA_SPACE = "1048576"          # +1GB 여유
 - 재빌드: bbappend 변경분만 빌드 (수 분)
 - 빌드 결과: `yocto/build/tmp-glibc/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.rootfs.wic.bz2`
 
+### bbappend 수정 후 재빌드
+
+bbappend 파일(예: `ot-br-posix_git.bbappend`)을 수정한 경우,
+sstate 캐시가 변경을 감지하지 못할 수 있다. **반드시 cleansstate 후 리빌드**:
+
+```bash
+./run.sh bb-cmd -c cleansstate ot-br-posix   # 캐시 무효화
+./run.sh bb                                   # 리빌드 (필수!)
+./run.sh flash /dev/sdX                       # 플래싱
+```
+
+> **주의**: `cleansstate`만 하고 `bb`를 빠뜨리면 이전 이미지가 그대로 플래싱된다.
+
 ### 빌드 관련 명령
 
 ```bash
 ./run.sh bb              # 기본 빌드 (core-image-weston)
 ./run.sh bb-clean        # tmp-glibc 삭제 후 클린 빌드
 ./run.sh bb-resume       # 중단된 빌드 이어서
+./run.sh bb-cmd -c cleansstate <recipe>  # 특정 레시피 sstate 캐시 삭제
 ./run.sh bb-cmd -e nodejs    # bitbake 임의 명령
 ./run.sh image           # 빌드된 이미지 정보 확인
 ```
@@ -180,3 +194,5 @@ git clone → (./run.sh layers) → ./run.sh bb → ./run.sh flash
 | SRP server disabled | 서비스 타이밍 | 30초 대기 후 재확인 (자동 retry) |
 | chip-tool `g_once_init_enter_pointer` | glib 2.80 비호환 | v1.4.0.0 + tag 81 사용 |
 | SSH 접속 실패 (host key 변경) | reflash 후 호스트키 리셋 | `./run.sh setup-key` |
+| bbappend 수정이 반영 안 됨 | sstate 캐시 재사용 | `bb-cmd -c cleansstate <recipe>` 후 `bb` |
+| cleansstate 후 플래시했는데 변경 없음 | 리빌드 누락 | `cleansstate` → **`bb`** → `flash` 순서 필수 |

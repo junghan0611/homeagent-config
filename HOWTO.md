@@ -129,14 +129,20 @@ reflash 후 다음 서비스가 **자동으로** 구성됨:
 ### 수동 작업 필요 항목
 
 ```bash
+# SSH 키 재등록 (reflash 후 호스트키 변경)
+./run.sh setup-key
+
 # Thread 네트워크 생성 (첫 부팅 시 1회)
 ot-ctl dataset init new
 ot-ctl dataset commit active
 ot-ctl ifconfig up
 ot-ctl thread start
+# 8초 대기 후 leader 확인
+ot-ctl state                          # → leader
 
-# SSH 키 재등록 (reflash 후 호스트키 변경)
-./run.sh setup-key
+# SRP server 재활성화 (Thread 시작 후 상태 리셋됨)
+systemctl restart otbr-srp-enable
+ot-ctl srp server state               # → running
 ```
 
 ## 7. 검증

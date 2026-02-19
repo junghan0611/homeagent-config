@@ -7,7 +7,7 @@ MAX_RETRY=10
 RETRY=0
 
 while [ $RETRY -lt $MAX_RETRY ]; do
-    STATE=$(ot-ctl srp server state 2>/dev/null | head -1)
+    STATE=$(ot-ctl srp server state 2>/dev/null | sed -n '1p' | tr -d '\r')
     if [ "$STATE" = "disabled" ]; then
         ot-ctl srp server enable
         echo "otbr-srp-enable: SRP server enabled"

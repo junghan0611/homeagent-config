@@ -2,5 +2,5 @@
 # RPi5: eth0 (내장 이더넷), ttyUSB0 (Thread RCP ZBDongle-E)
 
 # Options to pass to otbr-agent
-OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?b460800 trel://eth0"
+OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800"
 OTBR_NO_AUTO_ATTACH=1

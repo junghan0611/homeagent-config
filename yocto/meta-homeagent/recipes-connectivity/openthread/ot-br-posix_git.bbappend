@@ -1,5 +1,5 @@
 # HomeAgent: OTBR 설정 오버라이드
-# - backbone interface: eth1 (RPi5 USB-Ethernet)
+# - backbone interface: eth0 (RPi5 내장 이더넷)
 # - Thread RCP: /dev/ttyUSB0 (ZBDongle-E, baudrate 460800)
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/ot-br-posix:"

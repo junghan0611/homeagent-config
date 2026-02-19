@@ -339,7 +339,7 @@ BUILD_TARGET="linux-arm64-chip-tool-clang"
 
 ```
 meta-homeagent/recipes-connectivity/
-├── openthread/              # done (bbappend: eth1/ttyUSB0/460800)
+├── openthread/              # done (bbappend: eth0/ttyUSB0/460800)
 ├── zigbee2mqtt/             # done (npm, systemd)
 ├── matterjs-server/         # done (npm, systemd, WS :5580)
 ├── matterbridge/            # todo (npm, systemd)
@@ -422,7 +422,7 @@ ZIGBEE2MQTT_CONFIG_PERMIT_JOIN=false
 
 ```bash
 # /etc/default/otbr-agent (bbappend로 영구화)
-OTBR_AGENT_OPTS="-I wpan0 -B eth1 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800 trel://eth1"
+OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800 trel://eth0"
 OTBR_NO_AUTO_ATTACH=1
 ```
 
@@ -450,7 +450,7 @@ OTBR_NO_AUTO_ATTACH=1
 | zigbee2mqtt v1.42.0 | ✅ | 있음 | ember adapter, Tuya TS0201 |
 | HA Autodiscovery | ✅ | - | homeassistant/sensor/*/config |
 | OTBR v0.3.0 | ✅ | 있음 (meta-oe) | Thread leader |
-| OTBR 설정 bbappend | ✅ | 있음 | eth1/ttyUSB0/460800 |
+| OTBR 설정 bbappend | ✅ | 있음 | eth0/ttyUSB0/460800 |
 | Thread RCP 동글 | ✅ | - | ZBDongle-E v2.5.3, 460800 baud |
 | avahi-utils | ✅ | 있음 | avahi-browse 0.8 |
 | chip-tool v1.4.0.0 | ✅ | 불필요 (테스트용) | commissioning + 데이터 읽기 완료 |
@@ -485,7 +485,7 @@ OTBR_NO_AUTO_ATTACH=1
 1. [x] zigbee2mqtt + MQTT Autodiscovery 검증 (v1.42.0, Tuya TS0201)
 2. [x] OTBR + Thread 네트워크 형성 (leader)
 3. [x] Thread RCP 플래시 (ZBDongle-E v2.5.3)
-4. [x] OTBR 설정 Yocto bbappend (eth1/ttyUSB0/460800)
+4. [x] OTBR 설정 Yocto bbappend (eth0/ttyUSB0/460800)
 5. [x] avahi-utils + opkg Yocto 이미지 포함
 6. [x] chip-tool 크로스 컴파일 + Matter commissioning 전체 검증
 

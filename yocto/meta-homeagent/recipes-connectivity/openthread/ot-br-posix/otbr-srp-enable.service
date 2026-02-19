@@ -1,0 +1,12 @@
+[Unit]
+Description=Enable OTBR SRP Server
+After=otbr-agent.service
+Requires=otbr-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/otbr-srp-enable.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

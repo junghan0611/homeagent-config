@@ -213,7 +213,7 @@ Master Agent: (증류된 정보로 추론) → Human에게 적절한 응답
 {
   "name": "HomeAgent-RPi5",
   "version": "0.1.0",
-  "endpoint": "http://192.168.0.163:8080/a2a",
+  "endpoint": "http://192.168.69.5:8080/a2a",
   "skills": [
     {
       "name": "zigbee_control",
@@ -240,16 +240,6 @@ Master Agent: (증류된 정보로 추론) → Human에게 적절한 응답
 ```
 
 ---
-
-## TODO
-
-- [ ] A2A spec 상세 검토
-- [ ] Go SDK 기반 A2A 프로토타입
-- [ ] HomeAgent agent.json 스키마 설계
-- [ ] Constitutional AI 원칙 프레임워크 설계
-- [ ] context.json 스키마 정의 (가정/요양원/사무실)
-- [ ] Hailo-10H + 경량 LLM 기반 로컬 추론 검증
-- [ ] Zig 소형 디바이스 프로토타입 (Thread 센서 엔드포인트)
 
 ## 참고
 

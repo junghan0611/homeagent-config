@@ -422,7 +422,7 @@ ZIGBEE2MQTT_CONFIG_PERMIT_JOIN=false
 
 ```bash
 # /etc/default/otbr-agent (bbappend로 영구화)
-OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800 trel://eth0"
+OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800"
 OTBR_NO_AUTO_ATTACH=1
 ```
 
@@ -477,28 +477,5 @@ OTBR_NO_AUTO_ATTACH=1
 - [matterbridge](https://github.com/Luligu/matterbridge) — Zigbee→Matter 노출 (Bridge, Controller 아님)
 - [matterbridge-zigbee2mqtt](https://github.com/Luligu/matterbridge-zigbee2mqtt)
 
----
 
-## 로드맵
-
-### 완료
-1. [x] zigbee2mqtt + MQTT Autodiscovery 검증 (v1.42.0, Tuya TS0201)
-2. [x] OTBR + Thread 네트워크 형성 (leader)
-3. [x] Thread RCP 플래시 (ZBDongle-E v2.5.3)
-4. [x] OTBR 설정 Yocto bbappend (eth0/ttyUSB0/460800)
-5. [x] avahi-utils + opkg Yocto 이미지 포함
-6. [x] chip-tool 크로스 컴파일 + Matter commissioning 전체 검증
-
-### 다음 (Phase 2)
-7. [x] matterjs-server Yocto 레시피 (npm, Node.js 22, systemd)
-8. [ ] matterjs-server → Eve 센서 commissioning 검증
-9. [ ] HomeAgent Go → matterjs-server WebSocket 연동 프로토타입
-10. [ ] Matter 이벤트 → MQTT HA Autodiscovery publish
-
-### 이후 (Phase 3)
-11. [ ] matterbridge Yocto 레시피 (npm, systemd)
-12. [ ] matterbridge-zigbee2mqtt → Apple/Google Home 노출
-
-### 최종
-13. [ ] Constitutional AI Layer — MQTT + Matter 엔티티 기반 판단
-14. [ ] A2A Protocol — Master Agent 연동
+> 로드맵은 [README.md](../README.md#로드맵) 참조.

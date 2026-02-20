@@ -162,7 +162,7 @@ constitution.md (정체성)     context.json (환경)
 
 > *자세한 내용: [docs/A2A.md](docs/A2A.md) - Constitutional AI 섹션*
 
-### UI 철학: 코드 없는 동적 인터페이스
+### UI 철학: A2UI — 에이전트가 그리는 동적 인터페이스
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -171,21 +171,36 @@ constitution.md (정체성)     context.json (환경)
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                   HomeAgent 패러다임                         │
-│      [에이전트] → 동적 데이터 뷰어 → [빛과 형태로 소통]      │
+│              HomeAgent 패러다임 (A2UI)                       │
+│      [에이전트] → 선언적 JSON → [뷰어가 렌더링]             │
 │                                                             │
 │  • 프론트엔드를 코드로 고정하지 않음                        │
-│  • Quarto/R 대시보드처럼 동적 구성                          │
+│  • A2UI: 실행 코드가 아닌 데이터로 UI를 기술               │
+│  • JSONL 스트리밍으로 점진적 렌더링                         │
 │  • 에이전트가 토큰 세이빙하며 적절히 표현                   │
 │  • 디지털 아트 - 입력 대기가 아닌 능동적 표현               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**[A2UI](https://a2ui.org)** (Agent-to-User Interface, Google): 에이전트가 선언적 JSON으로 UI를 기술하면, 클라이언트가 렌더링하는 프로토콜. 실행 코드가 아닌 데이터이므로 UI 인젝션 방지. [OpenClaw](https://github.com/openclaw/openclaw)가 Canvas에 A2UI v0.8을 내장하여 macOS/iOS/Android/Web에서 동작하는 구현체를 보여주고 있다.
+
+```
+HomeAgent (에이전트)
+    │ A2UI JSONL (선언적 JSON)
+    ▼
+뷰어 (RPi5 디스플레이 / 웹 / 모바일)
+    │ 동일 프로토콜, 다중 클라이언트
+    ├→ RPi5 로컬 디스플레이 (Weston/Wayland)
+    ├→ 웹 브라우저 (CopilotKit / AG-UI)
+    └→ 모바일 (네이티브 브릿지)
+```
+
 **핵심 전환:**
 - ❌ 짜 놓은 앱을 넣고 입력 대기
-- ✅ 에이전트가 상황에 맞게 동적으로 시각화
+- ✅ 에이전트가 상황에 맞게 동적으로 시각화 (surfaceUpdate)
 - ✅ HCI(Human-Computer Interaction) 인터페이스로 확장
 - ✅ 빛, 형태, 움직임으로 공간과 소통하는 디지털 아트
+- ✅ 동일 A2UI 프로토콜로 RPi5 디스플레이와 웹/모바일 동시 지원
 
 > *UI는 뷰어일 뿐. 에이전트가 무엇을 어떻게 보여줄지 결정한다.*
 
@@ -382,6 +397,9 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 - [x] **Matter commissioning 전체 흐름 검증** (2026-02-09)
   - BLE → PASE → NOC → Thread → SRP → mDNS → CASE → CommissioningComplete
   - Eve 도어센서 BooleanState 데이터 읽기 성공
+- [x] **OTBR 부팅 완전 자동화** (2026-02-20)
+  - Thread 네트워크 + SRP server: reflash 후 수동 작업 없이 부팅만으로 동작
+  - systemd 부팅 체인: otbr-agent → otbr-thread-init → otbr-srp-enable
 - [ ] zigbee2mqtt 설정 및 동작 확인
 
 ### Phase 2: matterjs-server + HA 호환
@@ -392,12 +410,14 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 - [ ] npmsw 오프라인 빌드 환경 구축
 - [ ] HA API 호환 레이어 프로토타입 (Go)
 
-### Phase 3: AI + 에이전트 통합
+### Phase 3: AI + 에이전트 + 동적 UI
 
 - [ ] Go HomeAgent 컨트롤러 프로토타입
 - [ ] EdgeAI Runtime (Hailo + ONNX/TFLite)
 - [ ] A2A 프로토콜 구현
+- [ ] A2UI 뷰어 (RPi5 디스플레이 + 웹 동시 지원)
 - [ ] Constitutional AI 판단 프레임워크
+- [ ] sLLM 온디바이스 튜닝 (Hailo-10H GenAI)
 - [ ] 풀패키지 Yocto 이미지 배포
 
 ---
@@ -406,10 +426,29 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 
 | 문서 | 내용 |
 |------|------|
+| [HOWTO.md](HOWTO.md) | 클린 상태에서 동작하는 RPi5까지 재현하는 세팅 가이드 |
+| [HARDWARE.md](HARDWARE.md) | RPi5 하드웨어 정보 (네트워크, USB, Thread, 온도) |
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Hailo 버전 매트릭스, RCP 정보, Matter 검증 기록 |
 | [docs/A2A.md](docs/A2A.md) | A2A 프로토콜, Constitutional AI, 런타임 스택 결정 근거 |
+| [docs/A2UI.md](docs/A2UI.md) | A2UI 동적 UI 프로토콜, OpenClaw 참조, 뷰어 아키텍처 |
 | [docs/MQTT-HA.md](docs/MQTT-HA.md) | Matter/HA 호환 아키텍처, matterjs-server 전환 배경 |
 | [docs/TARGET_DEVICE.md](docs/TARGET_DEVICE.md) | 타겟 디바이스 상세 정보 |
+
+---
+
+## 참조 프로젝트
+
+이 프로젝트의 방향에 영향을 준 프로젝트들. 개별 기능보다 **만든 사람의 철학이 아키텍처에 담겨 있는** 것들을 중심으로.
+
+| 프로젝트 | 관계 | 핵심 |
+|----------|------|------|
+| [OpenClaw](https://github.com/openclaw/openclaw) | A2UI 구현체 | 에이전트 → 선언적 JSON → 뷰어. Canvas에 A2UI v0.8 내장. 멀티플랫폼 |
+| [pi-mono](https://github.com/badlogic/pi-mono) | 에이전트 인프라 | coding agent CLI + unified LLM API + TUI/Web UI. TypeScript 모노레포 |
+| [be-more-agent](https://github.com/brenpoly/be-more-agent) | RPi5 비서 비교 | Ollama + Whisper + Piper TTS + 얼굴 애니메이션. 빌딩블록 조합형 |
+| [A2UI](https://a2ui.org) | UI 프로토콜 | Google의 Agent-to-User Interface 스펙. 선언적 JSON, UI 인젝션 방지 |
+| [CopilotKit](https://github.com/CopilotKit/CopilotKit) | 프론트엔드 | AG-UI 프로토콜로 에이전트 연결. A2UI + React 렌더링 |
+
+**HomeAgent와의 차이점**: 위 프로젝트들은 각자의 레이어에서 뛰어나지만, **재현 가능한 프로덕션 빌드 세트** (Yocto 이미지 → SD 카드 → 부팅 → 즉시 동작)를 제공하지는 않는다. HomeAgent는 Zigbee/Matter 허브 기능 + sLLM 튜닝 + 동적 UI를 **하나의 배포 가능한 이미지**로 묶는 것이 목표다.
 
 ---
 

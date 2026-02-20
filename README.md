@@ -431,6 +431,7 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Hailo 버전 매트릭스, RCP 정보, Matter 검증 기록 |
 | [docs/A2A.md](docs/A2A.md) | A2A 프로토콜, Constitutional AI, 런타임 스택 결정 근거 |
 | [docs/A2UI.md](docs/A2UI.md) | A2UI 동적 UI 프로토콜, OpenClaw 참조, 뷰어 아키텍처 |
+| [docs/MATTER-VERIFY.md](docs/MATTER-VERIFY.md) | chip-tool(oracle) vs matterjs-server 검증 기록 |
 | [docs/MQTT-HA.md](docs/MQTT-HA.md) | Matter/HA 호환 아키텍처, matterjs-server 전환 배경 |
 | [docs/TARGET_DEVICE.md](docs/TARGET_DEVICE.md) | 타겟 디바이스 상세 정보 |
 

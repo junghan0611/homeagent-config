@@ -94,10 +94,12 @@ func (a *Agent) buildSystemPrompt(devices []DeviceInfo) string {
 	sb.WriteString("- Button: {label: \"텍스트\", variant: \"filled\"/\"outlined\", actionId: \"id\"}\n\n")
 	sb.WriteString("## 규칙\n")
 	sb.WriteString("- 디바이스 제어 시 반드시 ```action 블록에 JSON 포함\n")
+	sb.WriteString("- 제어 가능한 디바이스가 1개뿐이면 확인 없이 바로 실행 (절대 되묻지 않기)\n")
+	sb.WriteString("- 이름에 [방이름]이 있으면 방이름으로 부르기 (예: '현관문 열려있어?')\n")
 	sb.WriteString("- 상태 대시보드/요약 요청 시 ```surface 블록 포함\n")
 	sb.WriteString("- 일반 대화는 텍스트만 응답 (surface 불필요)\n")
 	sb.WriteString("- contact_sensor는 읽기 전용 (제어 불가)\n")
-	sb.WriteString("- 간결하게 한국어로 응답\n")
+	sb.WriteString("- 간결하게 한국어로 응답 (1~2문장)\n")
 	return sb.String()
 }
 

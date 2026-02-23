@@ -22,6 +22,9 @@ type Config struct {
 	// LLM Agent
 	OpenRouterKey string
 	LLMModel      string
+
+	// Device aliases
+	AliasesFile string
 }
 
 func Load() *Config {
@@ -33,6 +36,7 @@ func Load() *Config {
 		WifiPassword:  os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
 		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
 		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.5-flash"),
+		AliasesFile:   envOr("HOMEAGENT_ALIASES", "/opt/homeagent/aliases.json"),
 	}
 }
 

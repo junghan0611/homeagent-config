@@ -120,9 +120,13 @@ func (h *Hub) buildHomeSurface() map[string]interface{} {
 			iconName, color, stateText = "sensor", "#6b7280", "알 수 없음"
 		}
 
+		label := d.Name
+		if d.Room != "" {
+			label = fmt.Sprintf("%s · %s", d.Room, d.Name)
+		}
 		deviceRows = append(deviceRows, row(10,
 			icon(iconName, 20, color),
-			text("body", fmt.Sprintf("%s", d.Name)),
+			text("body", label),
 			text("caption", stateText),
 		))
 	}

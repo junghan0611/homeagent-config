@@ -35,6 +35,7 @@ func getOTBRDataset() (string, error) {
 type DeviceState struct {
 	NodeID    int                    `json:"node_id"`
 	Name      string                 `json:"name"`
+	Room      string                 `json:"room,omitempty"`
 	Type      string                 `json:"type"` // "contact_sensor", etc.
 	Available bool                   `json:"available"`
 	State     map[string]interface{} `json:"state"` // e.g. {"contact": true}
@@ -55,6 +56,9 @@ type Hub struct {
 	// LLM Agent
 	agent     *agent.Agent
 	lastEvent time.Time // debounce rapid events
+
+	// Device aliases
+	aliases map[int]DeviceAlias
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -83,6 +87,7 @@ func New(cfg *config.Config) *Hub {
 		eventCh:    make(chan Event, 100),
 		sseClients: make(map[chan Event]struct{}),
 		agent:      ag,
+		aliases:    loadAliases(cfg.AliasesFile),
 	}
 }
 
@@ -223,6 +228,12 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 	// Extract device info from attributes
 	if name, ok := n.Attributes["0/40/3"]; ok {
 		ds.Name = fmt.Sprintf("%v", name)
+	}
+
+	// Apply alias (overrides manufacturer name)
+	if alias, ok := h.aliases[n.NodeID]; ok {
+		ds.Name = alias.Name
+		ds.Room = alias.Room
 	}
 
 	// Detect device type from endpoint 1 descriptor
@@ -450,9 +461,13 @@ func (h *Hub) deviceInfos() []agent.DeviceInfo {
 		default:
 			desc = fmt.Sprintf("%v", d.State)
 		}
+		name := d.Name
+		if d.Room != "" {
+			name = fmt.Sprintf("[%s] %s", d.Room, d.Name)
+		}
 		infos = append(infos, agent.DeviceInfo{
 			NodeID:    d.NodeID,
-			Name:      d.Name,
+			Name:      name,
 			Type:      d.Type,
 			Available: d.Available,
 			StateDesc: desc,

@@ -95,6 +95,15 @@ type openRouterResp struct {
 	} `json:"error,omitempty"`
 }
 
+// EventContext for reactive agent
+type EventContext struct {
+	DeviceName string `json:"device_name"`
+	DeviceType string `json:"device_type"`
+	EventKey   string `json:"event_key"`
+	EventValue string `json:"event_value"`
+	TimeKST    string `json:"time_kst"`
+}
+
 var actionBlockRe = regexp.MustCompile("(?s)```action\\s*\\n(.+?)\\n```")
 
 func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
@@ -149,5 +158,87 @@ func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) 
 	reply := actionBlockRe.ReplaceAllString(content, "")
 	result.Reply = strings.TrimSpace(reply)
 
+	return result, nil
+}
+
+func (a *Agent) buildEventPrompt(evt EventContext, devices []DeviceInfo) string {
+	var sb strings.Builder
+	sb.WriteString("당신은 HomeAgent, 스마트홈 이벤트 판단 에이전트입니다.\n\n")
+	sb.WriteString("## 이벤트 발생\n")
+	sb.WriteString(fmt.Sprintf("- 시각: %s\n", evt.TimeKST))
+	sb.WriteString(fmt.Sprintf("- 디바이스: %s (%s)\n", evt.DeviceName, evt.DeviceType))
+	sb.WriteString(fmt.Sprintf("- 변경: %s = %s\n\n", evt.EventKey, evt.EventValue))
+	sb.WriteString("## 전체 디바이스 상태\n")
+	for _, d := range devices {
+		sb.WriteString(fmt.Sprintf("- Node %d: %s (%s) → %s\n", d.NodeID, d.Name, d.Type, d.StateDesc))
+	}
+	sb.WriteString("\n## 가능한 액션\n")
+	sb.WriteString("on_off_plug/on_off_light만 제어 가능:\n")
+	sb.WriteString("```action\n{\"action\":\"on\",\"node_id\":N}\n```\n\n")
+	sb.WriteString("## 판단 규칙\n")
+	sb.WriteString("- 22:00~06:00 사이 문 열림 → ⚠️ 경고 알림\n")
+	sb.WriteString("- 낮 시간 문 열림/닫힘 → 📋 간결한 상태 안내\n")
+	sb.WriteString("- 플러그/조명 상태 변경 → 📋 간결한 상태 안내\n")
+	sb.WriteString("- 필요시 연관 디바이스 자동 제어 가능 (```action 블록 사용)\n")
+	sb.WriteString("- 한 줄~두 줄 이내로 간결하게 한국어 응답\n")
+	sb.WriteString("- 불필요한 알림은 하지 마세요 (\"ignore\"만 응답)\n")
+	return sb.String()
+}
+
+// ReactToEvent evaluates a device event and returns agent response (or nil to ignore)
+func (a *Agent) ReactToEvent(ctx context.Context, evt EventContext, devices []DeviceInfo) (*ChatResult, error) {
+	sysPrompt := a.buildEventPrompt(evt, devices)
+
+	reqBody := openRouterReq{
+		Model: a.cfg.Model,
+		Messages: []openRouterMsg{
+			{Role: "system", Content: sysPrompt},
+			{Role: "user", Content: fmt.Sprintf("%s의 %s이(가) %s = %s", evt.TimeKST, evt.DeviceName, evt.EventKey, evt.EventValue)},
+		},
+		MaxToks: 200,
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequestWithContext(ctx, "POST", "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openrouter: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var orResp openRouterResp
+	if err := json.Unmarshal(respBody, &orResp); err != nil {
+		return nil, fmt.Errorf("openrouter parse: %w", err)
+	}
+	if orResp.Error != nil {
+		return nil, fmt.Errorf("openrouter: %s", orResp.Error.Message)
+	}
+	if len(orResp.Choices) == 0 {
+		return nil, fmt.Errorf("openrouter: no choices")
+	}
+
+	content := orResp.Choices[0].Message.Content
+	log.Printf("[agent-event] LLM response: %s", content)
+
+	// "ignore" means no notification needed
+	if strings.TrimSpace(strings.ToLower(content)) == "ignore" {
+		return nil, nil
+	}
+
+	result := &ChatResult{}
+	matches := actionBlockRe.FindAllStringSubmatch(content, -1)
+	for _, m := range matches {
+		var act Action
+		if err := json.Unmarshal([]byte(m[1]), &act); err == nil {
+			result.Actions = append(result.Actions, act)
+		}
+	}
+
+	reply := actionBlockRe.ReplaceAllString(content, "")
+	result.Reply = strings.TrimSpace(reply)
 	return result, nil
 }

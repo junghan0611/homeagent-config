@@ -53,7 +53,8 @@ type Hub struct {
 	sseMu      sync.Mutex
 
 	// LLM Agent
-	agent *agent.Agent
+	agent     *agent.Agent
+	lastEvent time.Time // debounce rapid events
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -288,8 +289,65 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 			Value:    upd.Value,
 		}
 
+		// Trigger agent reaction (debounced, async)
+		if h.agent != nil && time.Since(h.lastEvent) > 3*time.Second {
+			h.lastEvent = time.Now()
+			devName := ""
+			devType := ""
+			if ds != nil {
+				devName = ds.Name
+				devType = ds.Type
+			}
+			evtCtx := agent.EventContext{
+				DeviceName: devName,
+				DeviceType: devType,
+				EventKey:   upd.Path,
+				EventValue: fmt.Sprintf("%v", upd.Value),
+				TimeKST:    time.Now().In(time.FixedZone("KST", 9*3600)).Format("15:04"),
+			}
+			go h.reactToEvent(evtCtx)
+		}
+
 	case matter.EventNodeAdded, matter.EventNodeUpdated:
 		log.Printf("[hub] %s: %s", evt.Type, string(evt.Data))
+	}
+}
+
+func (h *Hub) reactToEvent(evtCtx agent.EventContext) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	result, err := h.agent.ReactToEvent(ctx, evtCtx, h.deviceInfos())
+	if err != nil {
+		log.Printf("[agent-event] error: %v", err)
+		return
+	}
+	if result == nil {
+		log.Printf("[agent-event] ignored: %s %s=%s", evtCtx.DeviceName, evtCtx.EventKey, evtCtx.EventValue)
+		return
+	}
+
+	// Execute any actions
+	for _, act := range result.Actions {
+		switch act.ActionType {
+		case "on":
+			if err := h.SetOnOff(ctx, act.NodeID, true); err != nil {
+				log.Printf("[agent-event] action on node %d failed: %v", act.NodeID, err)
+			} else {
+				log.Printf("[agent-event] executed: on node %d", act.NodeID)
+			}
+		case "off":
+			if err := h.SetOnOff(ctx, act.NodeID, false); err != nil {
+				log.Printf("[agent-event] action off node %d failed: %v", act.NodeID, err)
+			} else {
+				log.Printf("[agent-event] executed: off node %d", act.NodeID)
+			}
+		}
+	}
+
+	// Push agent message via SSE
+	if result.Reply != "" {
+		h.eventCh <- Event{Type: "agent_message", Value: result.Reply}
 	}
 }
 

@@ -4,6 +4,7 @@ import { getDevices, subscribeEvents, type DeviceState, type HubEvent } from "./
 import "./device-card.js";
 import "./commission-dialog.js";
 import "./chat-panel.js";
+import "./a2ui-renderer.js";
 
 @customElement("ha-app")
 export class App extends LitElement {
@@ -21,6 +22,9 @@ export class App extends LitElement {
 
   @state()
   private agentMessage = "";
+
+  @state()
+  private currentSurface: any = null;
 
   private eventSource?: EventSource;
 
@@ -334,6 +338,10 @@ export class App extends LitElement {
         chatPanel.addAgentMessage(`🔔 ${evt.value}`);
       }
     }
+
+    if (evt.type === "surface_update") {
+      this.currentSurface = evt.value;
+    }
   }
 
   private updateAgentMessage() {
@@ -398,6 +406,10 @@ export class App extends LitElement {
                 <p>Matter 디바이스를 페어링해 보세요</p>
               </div>
             `}
+
+        <!-- A2UI Dynamic Surface -->
+        <ha-a2ui-renderer .surface=${this.currentSurface}></ha-a2ui-renderer>
+        ${this.currentSurface ? html`<br/>` : ""}
 
         <!-- Chat -->
         <ha-chat-panel></ha-chat-panel>

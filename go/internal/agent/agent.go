@@ -48,10 +48,17 @@ type Action struct {
 	NodeID     int    `json:"node_id"`
 }
 
+// SurfaceUpdate is an A2UI surface update
+type SurfaceUpdate struct {
+	SurfaceID  string      `json:"surfaceId"`
+	Components interface{} `json:"components"`
+}
+
 // ChatResult is the agent's response
 type ChatResult struct {
-	Reply   string   `json:"reply"`
-	Actions []Action `json:"actions,omitempty"`
+	Reply   string          `json:"reply"`
+	Actions []Action        `json:"actions,omitempty"`
+	Surface *SurfaceUpdate  `json:"surface,omitempty"`
 }
 
 func (a *Agent) buildSystemPrompt(devices []DeviceInfo) string {
@@ -65,10 +72,31 @@ func (a *Agent) buildSystemPrompt(devices []DeviceInfo) string {
 	sb.WriteString("on_off_plug/on_off_light 타입만 제어 가능:\n")
 	sb.WriteString("```action\n{\"action\":\"on\",\"node_id\":N}\n```\n")
 	sb.WriteString("```action\n{\"action\":\"off\",\"node_id\":N}\n```\n\n")
+	sb.WriteString("## A2UI 동적 UI (선택)\n")
+	sb.WriteString("상태 요약이나 대시보드 요청 시 ```surface 블록으로 UI JSON을 생성하세요:\n")
+	sb.WriteString("```surface\n")
+	sb.WriteString(`{"surfaceId":"main","components":[`)
+	sb.WriteString("\n")
+	sb.WriteString(`  {"type":"Card","props":{"variant":"outlined"},"children":[`)
+	sb.WriteString("\n")
+	sb.WriteString(`    {"type":"Text","props":{"variant":"h5","text":"제목"}},`)
+	sb.WriteString("\n")
+	sb.WriteString(`    {"type":"Text","props":{"variant":"body","text":"내용"}}`)
+	sb.WriteString("\n  ]}")
+	sb.WriteString("\n]}\n```\n\n")
+	sb.WriteString("사용 가능한 컴포넌트:\n")
+	sb.WriteString("- Text: {variant: \"h3\"/\"h5\"/\"body\"/\"caption\", text: \"...\"}\n")
+	sb.WriteString("- Card: {variant: \"outlined\"/\"elevated\", children: [...]}\n")
+	sb.WriteString("- Row: {gap: 8, children: [...]}\n")
+	sb.WriteString("- Column: {gap: 8, children: [...]}\n")
+	sb.WriteString("- Icon: {name: \"door\"/\"plug\"/\"warning\"/\"check\", size: 24, color: \"#hex\"}\n")
+	sb.WriteString("- Divider: {}\n")
+	sb.WriteString("- Button: {label: \"텍스트\", variant: \"filled\"/\"outlined\", actionId: \"id\"}\n\n")
 	sb.WriteString("## 규칙\n")
 	sb.WriteString("- 디바이스 제어 시 반드시 ```action 블록에 JSON 포함\n")
+	sb.WriteString("- 상태 대시보드/요약 요청 시 ```surface 블록 포함\n")
+	sb.WriteString("- 일반 대화는 텍스트만 응답 (surface 불필요)\n")
 	sb.WriteString("- contact_sensor는 읽기 전용 (제어 불가)\n")
-	sb.WriteString("- 상태 질문은 현재 데이터 기반으로 답변\n")
 	sb.WriteString("- 간결하게 한국어로 응답\n")
 	return sb.String()
 }
@@ -105,6 +133,7 @@ type EventContext struct {
 }
 
 var actionBlockRe = regexp.MustCompile("(?s)```action\\s*\\n(.+?)\\n```")
+var surfaceBlockRe = regexp.MustCompile("(?s)```surface\\s*\\n(.+?)\\n```")
 
 func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
 	sysPrompt := a.buildSystemPrompt(devices)
@@ -154,8 +183,20 @@ func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) 
 		}
 	}
 
-	// Remove action blocks from reply text
+	// Extract surface blocks
+	surfaceMatches := surfaceBlockRe.FindAllStringSubmatch(content, 1)
+	for _, m := range surfaceMatches {
+		var su SurfaceUpdate
+		if err := json.Unmarshal([]byte(m[1]), &su); err == nil {
+			result.Surface = &su
+		} else {
+			log.Printf("[agent] surface parse error: %v", err)
+		}
+	}
+
+	// Remove action + surface blocks from reply text
 	reply := actionBlockRe.ReplaceAllString(content, "")
+	reply = surfaceBlockRe.ReplaceAllString(reply, "")
 	result.Reply = strings.TrimSpace(reply)
 
 	return result, nil

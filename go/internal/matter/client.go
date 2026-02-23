@@ -256,6 +256,38 @@ func (c *Client) StartListening(ctx context.Context) error {
 	return nil
 }
 
+// SendCommand sends a Matter cluster command to a node
+func (c *Client) SendCommand(ctx context.Context, nodeID int, endpointID int, clusterID int, commandID int, payload map[string]interface{}) error {
+	args := map[string]interface{}{
+		"node_id":     nodeID,
+		"endpoint_id": endpointID,
+		"cluster_id":  clusterID,
+		"command_name": commandID,
+	}
+	if payload != nil {
+		args["payload"] = payload
+	}
+
+	id, ch, err := c.send("send_command", args)
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("send_command parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("send_command error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
 // SetWifiCredentials sets WiFi credentials for commissioning WiFi Matter devices
 func (c *Client) SetWifiCredentials(ctx context.Context, ssid, password string) error {
 	id, ch, err := c.send("set_wifi_credentials", map[string]string{

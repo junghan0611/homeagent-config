@@ -168,6 +168,16 @@ func (h *Hub) Commission(ctx context.Context, code string) (*DeviceState, error)
 	return ds, nil
 }
 
+// SetOnOff sends on/off command to a device
+func (h *Hub) SetOnOff(ctx context.Context, nodeID int, on bool) error {
+	// OnOff cluster = 6, On = 1, Off = 0, Toggle = 2
+	commandID := 0 // Off
+	if on {
+		commandID = 1 // On
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, 6, commandID, nil)
+}
+
 // Devices returns current device states
 func (h *Hub) Devices() []DeviceState {
 	h.mu.RLock()
@@ -224,6 +234,9 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 	if contact, ok := n.Attributes["1/69/0"]; ok {
 		ds.State["contact"] = contact
 	}
+	if onoff, ok := n.Attributes["1/6/0"]; ok {
+		ds.State["on"] = onoff
+	}
 
 	h.devices[n.NodeID] = ds
 	log.Printf("[hub] node %d: %s (%s) state=%v", ds.NodeID, ds.Name, ds.Type, ds.State)
@@ -244,8 +257,10 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 		if ok {
 			// Map Matter paths to human-readable keys
 			switch upd.Path {
-			case "1/69/0": // BooleanState
+			case "1/69/0": // BooleanState (contact sensor)
 				ds.State["contact"] = upd.Value
+			case "1/6/0": // OnOff
+				ds.State["on"] = upd.Value
 			default:
 				ds.State[upd.Path] = upd.Value
 			}
@@ -290,6 +305,7 @@ func (h *Hub) eventBroadcaster(ctx context.Context) {
 func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
 	mux.HandleFunc("/api/commission", h.handleCommission)
+	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/events", h.handleSSE)
 }
 
@@ -335,6 +351,43 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning", "code": req.Code})
+}
+
+func (h *Hub) handleDeviceCommand(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		NodeID  int    `json:"node_id"`
+		Command string `json:"command"` // "on", "off", "toggle"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Command {
+	case "on":
+		err = h.SetOnOff(r.Context(), req.NodeID, true)
+	case "off":
+		err = h.SetOnOff(r.Context(), req.NodeID, false)
+	default:
+		http.Error(w, `{"error":"unknown command"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *Hub) handleSSE(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import type { DeviceState } from "./api.js";
+import { sendCommand, type DeviceState } from "./api.js";
 
 @customElement("ha-device-card")
 export class DeviceCard extends LitElement {
@@ -33,12 +33,10 @@ export class DeviceCard extends LitElement {
       transition: background 0.3s ease;
     }
 
-    .card.open::before {
-      background: #4caf50;
-    }
-    .card.closed::before {
-      background: #f44336;
-    }
+    .card.on::before { background: #4caf50; }
+    .card.off::before { background: #f44336; }
+    .card.open::before { background: #4caf50; }
+    .card.closed::before { background: #f44336; }
 
     .header {
       display: flex;
@@ -71,13 +69,19 @@ export class DeviceCard extends LitElement {
       margin-top: 2px;
     }
 
-    .state {
+    .state-row {
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
       padding: 12px 16px;
       background: rgba(255, 255, 255, 0.03);
       border-radius: 10px;
+    }
+
+    .state-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .state-dot {
@@ -86,24 +90,47 @@ export class DeviceCard extends LitElement {
       border-radius: 50%;
       transition: all 0.3s ease;
     }
-    .state-dot.open {
-      background: #4caf50;
-      box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
-    }
-    .state-dot.closed {
-      background: #f44336;
-      box-shadow: 0 0 8px rgba(244, 67, 54, 0.5);
-    }
+    .state-dot.on, .state-dot.open { background: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5); }
+    .state-dot.off, .state-dot.closed { background: #f44336; box-shadow: 0 0 8px rgba(244, 67, 54, 0.5); }
 
     .state-label {
       font-size: 18px;
       font-weight: 600;
     }
-    .state-label.open {
-      color: #4caf50;
+    .state-label.on, .state-label.open { color: #4caf50; }
+    .state-label.off, .state-label.closed { color: #f44336; }
+
+    /* Toggle button */
+    .toggle {
+      position: relative;
+      width: 56px;
+      height: 30px;
+      border-radius: 15px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #2a2e3e;
+      padding: 0;
     }
-    .state-label.closed {
-      color: #f44336;
+    .toggle.on {
+      background: #4caf50;
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.3s ease;
+    }
+    .toggle.on::after {
+      transform: translateX(26px);
+    }
+    .toggle:active {
+      transform: scale(0.95);
     }
 
     .meta {
@@ -113,22 +140,34 @@ export class DeviceCard extends LitElement {
     }
   `;
 
+  private get isOn(): boolean {
+    return this.device?.state?.on === true;
+  }
+
   private get isOpen(): boolean {
     return this.device?.state?.contact === true;
   }
 
   private get stateClass(): string {
-    return this.isOpen ? "open" : "closed";
+    switch (this.device?.type) {
+      case "contact_sensor":
+        return this.isOpen ? "open" : "closed";
+      case "on_off_plug":
+      case "on_off_light":
+        return this.isOn ? "on" : "off";
+      default:
+        return "";
+    }
   }
 
   private get icon(): string {
     switch (this.device?.type) {
       case "contact_sensor":
         return this.isOpen ? "🚪" : "🔒";
-      case "on_off_light":
-        return "💡";
       case "on_off_plug":
-        return "🔌";
+        return this.isOn ? "🔌" : "⭕";
+      case "on_off_light":
+        return this.isOn ? "💡" : "🌑";
       default:
         return "📡";
     }
@@ -138,8 +177,38 @@ export class DeviceCard extends LitElement {
     switch (this.device?.type) {
       case "contact_sensor":
         return this.isOpen ? "열림 (Open)" : "닫힘 (Closed)";
+      case "on_off_plug":
+        return this.isOn ? "켜짐 (ON)" : "꺼짐 (OFF)";
+      case "on_off_light":
+        return this.isOn ? "켜짐 (ON)" : "꺼짐 (OFF)";
       default:
         return JSON.stringify(this.device?.state || {});
+    }
+  }
+
+  private get protocol(): string {
+    switch (this.device?.type) {
+      case "contact_sensor":
+        return "Matter over Thread";
+      case "on_off_plug":
+        return "Matter over WiFi";
+      case "on_off_light":
+        return "Matter over WiFi";
+      default:
+        return "Matter";
+    }
+  }
+
+  private get hasToggle(): boolean {
+    return this.device?.type === "on_off_plug" || this.device?.type === "on_off_light";
+  }
+
+  private async handleToggle() {
+    const cmd = this.isOn ? "off" : "on";
+    try {
+      await sendCommand(this.device.node_id, cmd);
+    } catch (e) {
+      console.error("toggle failed:", e);
     }
   }
 
@@ -156,13 +225,19 @@ export class DeviceCard extends LitElement {
           </div>
         </div>
 
-        <div class="state">
-          <div class="state-dot ${this.stateClass}"></div>
-          <div class="state-label ${this.stateClass}">${this.stateText}</div>
+        <div class="state-row">
+          <div class="state-left">
+            <div class="state-dot ${this.stateClass}"></div>
+            <div class="state-label ${this.stateClass}">${this.stateText}</div>
+          </div>
+
+          ${this.hasToggle
+            ? html`<button class="toggle ${this.isOn ? "on" : ""}" @click=${this.handleToggle}></button>`
+            : ""}
         </div>
 
         <div class="meta">
-          Matter over Thread · ${this.device.available ? "온라인" : "오프라인"}
+          ${this.protocol} · ${this.device.available ? "온라인" : "오프라인"}
         </div>
       </div>
     `;

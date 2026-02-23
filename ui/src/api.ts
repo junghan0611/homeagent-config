@@ -23,6 +23,18 @@ export async function getDevices(): Promise<DeviceState[]> {
   return res.json();
 }
 
+export async function sendCommand(nodeId: number, command: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/devices/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ node_id: nodeId, command }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "Command failed");
+  }
+}
+
 export async function commission(code: string): Promise<{ status: string }> {
   const res = await fetch(`${API_BASE}/api/commission`, {
     method: "POST",

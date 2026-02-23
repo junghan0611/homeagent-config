@@ -292,6 +292,8 @@ export class App extends LitElement {
           // Map Matter paths to keys
           if (evt.key === "1/69/0") {
             newState["contact"] = evt.value;
+          } else if (evt.key === "1/6/0") {
+            newState["on"] = evt.value;
           } else {
             newState[evt.key] = evt.value;
           }
@@ -305,10 +307,10 @@ export class App extends LitElement {
       const val = evt.value;
       const label =
         evt.key === "1/69/0"
-          ? val
-            ? "🚪 열림"
-            : "🔒 닫힘"
-          : `${evt.key}=${val}`;
+          ? val ? "🚪 열림" : "🔒 닫힘"
+          : evt.key === "1/6/0"
+            ? val ? "🔌 켜짐" : "⭕ 꺼짐"
+            : `${evt.key}=${val}`;
       this.eventLog = [`${now} Node ${evt.device_id}: ${label}`, ...this.eventLog.slice(0, 19)];
       this.lastEvent = label;
       this.requestUpdate();

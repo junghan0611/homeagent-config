@@ -51,7 +51,7 @@ type Event struct {
 // AttributeUpdate represents [nodeID, path, value]
 type AttributeUpdate struct {
 	NodeID int
-	Path   string // "endpoint/cluster/attribute" e.g. "1/69/0"
+	Path   string
 	Value  interface{}
 }
 
@@ -68,22 +68,33 @@ type Node struct {
 // EventHandler is called for each incoming event
 type EventHandler func(event Event)
 
-// Client connects to matterjs-server WebSocket
+// pendingReq tracks a command waiting for response
+type pendingReq struct {
+	ch chan json.RawMessage // receives raw response
+}
+
+// Client connects to matterjs-server WebSocket.
+// Single read loop dispatches responses and events.
 type Client struct {
 	url     string
 	conn    *websocket.Conn
-	mu      sync.Mutex
+	writeMu sync.Mutex // protects conn.WriteJSON
 	msgID   atomic.Int64
 	info    *ServerInfo
 	handler EventHandler
+
+	// Pending command responses
+	pendingMu sync.Mutex
+	pending   map[string]*pendingReq
 }
 
-// NewClient creates a new Matter WebSocket client
 func NewClient(url string) *Client {
-	return &Client{url: url}
+	return &Client{
+		url:     url,
+		pending: make(map[string]*pendingReq),
+	}
 }
 
-// OnEvent sets the event handler
 func (c *Client) OnEvent(h EventHandler) {
 	c.handler = h
 }
@@ -99,6 +110,9 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	c.conn = conn
 
+	// Disable read deadline — the read loop runs forever
+	c.conn.SetReadDeadline(time.Time{})
+
 	// Read server info (first message)
 	var info ServerInfo
 	if err := conn.ReadJSON(&info); err != nil {
@@ -110,7 +124,6 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// ServerInfo returns the server info received on connect
 func (c *Client) Info() *ServerInfo {
 	return c.info
 }
@@ -119,12 +132,16 @@ func (c *Client) nextID() string {
 	return fmt.Sprintf("ha-%d", c.msgID.Add(1))
 }
 
-// send sends a command and returns the message ID
-func (c *Client) send(command string, args interface{}) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+// send sends a command and registers a pending response channel
+func (c *Client) send(command string, args interface{}) (string, chan json.RawMessage, error) {
 	id := c.nextID()
+	ch := make(chan json.RawMessage, 1)
+
+	c.pendingMu.Lock()
+	c.pending[id] = &pendingReq{ch: ch}
+	c.pendingMu.Unlock()
+
+	c.writeMu.Lock()
 	msg := map[string]interface{}{
 		"message_id": id,
 		"command":    command,
@@ -132,112 +149,119 @@ func (c *Client) send(command string, args interface{}) (string, error) {
 	if args != nil {
 		msg["args"] = args
 	}
-	if err := c.conn.WriteJSON(msg); err != nil {
-		return "", fmt.Errorf("matter ws send %s: %w", command, err)
+	err := c.conn.WriteJSON(msg)
+	c.writeMu.Unlock()
+
+	if err != nil {
+		c.pendingMu.Lock()
+		delete(c.pending, id)
+		c.pendingMu.Unlock()
+		return "", nil, fmt.Errorf("matter ws send %s: %w", command, err)
 	}
-	return id, nil
+	return id, ch, nil
+}
+
+// waitResponse waits for a command response with timeout
+func (c *Client) waitResponse(id string, ch chan json.RawMessage, timeout time.Duration) (json.RawMessage, error) {
+	defer func() {
+		c.pendingMu.Lock()
+		delete(c.pending, id)
+		c.pendingMu.Unlock()
+	}()
+
+	select {
+	case raw := <-ch:
+		return raw, nil
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("matter ws timeout waiting for %s", id)
+	}
 }
 
 // GetNodes returns all commissioned nodes
 func (c *Client) GetNodes(ctx context.Context) ([]Node, error) {
-	id, err := c.send("get_nodes", nil)
+	id, ch, err := c.send("get_nodes", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Read until we get our response
-	for {
-		var raw json.RawMessage
-		if err := c.conn.ReadJSON(&raw); err != nil {
-			return nil, fmt.Errorf("matter ws read: %w", err)
-		}
-
-		var resp WSMessage
-		if err := json.Unmarshal(raw, &resp); err != nil {
-			continue
-		}
-		if resp.MessageID != id {
-			continue
-		}
-		if resp.ErrorCode != 0 {
-			return nil, fmt.Errorf("get_nodes error %d: %s", resp.ErrorCode, resp.Details)
-		}
-
-		var nodes []Node
-		if err := json.Unmarshal(resp.Result, &nodes); err != nil {
-			return nil, fmt.Errorf("get_nodes parse: %w", err)
-		}
-		return nodes, nil
+	raw, err := c.waitResponse(id, ch, 30*time.Second)
+	if err != nil {
+		return nil, err
 	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("get_nodes parse resp: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("get_nodes error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var nodes []Node
+	if err := json.Unmarshal(resp.Result, &nodes); err != nil {
+		return nil, fmt.Errorf("get_nodes parse: %w", err)
+	}
+	return nodes, nil
 }
 
 // CommissionWithCode commissions a device using its setup code
 func (c *Client) CommissionWithCode(ctx context.Context, code string) (*Node, error) {
-	id, err := c.send("commission_with_code", map[string]string{"code": code})
+	id, ch, err := c.send("commission_with_code", map[string]string{"code": code})
 	if err != nil {
 		return nil, err
 	}
 
-	// Commission can take 30+ seconds
-	c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
-	defer c.conn.SetReadDeadline(time.Time{})
-
-	for {
-		var raw json.RawMessage
-		if err := c.conn.ReadJSON(&raw); err != nil {
-			return nil, fmt.Errorf("matter ws commission read: %w", err)
-		}
-
-		var resp WSMessage
-		if err := json.Unmarshal(raw, &resp); err != nil {
-			continue
-		}
-		if resp.MessageID != id {
-			continue
-		}
-		if resp.ErrorCode != 0 {
-			return nil, fmt.Errorf("commission error %d: %s", resp.ErrorCode, resp.Details)
-		}
-
-		var node Node
-		if err := json.Unmarshal(resp.Result, &node); err != nil {
-			return nil, fmt.Errorf("commission parse: %w", err)
-		}
-		log.Printf("[matter] commissioned node %d", node.NodeID)
-		return &node, nil
+	// Commission can take 120+ seconds
+	raw, err := c.waitResponse(id, ch, 180*time.Second)
+	if err != nil {
+		return nil, err
 	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("commission parse resp: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("commission error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var node Node
+	if err := json.Unmarshal(resp.Result, &node); err != nil {
+		return nil, fmt.Errorf("commission parse: %w", err)
+	}
+	log.Printf("[matter] commissioned node %d", node.NodeID)
+	return &node, nil
 }
 
 // StartListening subscribes to real-time events
 func (c *Client) StartListening(ctx context.Context) error {
-	id, err := c.send("start_listening", nil)
+	id, ch, err := c.send("start_listening", nil)
 	if err != nil {
 		return err
 	}
 
-	// Wait for ack
-	for {
-		var raw json.RawMessage
-		if err := c.conn.ReadJSON(&raw); err != nil {
-			return fmt.Errorf("matter ws listen read: %w", err)
-		}
-
-		var resp WSMessage
-		if err := json.Unmarshal(raw, &resp); err != nil {
-			continue
-		}
-		if resp.MessageID == id {
-			if resp.ErrorCode != 0 {
-				return fmt.Errorf("start_listening error %d: %s", resp.ErrorCode, resp.Details)
-			}
-			log.Printf("[matter] start_listening active")
-			return nil
-		}
+	raw, err := c.waitResponse(id, ch, 30*time.Second)
+	if err != nil {
+		return err
 	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("start_listening parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("start_listening error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	log.Printf("[matter] start_listening active")
+	return nil
 }
 
-// Listen reads events in a loop, calling the handler for each
-func (c *Client) Listen(ctx context.Context) error {
+// ReadLoop is the single read goroutine. It dispatches:
+//   - command responses → pending waiters
+//   - events → handler
+//
+// Returns only on connection error.
+func (c *Client) ReadLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -247,45 +271,66 @@ func (c *Client) Listen(ctx context.Context) error {
 
 		var raw json.RawMessage
 		if err := c.conn.ReadJSON(&raw); err != nil {
-			return fmt.Errorf("matter ws listen: %w", err)
+			return fmt.Errorf("matter ws read: %w", err)
 		}
 
+		// Try as command response (has message_id)
+		var msg WSMessage
+		if err := json.Unmarshal(raw, &msg); err == nil && msg.MessageID != "" {
+			c.pendingMu.Lock()
+			p, ok := c.pending[msg.MessageID]
+			c.pendingMu.Unlock()
+			if ok {
+				p.ch <- raw
+				continue
+			}
+		}
+
+		// Try as event (has "event" field)
 		var evt Event
-		if err := json.Unmarshal(raw, &evt); err != nil {
+		if err := json.Unmarshal(raw, &evt); err == nil && evt.Type != "" {
+			if c.handler != nil {
+				c.handler(evt)
+			}
 			continue
 		}
-		if evt.Type == "" {
-			continue // not an event (e.g. command response)
-		}
 
-		if c.handler != nil {
-			c.handler(evt)
-		}
+		// Unknown message — log and skip
+		log.Printf("[matter] unknown message: %s", string(raw)[:min(200, len(raw))])
 	}
+}
+
+// Close the WebSocket connection
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
 }
 
 // ParseAttributeUpdate parses an attribute_updated event data
 func ParseAttributeUpdate(data json.RawMessage) (*AttributeUpdate, error) {
-	// data is [nodeID, "path", value]
 	var arr []json.RawMessage
 	if err := json.Unmarshal(data, &arr); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attribute update: expected array: %w", err)
 	}
-	if len(arr) != 3 {
-		return nil, fmt.Errorf("expected 3 elements, got %d", len(arr))
+	if len(arr) < 3 {
+		return nil, fmt.Errorf("attribute update: expected 3 elements, got %d", len(arr))
 	}
 
 	var nodeID int
 	if err := json.Unmarshal(arr[0], &nodeID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attribute update nodeID: %w", err)
 	}
+
 	var path string
 	if err := json.Unmarshal(arr[1], &path); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attribute update path: %w", err)
 	}
+
 	var value interface{}
 	if err := json.Unmarshal(arr[2], &value); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attribute update value: %w", err)
 	}
 
 	return &AttributeUpdate{
@@ -295,10 +340,9 @@ func ParseAttributeUpdate(data json.RawMessage) (*AttributeUpdate, error) {
 	}, nil
 }
 
-// Close closes the WebSocket connection
-func (c *Client) Close() error {
-	if c.conn != nil {
-		return c.conn.Close()
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-	return nil
+	return b
 }

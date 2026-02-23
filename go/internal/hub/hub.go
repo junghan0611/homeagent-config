@@ -56,9 +56,28 @@ func New(cfg *config.Config) *Hub {
 
 // Run starts the hub: connect to Matter, subscribe, serve HTTP
 func (h *Hub) Run(ctx context.Context) error {
+	// Start event broadcaster
+	go h.eventBroadcaster(ctx)
+
+	// Connect + read loop with auto-reconnect
+	for {
+		err := h.connectAndListen(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err() // graceful shutdown
+		}
+		log.Printf("[hub] Matter connection lost: %v — reconnecting in 5s", err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+func (h *Hub) connectAndListen(ctx context.Context) error {
 	// 1. Connect to matterjs-server
 	if err := h.matter.Connect(ctx); err != nil {
-		return fmt.Errorf("hub: %w", err)
+		return fmt.Errorf("hub connect: %w", err)
 	}
 	defer h.matter.Close()
 
@@ -67,7 +86,13 @@ func (h *Hub) Run(ctx context.Context) error {
 		h.handleMatterEvent(evt)
 	})
 
-	// 3. Get existing nodes
+	// 3. Start read loop FIRST (goroutine) — must run before any commands
+	readErr := make(chan error, 1)
+	go func() {
+		readErr <- h.matter.ReadLoop(ctx)
+	}()
+
+	// 4. Get existing nodes
 	nodes, err := h.matter.GetNodes(ctx)
 	if err != nil {
 		log.Printf("[hub] get_nodes failed: %v (continuing)", err)
@@ -78,17 +103,14 @@ func (h *Hub) Run(ctx context.Context) error {
 		log.Printf("[hub] loaded %d existing node(s)", len(nodes))
 	}
 
-	// 4. Start listening for events
+	// 5. Start listening for events
 	if err := h.matter.StartListening(ctx); err != nil {
 		return fmt.Errorf("hub start_listening: %w", err)
 	}
 
-	// 5. Start event broadcaster (feeds SSE clients)
-	go h.eventBroadcaster(ctx)
-
-	// 6. Listen for Matter events (blocking)
+	// 6. Wait for read loop to exit (connection lost)
 	log.Printf("[hub] listening for Matter events...")
-	return h.matter.Listen(ctx)
+	return <-readErr
 }
 
 // Commission triggers a new device commissioning

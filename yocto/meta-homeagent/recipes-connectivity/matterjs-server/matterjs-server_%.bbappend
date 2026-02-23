@@ -13,6 +13,12 @@ SYSTEMD_AUTO_ENABLE = "enable"
 INSANE_SKIP:${PN} += "already-stripped file-rdeps"
 
 do_install:append() {
+    # Remove non-AArch64 prebuilt native binaries
+    # npm packages bundle prebuilds for all platforms; keep only linux-arm64
+    for dir in $(find ${D}${prefix}/lib/node_modules -type d -name "prebuilds"); do
+        find "$dir" -mindepth 1 -maxdepth 1 -type d ! -name "linux-arm64" -exec rm -rf {} +
+    done
+
     # Environment variables file
     install -d ${D}${sysconfdir}/default
     install -m 0644 ${WORKDIR}/matterjs-server.default ${D}${sysconfdir}/default/matterjs-server

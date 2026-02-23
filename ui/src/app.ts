@@ -250,13 +250,31 @@ export class App extends LitElement {
     }
   }
 
+  private sseRetryCount = 0;
+
   private connectSSE() {
+    // Close previous connection
+    this.eventSource?.close();
+    this.eventSource = undefined;
+
+    // Backoff: 3s, 6s, 12s, max 30s
+    const delay = Math.min(3000 * Math.pow(2, this.sseRetryCount), 30000);
+
     this.eventSource = subscribeEvents(
-      (evt) => this.handleEvent(evt),
+      (evt) => {
+        this.sseRetryCount = 0; // Reset on success
+        this.handleEvent(evt);
+      },
       () => {
         this.connected = false;
-        // Reconnect after 3s
-        setTimeout(() => this.connectSSE(), 3000);
+        this.eventSource?.close();
+        this.eventSource = undefined;
+        this.sseRetryCount++;
+        if (this.sseRetryCount > 10) {
+          console.error("SSE: too many retries, stopping");
+          return;
+        }
+        setTimeout(() => this.connectSSE(), delay);
       }
     );
   }

@@ -32,7 +32,7 @@ func Load() *Config {
 		WifiSSID:      os.Getenv("HOMEAGENT_WIFI_SSID"),
 		WifiPassword:  os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
 		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
-		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.0-flash-001"),
+		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.5-flash"),
 	}
 }
 

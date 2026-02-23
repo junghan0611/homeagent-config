@@ -25,7 +25,7 @@ type Agent struct {
 
 func New(cfg Config) *Agent {
 	if cfg.Model == "" {
-		cfg.Model = "google/gemini-2.0-flash-001"
+		cfg.Model = "google/gemini-2.5-flash"
 	}
 	return &Agent{
 		cfg:    cfg,

@@ -14,13 +14,19 @@ type Config struct {
 
 	// Matter WebSocket (matterjs-server)
 	MatterWSURL string
+
+	// WiFi credentials for Matter WiFi device commissioning
+	WifiSSID     string
+	WifiPassword string
 }
 
 func Load() *Config {
 	return &Config{
-		HTTPAddr:    envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
-		MQTTBroker:  envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
-		MatterWSURL: envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
+		HTTPAddr:     envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
+		MQTTBroker:   envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
+		MatterWSURL:  envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
+		WifiSSID:     os.Getenv("HOMEAGENT_WIFI_SSID"),
+		WifiPassword: os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
 	}
 }
 

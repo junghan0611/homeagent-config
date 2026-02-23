@@ -122,6 +122,15 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 		}
 	}
 
+	// 3.6. Inject WiFi credentials if configured
+	if h.cfg.WifiSSID != "" {
+		if err := h.matter.SetWifiCredentials(ctx, h.cfg.WifiSSID, h.cfg.WifiPassword); err != nil {
+			log.Printf("[hub] set_wifi_credentials failed: %v", err)
+		} else {
+			log.Printf("[hub] WiFi credentials set: %s", h.cfg.WifiSSID)
+		}
+	}
+
 	// 4. Get existing nodes
 	nodes, err := h.matter.GetNodes(ctx)
 	if err != nil {

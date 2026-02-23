@@ -256,6 +256,31 @@ func (c *Client) StartListening(ctx context.Context) error {
 	return nil
 }
 
+// SetWifiCredentials sets WiFi credentials for commissioning WiFi Matter devices
+func (c *Client) SetWifiCredentials(ctx context.Context, ssid, password string) error {
+	id, ch, err := c.send("set_wifi_credentials", map[string]string{
+		"ssid":        ssid,
+		"credentials": password,
+	})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("set_wifi_credentials parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("set_wifi_credentials error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
 // SetThreadDataset sets the Thread operational dataset for commissioning
 func (c *Client) SetThreadDataset(ctx context.Context, dataset string) error {
 	id, ch, err := c.send("set_thread_dataset", map[string]string{"dataset": dataset})

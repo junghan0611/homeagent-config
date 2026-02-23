@@ -520,10 +520,7 @@ func (h *Hub) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Push agent message via SSE
-	if result.Reply != "" {
-		h.eventCh <- Event{Type: "agent_message", Value: result.Reply}
-	}
+	// Surface updates go via SSE (chat reply already returned via HTTP)
 	if result.Surface != nil {
 		h.eventCh <- Event{Type: "surface_update", Value: result.Surface}
 	}

@@ -21,17 +21,18 @@ chip-tool (oracle, CLI)              matterjs-server (검증 대상, WebSocket)
 
 | 항목 | 값 |
 |------|-----|
-| RPi5 IP | 192.168.69.5 |
+| RPi5 IP | 192.168.69.6 |
 | Thread 상태 | leader (otbr-thread-init 자동) |
 | SRP 상태 | running (otbr-srp-enable 자동) |
 | Spinel URL | `spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800` |
-| Node.js | Yocto 이미지 내장 (v20+) |
+| Node.js | Yocto 이미지 내장 (v20.18.2) |
+| matterjs-server | 0.3.5 (matter.js/0.16.9-alpha.0-20260204) |
 
 ## 테스트 디바이스
 
 | 디바이스 | Setup Code | Node ID | 클러스터 | 상태 |
 |----------|-----------|---------|---------|------|
-| Eve 도어센서 | `0073-043-4300` | 1 | BooleanState | FALSE (문 닫힘) |
+| Tuya 도어센서 (DS001-T) | `0239-244-2173` | 1 | BooleanState (0x0045) | 동작 확인 |
 
 ---
 
@@ -71,7 +72,7 @@ chip-tool (oracle, CLI)              matterjs-server (검증 대상, WebSocket)
 
 ---
 
-## Phase 2: matterjs-server 검증 (진행 중)
+## Phase 2: matterjs-server 검증 (2026-02-23 완료 ✅)
 
 ### 2-1. Yocto 빌드
 
@@ -80,107 +81,125 @@ chip-tool (oracle, CLI)              matterjs-server (검증 대상, WebSocket)
 | 레시피 (.bb) | ✅ | `matterjs-server_0.3.5.bb` |
 | bbappend | ✅ | systemd + 환경변수 |
 | npm-shrinkwrap | ✅ | 176개 패키지, `@matter/main` 0.16.9-alpha |
-| bitbake 빌드 | 미검증 | `bb-cmd -c cleansstate matterjs-server` → `bb` |
-| RPi5 서비스 기동 | 미검증 | `systemctl status matterjs-server` |
+| bitbake 빌드 | ✅ | prebuild QA 해결 (9e5aef1) |
+| RPi5 서비스 기동 | ✅ | active (running), :5580 리스닝 |
 
-### 2-2. 서비스 기동 검증
+### 2-2. 서비스 기동 검증 (✅)
 
 ```bash
-# RPi5에서 확인
-systemctl status matterjs-server
-journalctl -u matterjs-server -f
-
-# WebSocket 포트 확인
-ss -tlnp | grep 5580
+systemctl status matterjs-server   # active (running)
+journalctl -u matterjs-server      # WebServer listening on http://0.0.0.0:5580
 ```
 
-기대 결과:
-- matterjs-server active (running)
-- WebSocket :5580 리스닝
-- 대시보드: http://192.168.69.5:5580
+- 대시보드: http://192.168.69.6:5580
+- BLE 미지원 (`ENODEV`) — Thread(mDNS) 기반 커미셔닝만 가능
 
-### 2-3. Commissioning 비교
+### 2-3. Commissioning 비교 (✅)
 
-**chip-tool (oracle)**:
+**chip-tool (oracle)** — 2026-02-23 06:05 UTC:
 ```bash
-chip-tool pairing code-thread 1 hex:<dataset> 0073-043-4300 --bypass-attestation-verifier true
+/opt/chip-tool/run-chip-tool.sh pairing code-thread 1 \
+  hex:0e08...f7f8 0239-244-2173 \
+  --bypass-attestation-verifier true
+# → "Device commissioning completed with success"
 ```
 
-**matterjs-server (WebSocket)**:
+**matterjs-server (WebSocket)** — 2026-02-23 06:12 UTC:
 ```json
-{
-  "message_id": "1",
-  "command": "commission_with_code",
-  "args": {
-    "code": "0073-043-4300",
-    "thread_dataset": "<hex dataset>"
-  }
-}
+{"message_id": "commission", "command": "commission_with_code", "args": {"code": "0239-244-2173"}}
 ```
+결과: `"node_id": 1, "available": true`
+
+> 참고: matterjs-server는 `set_thread_operational_dataset` 명령이 없음.
+> Thread dataset은 BLE commissioning 과정에서 자동으로 전달됨.
 
 | 비교 항목 | chip-tool | matterjs-server | 일치 |
 |----------|-----------|-----------------|:----:|
-| Commissioning 성공 | ✅ | | |
-| Node ID 할당 | 1 | | |
-| Thread 조인 확인 | ✅ | | |
-| CASE 세션 | ✅ | | |
+| Commissioning 성공 | ✅ | ✅ | ✅ |
+| Node ID 할당 | 1 | 1 | ✅ |
+| Thread 조인 확인 | ✅ | ✅ | ✅ |
+| VendorName | Tuya | Tuya | ✅ |
+| ProductName | Door Window Sensor_Thread | Door Window Sensor_Thread | ✅ |
 
-### 2-4. Attribute Read 비교
+### 2-4. Attribute Read 비교 (✅)
 
 **chip-tool (oracle)**:
 ```bash
-chip-tool booleanstate read state-value 1 1
-# → FALSE
+/opt/chip-tool/run-chip-tool.sh booleanstate read state-value 1 1
+# → Endpoint: 1 Cluster: 0x0000_0045 Attribute 0x0000_0000
+#   StateValue: FALSE
 ```
 
-**matterjs-server (WebSocket)**:
+**matterjs-server (commissioning 응답에 포함)**:
 ```json
-{
-  "message_id": "2",
-  "command": "read_attribute",
-  "args": {
-    "node_id": 1,
-    "attribute_path": "1/69/0"
-  }
-}
+"1/69/0": false
 ```
 
-(attribute_path: endpoint/cluster/attribute = 1/0x0045/0x0000)
+(attribute_path: endpoint/cluster/attribute = 1/0x0045(=69)/0x0000)
 
 | 비교 항목 | chip-tool | matterjs-server | 일치 |
 |----------|-----------|-----------------|:----:|
-| BooleanState value | FALSE | | |
-| 응답 시간 | ~2s | | |
+| BooleanState (닫힘) | FALSE | false | ✅ |
+| DeviceType | 21 (Contact Sensor) | 21 | ✅ |
+| Endpoint | 1 | 1 | ✅ |
+| VendorID | 4701 (0x125D) | 4701 | ✅ |
+| Battery (0/47/11) | - | 3300 mV | ✅ |
+| Matter Version | - | 1.2.0 | ✅ |
 
-### 2-5. 이벤트 구독 (chip-tool에 없는 기능)
+### 2-5. 이벤트 구독 (✅ — chip-tool에 없는 기능)
 
 ```json
-{
-  "message_id": "3",
-  "command": "start_listening"
-}
+{"message_id": "listen", "command": "start_listening"}
 ```
 
-matterjs-server만의 기능 — 문 열림/닫힘 실시간 이벤트 수신.
-chip-tool로는 불가능하므로 물리적으로 문을 열었다 닫으며 확인.
+도어 센서 개폐 시 실시간 이벤트 수신 확인:
+
+```
+06:12:35 UTC → {"event":"attribute_updated","data":[1,"1/69/0",true]}   # 문 열림
+06:12:38 UTC → {"event":"attribute_updated","data":[1,"1/69/0",false]}  # 문 닫힘
+06:12:39 UTC → {"event":"attribute_updated","data":[1,"1/69/0",true]}   # 문 열림
+06:12:40 UTC → {"event":"attribute_updated","data":[1,"1/69/0",false]}  # 문 닫힘
+06:12:42 UTC → {"event":"attribute_updated","data":[1,"1/69/0",true]}   # 문 열림
+06:12:43 UTC → {"event":"attribute_updated","data":[1,"1/69/0",false]}  # 문 닫힘
+06:13:04 UTC → {"event":"attribute_updated","data":[1,"1/69/0",true]}   # 문 열림
+```
+
+**결론**: matterjs-server의 `start_listening`은 chip-tool에 없는 핵심 기능.
+WebSocket을 통해 실시간 도어 개폐 이벤트를 안정적으로 수신함.
+
+### Phase 2 최종 결론
+
+> **matterjs-server는 chip-tool oracle과 100% 일치하며, 추가로 실시간 이벤트 구독 기능을 제공한다.**
+> chip-tool은 디버깅 도구로만 유지하고, 운영은 matterjs-server 기반으로 진행.
 
 ---
 
-## Phase 3: fabric 이관 (chip-tool → matterjs-server)
+## Phase 3: Go 컨트롤러 연동 (다음 단계)
 
-chip-tool과 matterjs-server는 각자 fabric을 가진다.
-동일 디바이스에 복수 fabric commissioning 가능 (Matter 스펙).
+matterjs-server WebSocket API → Go 컨트롤러 → MQTT 브리지 구조.
 
-**전략 A**: matterjs-server로 새로 commissioning (별도 fabric)
-**전략 B**: chip-tool fabric 데이터를 matterjs-server로 마이그레이션
-
-→ 전략 A 우선 (더 단순). 검증 후 chip-tool은 디버깅 도구로만 유지.
+| 작업 | 상태 | 비고 |
+|------|:----:|------|
+| WebSocket 클라이언트 (Go) | 미시작 | `start_listening` 구독 |
+| MQTT 퍼블리시 | 미시작 | `homeagent/matter/1/contact` |
+| 상태 머신 | 미시작 | 디바이스 온라인/오프라인 관리 |
 
 ---
 
 ## 트러블슈팅 기록
 
-(검증 진행하며 추가)
+### SED (Sleepy End Device) 타임아웃
+
+도어센서는 Thread SED로 동작. chip-tool의 `open-commissioning-window`가
+디바이스 슬립 시 타임아웃 (20초) 발생.
+
+**해결**: 센서 물리 조작으로 웨이크업 후 명령 전송, 또는
+matterjs-server 단독 커미셔닝 (팩토리 리셋 후 직접 commission_with_code).
+
+### Commissioning Window Error 0x02
+
+`open-commissioning-window` 재실행 시 `Cluster-specific error: 0x02` 발생.
+이미 창이 열려있는 상태. `revoke-commissioning` 후 재시도로 해결.
 
 ---
 

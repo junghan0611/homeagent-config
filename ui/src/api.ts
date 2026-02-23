@@ -23,13 +23,13 @@ export async function getDevices(): Promise<DeviceState[]> {
   return res.json();
 }
 
-export async function commission(code: string): Promise<DeviceState> {
+export async function commission(code: string): Promise<{ status: string }> {
   const res = await fetch(`${API_BASE}/api/commission`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
-  if (!res.ok) {
+  if (!res.ok && res.status !== 202) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || "Commission failed");
   }

@@ -146,9 +146,10 @@ export class CommissionDialog extends LitElement {
     this.error = "";
 
     try {
-      const device = await commission(this.code.trim());
+      await commission(this.code.trim());
+      // Commission is async (60-120s). Result comes via SSE event.
       this.dispatchEvent(
-        new CustomEvent("commissioned", { detail: device, bubbles: true })
+        new CustomEvent("commissioned", { bubbles: true })
       );
       this.code = "";
       this.open = false;

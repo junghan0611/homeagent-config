@@ -298,7 +298,11 @@ export class App extends LitElement {
 
     if (evt.type === "device_added") {
       this.loadDevices();
-      this.agentMessage = `새 디바이스가 추가되었습니다! Node ${evt.device_id}`;
+      this.agentMessage = `🎉 새 디바이스가 추가되었습니다! <em>Node ${evt.device_id}</em>`;
+    }
+
+    if (evt.type === "commission_error") {
+      this.agentMessage = `⚠️ 페어링 실패: ${evt.value}`;
     }
   }
 
@@ -314,7 +318,7 @@ export class App extends LitElement {
 
   private handleCommissioned() {
     this.showCommission = false;
-    this.loadDevices();
+    this.agentMessage = "🔗 페어링 진행 중... 디바이스가 페어링 모드인지 확인하세요. (60~120초 소요)";
   }
 
   render() {

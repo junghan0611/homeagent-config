@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/junghan0611/homeagent/internal/config"
 	"github.com/junghan0611/homeagent/internal/matter"
@@ -254,16 +255,25 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ds, err := h.Commission(r.Context(), req.Code)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
+	// Commission is long-running (60-120s). Use background context
+	// so browser disconnect doesn't cancel it. Return 202 immediately.
+	log.Printf("[hub] commission requested: %s", req.Code)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+		defer cancel()
+		ds, err := h.Commission(ctx, req.Code)
+		if err != nil {
+			log.Printf("[hub] commission failed: %v", err)
+			h.eventCh <- Event{Type: "commission_error", Key: "error", Value: err.Error()}
+		} else {
+			log.Printf("[hub] commission success: node %d", ds.NodeID)
+		}
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ds)
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning", "code": req.Code})
 }
 
 func (h *Hub) handleSSE(w http.ResponseWriter, r *http.Request) {

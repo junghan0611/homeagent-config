@@ -136,6 +136,15 @@ export class ChatPanel extends LitElement {
     }
   `;
 
+  /** Called externally (e.g. from SSE agent_message events) */
+  public addAgentMessage(text: string) {
+    this.messages = [...this.messages, { role: "agent", text }];
+    this.updateComplete.then(() => {
+      const el = this.shadowRoot?.querySelector(".messages");
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }
+
   private async handleSend() {
     const msg = this.input.trim();
     if (!msg || this.loading) return;

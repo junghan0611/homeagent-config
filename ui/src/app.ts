@@ -328,6 +328,11 @@ export class App extends LitElement {
 
     if (evt.type === "agent_message") {
       this.agentMessage = `🤖 ${evt.value}`;
+      // Push to chat panel
+      const chatPanel = this.shadowRoot?.querySelector("ha-chat-panel") as any;
+      if (chatPanel?.addAgentMessage && evt.value) {
+        chatPanel.addAgentMessage(`🔔 ${evt.value}`);
+      }
     }
   }
 

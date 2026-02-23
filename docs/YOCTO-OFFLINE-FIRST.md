@@ -244,6 +244,28 @@ IMAGE_INSTALL:append = " <package-name>"
 
 주의: `build/conf/local.conf`은 `.gitignore` 대상이므로 `conf/local.conf.sample`도 함께 업데이트할 것.
 
+### 이미지 sstate 캐시 — 패키지 변경이 이미지에 반영 안 됨
+
+**증상**: `cleansstate <recipe>` → `bb` 성공, ipk 새로 생성됨. 하지만 플래시 후 RPi5에 이전 패키지가 그대로 있음.
+
+**원인**: Yocto sstate가 이미지 레시피(`core-image-weston`)의 `do_rootfs` 결과를 캐싱. 레시피 패키지만 `cleansstate`하면 ipk는 갱신되지만, 이미지의 sstate는 여전히 유효하다고 판단하여 `do_rootfs`를 건너뜀.
+
+**해결**:
+
+```bash
+# 레시피 + 이미지 둘 다 cleansstate
+./run.sh bb-cmd -c cleansstate <recipe>
+./run.sh bb-cmd -c cleansstate core-image-weston
+./run.sh bb
+```
+
+**검증**: 이미지 심볼릭 링크의 타임스탬프가 갱신되었는지 확인:
+
+```bash
+ls -la yocto/build/tmp-glibc/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.rootfs.wic.bz2
+# → 새 날짜/시간의 .wic.bz2 파일을 가리켜야 함
+```
+
 ## 참고 자료
 
 - [Yocto 3.1 Migration Guide - npm changes](https://docs.yoctoproject.org/migration-guides/migration-3.1.html)

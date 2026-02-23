@@ -28,8 +28,10 @@ type Hub struct {
 	devices map[int]*DeviceState // nodeID -> state
 	mu      sync.RWMutex
 
-	// Event subscribers (for A2UI later)
-	eventCh chan Event
+	// Event subscribers
+	eventCh    chan Event
+	sseClients map[chan Event]struct{}
+	sseMu      sync.Mutex
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -43,10 +45,11 @@ type Event struct {
 // New creates a new Hub
 func New(cfg *config.Config) *Hub {
 	return &Hub{
-		cfg:     cfg,
-		matter:  matter.NewClient(cfg.MatterWSURL),
-		devices: make(map[int]*DeviceState),
-		eventCh: make(chan Event, 100),
+		cfg:        cfg,
+		matter:     matter.NewClient(cfg.MatterWSURL),
+		devices:    make(map[int]*DeviceState),
+		eventCh:    make(chan Event, 100),
+		sseClients: make(map[chan Event]struct{}),
 	}
 }
 
@@ -79,8 +82,8 @@ func (h *Hub) Run(ctx context.Context) error {
 		return fmt.Errorf("hub start_listening: %w", err)
 	}
 
-	// 5. Start event logger (will be A2UI later)
-	go h.eventLogger(ctx)
+	// 5. Start event broadcaster (feeds SSE clients)
+	go h.eventBroadcaster(ctx)
 
 	// 6. Listen for Matter events (blocking)
 	log.Printf("[hub] listening for Matter events...")
@@ -199,13 +202,24 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 	}
 }
 
-func (h *Hub) eventLogger(ctx context.Context) {
+func (h *Hub) eventBroadcaster(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case evt := <-h.eventCh:
 			log.Printf("[event] %s node=%d %s=%v", evt.Type, evt.DeviceID, evt.Key, evt.Value)
+
+			// Broadcast to SSE clients
+			h.sseMu.Lock()
+			for ch := range h.sseClients {
+				select {
+				case ch <- evt:
+				default:
+					// drop if client is slow
+				}
+			}
+			h.sseMu.Unlock()
 		}
 	}
 }
@@ -214,6 +228,7 @@ func (h *Hub) eventLogger(ctx context.Context) {
 func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
 	mux.HandleFunc("/api/commission", h.handleCommission)
+	mux.HandleFunc("/api/events", h.handleSSE)
 }
 
 func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -249,4 +264,51 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ds)
+}
+
+func (h *Hub) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	ch := make(chan Event, 50)
+	h.sseMu.Lock()
+	h.sseClients[ch] = struct{}{}
+	h.sseMu.Unlock()
+
+	defer func() {
+		h.sseMu.Lock()
+		delete(h.sseClients, ch)
+		h.sseMu.Unlock()
+	}()
+
+	// Send initial snapshot
+	data, _ := json.Marshal(map[string]interface{}{
+		"type":    "snapshot",
+		"devices": h.Devices(),
+	})
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt := <-ch:
+			data, err := json.Marshal(evt)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
 }

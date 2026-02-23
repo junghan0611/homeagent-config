@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/junghan0611/homeagent/internal/config"
@@ -52,6 +53,23 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
 	})
 	h.RegisterHTTP(mux)
+
+	// Static file serving (UI)
+	uiDir := os.Getenv("HOMEAGENT_UI_DIR")
+	if uiDir == "" {
+		// Try relative to binary
+		if exe, err := os.Executable(); err == nil {
+			candidate := filepath.Join(filepath.Dir(exe), "ui")
+			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+				uiDir = candidate
+			}
+		}
+	}
+	if uiDir != "" {
+		log.Printf("UI 서빙: %s", uiDir)
+		fs := http.FileServer(http.Dir(uiDir))
+		mux.Handle("/", fs)
+	}
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: mux}
 	go func() {

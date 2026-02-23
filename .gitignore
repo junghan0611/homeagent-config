@@ -85,3 +85,6 @@ yocto/sources/meta-hailo
 
 .claude
 go/homeagent
+.claude/
+ui/node_modules
+ui/dist

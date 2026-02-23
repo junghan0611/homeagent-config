@@ -256,6 +256,28 @@ func (c *Client) StartListening(ctx context.Context) error {
 	return nil
 }
 
+// SetThreadDataset sets the Thread operational dataset for commissioning
+func (c *Client) SetThreadDataset(ctx context.Context, dataset string) error {
+	id, ch, err := c.send("set_thread_dataset", map[string]string{"dataset": dataset})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("set_thread_dataset parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("set_thread_dataset error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
 // ReadLoop is the single read goroutine. It dispatches:
 //   - command responses → pending waiters
 //   - events → handler

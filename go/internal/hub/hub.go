@@ -6,12 +6,29 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/junghan0611/homeagent/internal/config"
 	"github.com/junghan0611/homeagent/internal/matter"
 )
+
+// getOTBRDataset fetches the active Thread dataset from ot-ctl
+func getOTBRDataset() (string, error) {
+	out, err := exec.Command("ot-ctl", "dataset", "active", "-x").Output()
+	if err != nil {
+		return "", fmt.Errorf("ot-ctl: %w", err)
+	}
+	dataset := strings.TrimSpace(string(out))
+	// ot-ctl outputs "hex\nDone" — take the first line
+	lines := strings.Split(dataset, "\n")
+	if len(lines) > 0 {
+		dataset = strings.TrimSpace(lines[0])
+	}
+	return dataset, nil
+}
 
 // DeviceState represents current state of a device
 type DeviceState struct {
@@ -91,6 +108,19 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 	go func() {
 		readErr <- h.matter.ReadLoop(ctx)
 	}()
+
+	// 3.5. Inject Thread dataset from OTBR if not set
+	if info := h.matter.Info(); info != nil && !info.ThreadCredentialsSet {
+		if dataset, err := getOTBRDataset(); err != nil {
+			log.Printf("[hub] OTBR dataset fetch failed: %v (continuing)", err)
+		} else if dataset != "" {
+			if err := h.matter.SetThreadDataset(ctx, dataset); err != nil {
+				log.Printf("[hub] set_thread_dataset failed: %v", err)
+			} else {
+				log.Printf("[hub] Thread dataset injected (%d bytes)", len(dataset)/2)
+			}
+		}
+	}
 
 	// 4. Get existing nodes
 	nodes, err := h.matter.GetNodes(ctx)

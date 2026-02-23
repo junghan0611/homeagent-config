@@ -21,6 +21,14 @@ help() {
     echo ""
     echo "Usage: ./run.sh <command> [args]"
     echo ""
+    echo -e "${GREEN}HomeAgent 배포:${NC}"
+    echo "  ha-deploy [IP]  전체 배포 (빌드+UI+aliases→RPi5→시작)"
+    echo "  ha-start [IP]   homeagent 시작"
+    echo "  ha-stop [IP]    homeagent 종료"
+    echo "  ha-status [IP]  RPi5 전체 상태 확인"
+    echo "  ha-logs [IP] [N] 최근 로그 (기본 50줄)"
+    echo "  ui-build        Lit 프론트엔드 빌드"
+    echo ""
     echo -e "${GREEN}개발 환경:${NC}"
     echo "  shell           Yocto FHS 빌드 환경 진입 (nix develop --impure)"
     echo "  status          레이어 브랜치 상태 확인"
@@ -546,6 +554,161 @@ cmd_npm_build() {
     bitbake "$pkg"
 }
 
+# ─── HomeAgent 통합 배포 ───
+
+cmd_ui_build() {
+    echo -e "${GREEN}[UI-BUILD]${NC} Lit 프론트엔드 빌드..."
+    cd "$SCRIPT_DIR/ui"
+    npx vite build
+    echo -e "${GREEN}[DONE]${NC} ui/dist/ ($(du -sh dist | awk '{print $1}'))"
+}
+
+# 전체 빌드 + 배포 + 시작
+cmd_ha_deploy() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo "  ./run.sh ha-deploy 192.168.69.6"
+        exit 1
+    fi
+    check_ssh_key
+
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+    echo -e "${CYAN}  HomeAgent 전체 배포 → $IP${NC}"
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+
+    # 1. Go 빌드
+    cmd_go_build
+
+    # 2. UI 빌드
+    cmd_ui_build
+
+    # 3. 기존 프로세스 정지
+    echo -e "${YELLOW}[STOP]${NC} 기존 homeagent 종료..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" '
+        PID=$(ps | grep "[h]omeagent" | awk "{print \$1}")
+        if [ -n "$PID" ]; then
+            kill -9 $PID 2>/dev/null
+            sleep 2
+            rm -f /opt/homeagent/homeagent
+        fi
+    ' || true
+
+    # 4. 파일 전송
+    echo -e "${GREEN}[UPLOAD]${NC} 바이너리 + UI + aliases..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "mkdir -p /opt/homeagent/ui"
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/go/bin/homeagent" root@"$IP":/opt/homeagent/homeagent
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/aliases.json" root@"$IP":/opt/homeagent/aliases.json
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "rm -rf /opt/homeagent/ui/*"
+    scp -i "$SSH_KEY" $SSH_OPTS -r "$SCRIPT_DIR/ui/dist/"* root@"$IP":/opt/homeagent/ui/
+
+    # 5. 시작
+    cmd_ha_start "$IP"
+
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}[DONE]${NC} 배포 완료! http://$IP:8080"
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+}
+
+# 환경변수 로드 + 시작
+cmd_ha_start() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
+    fi
+    check_ssh_key
+
+    # .env.rpi5에서 환경변수 → env 파일로 전송
+    local ENV_FILE="$SCRIPT_DIR/.env.rpi5"
+    local TMP_ENV="/tmp/homeagent.env"
+    : > "$TMP_ENV"
+
+    if [[ -f "$ENV_FILE" ]]; then
+        grep -v '^#' "$ENV_FILE" | grep -v '^$' >> "$TMP_ENV"
+    fi
+
+    # OPENROUTER_API_KEY는 ~/.env.local에서 가져오기
+    if [[ -f "$HOME/.env.local" ]]; then
+        grep '^export OPENROUTER_API_KEY=' "$HOME/.env.local" | sed 's/^export //' >> "$TMP_ENV"
+    fi
+
+    echo -e "${GREEN}[START]${NC} homeagent 시작 ($IP)..."
+    scp -i "$SSH_KEY" $SSH_OPTS "$TMP_ENV" root@"$IP":/opt/homeagent/.env
+    rm -f "$TMP_ENV"
+
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" '
+        cd /opt/homeagent
+        set -a; . ./.env; set +a
+        nohup ./homeagent > /tmp/homeagent.log 2>&1 &
+        sleep 3
+        if ps | grep -q "[h]omeagent"; then
+            echo "OK: homeagent 실행 중"
+            sed -n "1,5p" /tmp/homeagent.log
+        else
+            echo "FAIL: 시작 실패"
+            cat /tmp/homeagent.log
+            exit 1
+        fi
+    '
+}
+
+cmd_ha_stop() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
+    fi
+    check_ssh_key
+    echo -e "${YELLOW}[STOP]${NC} homeagent 종료 ($IP)..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" \
+        'kill $(ps | grep "[h]omeagent" | awk "{print \$1}") 2>/dev/null && echo "stopped" || echo "not running"'
+}
+
+cmd_ha_logs() {
+    local IP=$(get_device_ip "$1")
+    local LINES="${2:-50}"
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
+    fi
+    check_ssh_key
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "tail -${LINES} /tmp/homeagent.log"
+}
+
+cmd_ha_status() {
+    local IP=$(get_device_ip "$1")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
+    fi
+    check_ssh_key
+    echo -e "${CYAN}[STATUS]${NC} $IP"
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'EOF'
+echo "=== HomeAgent ==="
+if ps | grep -q '[h]omeagent'; then
+    echo "  ✅ homeagent 실행 중 (PID: $(ps | grep '[h]omeagent' | awk '{print $1}'))"
+    wget -qO- http://localhost:8080/healthz 2>/dev/null && echo "" || echo "  ⚠️ healthz 응답 없음"
+else
+    echo "  ❌ homeagent 중지"
+fi
+echo ""
+echo "=== matterjs-server ==="
+if ps | grep -q '[m]atter-server'; then
+    echo "  ✅ 실행 중"
+else
+    echo "  ❌ 중지"
+fi
+echo ""
+echo "=== Thread (OTBR) ==="
+ot-ctl state 2>/dev/null || echo "  ❌ otbr 응답 없음"
+echo ""
+echo "=== 디스크 ==="
+df -h / | tail -1
+echo ""
+echo "=== 메모리 ==="
+free -h 2>/dev/null | sed -n '1,2p' || echo "  (free 없음)"
+EOF
+}
+
+# ─── Go 빌드/배포 (기존) ───
+
 cmd_go_build() {
     echo -e "${GREEN}[GO-BUILD]${NC} aarch64 정적 바이너리 빌드..."
     cd "$SCRIPT_DIR/go"
@@ -715,6 +878,24 @@ case "${1:-help}" in
         ;;
     npm-build)
         cmd_npm_build "$2"
+        ;;
+    ha-deploy)
+        cmd_ha_deploy "$2"
+        ;;
+    ha-start)
+        cmd_ha_start "$2"
+        ;;
+    ha-stop)
+        cmd_ha_stop "$2"
+        ;;
+    ha-status)
+        cmd_ha_status "$2"
+        ;;
+    ha-logs)
+        cmd_ha_logs "$2" "$3"
+        ;;
+    ui-build)
+        cmd_ui_build
         ;;
     go-build)
         cmd_go_build

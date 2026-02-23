@@ -118,14 +118,27 @@
             "integrity": "sha512-bf74ndAhipRVn3SbUEjzUdMyJtfgcwDhSJqOfa856lvND3F67pQD+Vc88v/TAuC45NXuwqBYrTGwF4VPd0svcA==",
             "dependencies": {
                 "@matter/main": "0.16.9-alpha.0-20260204-fd5b6ed86",
+                "@matter/nodejs-ble": "0.16.9-alpha.0-20260204-fd5b6ed86",
                 "@project-chip/matter.js": "0.16.9-alpha.0-20260204-fd5b6ed86",
                 "ws": "^8.19.0"
             },
             "engines": {
                 "node": ">=20.19.0 <22.0.0 || >=22.13.0"
+            }
+        },
+        "node_modules/@matter/nodejs-ble": {
+            "version": "0.16.9-alpha.0-20260204-fd5b6ed86",
+            "resolved": "https://registry.npmjs.org/@matter/nodejs-ble/-/nodejs-ble-0.16.9-alpha.0-20260204-fd5b6ed86.tgz",
+            "integrity": "sha512-cPh60wJ9tzI5KXlDNnqLgiJgIp1rB43dI/sbC4CaQkCokzJaF5q6iVxQJ/vJQvQNQIkqKjffyRFqRnZgKh/6Uw==",
+            "license": "Apache-2.0",
+            "dependencies": {
+                "@matter/general": "0.16.9-alpha.0-20260204-fd5b6ed86",
+                "@matter/protocol": "0.16.9-alpha.0-20260204-fd5b6ed86",
+                "@matter/types": "0.16.9-alpha.0-20260204-fd5b6ed86"
             },
             "optionalDependencies": {
-                "@matter/nodejs-ble": "0.16.9-alpha.0-20260204-fd5b6ed86"
+                "@stoprocent/bleno": "^0.12.1",
+                "@stoprocent/noble": "^2.3.10"
             }
         },
         "node_modules/@matter/general": {

@@ -33,6 +33,13 @@ br sync --flush-only # JSONL 동기화
 2. **추가보다 제거** - 복잡도는 버그의 온상
 3. **자기 복구 가능한 상태머신** - 무한 대기/루프 금지
 
+### npm-shrinkwrap 주의점 (Yocto 오프라인 빌드)
+
+- `optionalDependencies`에 나열된 패키지도 shrinkwrap에 **resolve 엔트리**(resolved URL + integrity)가 있어야 설치됨. 없으면 Yocto가 건너뜀
+- 코드가 `import "pkg"`로 하드 임포트하면 optional이 아닌 **사실상 필수**. shrinkwrap에서 `optionalDependencies` → `dependencies`로 이동할 것
+- 네이티브 prebuild 바이너리(`prebuilds/linux-x64/` 등)는 `do_install`에서 타겟 외 아키텍처 제거 필수 (QA `arch` 에러)
+- 상세: `docs/YOCTO-OFFLINE-FIRST.md`
+
 ### 인바리언트 (절대 금지)
 
 | 금지 | 허용 | 이유 |

@@ -53,12 +53,24 @@ SRC_URI = " \
 **shrinkwrap 생성 방법:**
 
 ```bash
-# devtool이 자동으로 생성
-devtool add <package-name> "npm://registry.npmjs.org/;package=<name>;version=<ver>"
+# run.sh 래퍼 사용 (FHS 환경 자동 진입)
+./run.sh npm-shrinkwrap matterjs-server
 
-# 생성된 파일들:
-# - recipes-*/<name>/<name>_<ver>.bb
-# - recipes-*/<name>/<name>/npm-shrinkwrap.json
+# 내부적으로 devtool add → shrinkwrap 복사 → workspace 정리
+```
+
+**생성 후 반드시 확인:**
+
+```bash
+# 1. optional인데 실제로는 필수인 패키지 확인
+#    소스 코드에서 import "pkg"로 하드 임포트하는데
+#    shrinkwrap에서 optionalDependencies인 경우 → dependencies로 이동
+grep -A3 "optionalDependencies" npm-shrinkwrap.json
+
+# 2. resolve 엔트리 존재 확인
+#    optionalDependencies에 이름만 있고 node_modules/<pkg> 엔트리가
+#    없으면 Yocto가 건너뜀 → npm view로 정보 조회 후 수동 추가
+npm view <pkg>@<ver> dist.tarball dist.integrity
 ```
 
 ### 2. Git 소스 + NPM 의존성
@@ -154,6 +166,83 @@ diff old/npm-shrinkwrap.json new/npm-shrinkwrap.json
 # - SRCREV (git 사용 시)
 # - LIC_FILES_CHKSUM
 ```
+
+## 트러블슈팅
+
+### `ERR_MODULE_NOT_FOUND` — optional 패키지 누락
+
+**증상**: RPi5에서 서비스 시작 시 `Cannot find package '@matter/nodejs-ble'`
+
+**원인**: npm-shrinkwrap.json에 해당 패키지의 resolve 엔트리가 없음. `optionalDependencies`에 이름만 있고 `node_modules/<pkg>` 아래 다운로드 정보(resolved, integrity)가 없으면 Yocto의 npm fetcher가 건너뜀.
+
+**해결**:
+
+```bash
+# 1. npm registry에서 패키지 정보 확인
+npm view @matter/nodejs-ble@<version> dist.tarball dist.integrity
+
+# 2. shrinkwrap에 resolve 엔트리 추가
+# node_modules/@matter/nodejs-ble: { version, resolved, integrity, dependencies }
+
+# 3. 참조하는 패키지의 optionalDependencies → dependencies로 이동
+# (코드에서 하드 import하면 optional이 아닌 필수)
+
+# 4. cleansstate 후 재빌드
+./run.sh bb-cmd -c cleansstate <recipe> && ./run.sh bb
+```
+
+**핵심 원리**: shrinkwrap의 optional은 "설치 실패해도 빌드 계속"이라는 npm 시맨틱. 하지만 소스 코드가 `import "pkg"`로 정적 임포트하면 런타임에 필수. monorepo에서 흔한 불일치 — 개발 호스트에서는 모두 설치되어 안 터지고, 크로스빌드에서만 터진다.
+
+### `Architecture did not match` — prebuild 바이너리 QA 에러
+
+**증상**: `do_package_qa`에서 `Architecture did not match (x86-64, expected AArch64)` 에러
+
+**원인**: npm 네이티브 패키지가 `prebuilds/` 디렉토리에 모든 플랫폼 바이너리를 번들. Node.js는 런타임에 맞는 것만 로드하지만 Yocto QA는 타겟 외 바이너리를 거부.
+
+**해결**: bbappend의 `do_install:append`에서 타겟 외 prebuilds 제거:
+
+```bash
+# RPi5 = AArch64 → linux-arm64만 유지
+for dir in $(find ${D}${prefix}/lib/node_modules -type d -name "prebuilds"); do
+    find "$dir" -mindepth 1 -maxdepth 1 -type d ! -name "linux-arm64" -exec rm -rf {} +
+done
+```
+
+`INSANE_SKIP += "arch"`로 우회 가능하지만 권장하지 않음 — 이미지 크기 낭비 + 실제 아키텍처 문제 감지 불가.
+
+### `buildpaths` WARNING — 빌드 경로 노출
+
+**증상**: `File ... contains reference to TMPDIR [buildpaths]`
+
+**원인**: node-gyp 빌드 메타데이터(`.target.mk`)에 빌드 호스트 경로가 남음.
+
+**조치**: 런타임 무영향. WARNING이므로 무시 가능. 필요 시 `do_install`에서 `.target.mk` 삭제.
+
+### bbappend 미적용 — layer.conf 누락
+
+**증상**: bbappend에 설정한 값(ttyUSB0, baudrate 등)이 무시되고 기본값 사용
+
+**원인**: `layer.conf`의 `BBFILES`에 `*.bbappend` 패턴 누락
+
+**해결**: `layer.conf`에 두 패턴 모두 포함 확인:
+
+```
+BBFILES += "${LAYERDIR}/recipes-*/*/*.bb ${LAYERDIR}/recipes-*/*/*.bbappend"
+```
+
+### IMAGE_INSTALL 누락
+
+**증상**: `bitbake <recipe>` 성공하지만 이미지에 패키지 없음
+
+**원인**: `build/conf/local.conf`에 `IMAGE_INSTALL:append` 누락. `conf/local.conf.sample`(템플릿)에만 있고 실제 빌드 설정에 없는 경우.
+
+**해결**: `build/conf/local.conf`에 추가:
+
+```bitbake
+IMAGE_INSTALL:append = " <package-name>"
+```
+
+주의: `build/conf/local.conf`은 `.gitignore` 대상이므로 `conf/local.conf.sample`도 함께 업데이트할 것.
 
 ## 참고 자료
 

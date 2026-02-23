@@ -379,6 +379,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/commission", h.handleCommission)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/chat", h.handleChat)
+	mux.HandleFunc("/api/home", h.handleHomeSurface)
 	mux.HandleFunc("/api/events", h.handleSSE)
 }
 

@@ -28,6 +28,12 @@ export interface ChatResult {
   actions?: { action: string; node_id: number }[];
 }
 
+export async function getHomeSurface(): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/home`);
+  if (!res.ok) throw new Error("Failed to load home surface");
+  return res.json();
+}
+
 export async function chat(message: string): Promise<ChatResult> {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",

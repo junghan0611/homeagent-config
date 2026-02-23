@@ -1,6 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { getDevices, subscribeEvents, type DeviceState, type HubEvent } from "./api.js";
+import { getDevices, getHomeSurface, subscribeEvents, type DeviceState, type HubEvent } from "./api.js";
 import "./device-card.js";
 import "./commission-dialog.js";
 import "./chat-panel.js";
@@ -236,12 +236,24 @@ export class App extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadDevices();
+    this.loadHomeSurface();
     this.connectSSE();
+    // Refresh home surface every 60s (time updates)
+    this._surfaceTimer = window.setInterval(() => this.loadHomeSurface(), 60_000);
   }
+
+  private _surfaceTimer?: number;
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.eventSource?.close();
+    if (this._surfaceTimer) clearInterval(this._surfaceTimer);
+  }
+
+  private async loadHomeSurface() {
+    try {
+      this.currentSurface = await getHomeSurface();
+    } catch { /* ignore */ }
   }
 
   private async loadDevices() {
@@ -342,6 +354,11 @@ export class App extends LitElement {
     if (evt.type === "surface_update") {
       this.currentSurface = evt.value;
     }
+
+    // Refresh home surface on device state changes
+    if (evt.type === "device_state" || evt.type === "device_added") {
+      this.loadHomeSurface();
+    }
   }
 
   private updateAgentMessage() {
@@ -377,6 +394,9 @@ export class App extends LitElement {
           </div>
         </div>
 
+        <!-- A2UI Home Surface -->
+        <ha-a2ui-renderer .surface=${this.currentSurface}></ha-a2ui-renderer>
+
         <!-- Agent message bar -->
         <div class="agent-bar">
           <div class="agent-avatar">🤖</div>
@@ -406,10 +426,6 @@ export class App extends LitElement {
                 <p>Matter 디바이스를 페어링해 보세요</p>
               </div>
             `}
-
-        <!-- A2UI Dynamic Surface -->
-        <ha-a2ui-renderer .surface=${this.currentSurface}></ha-a2ui-renderer>
-        ${this.currentSurface ? html`<br/>` : ""}
 
         <!-- Chat -->
         <ha-chat-panel></ha-chat-panel>

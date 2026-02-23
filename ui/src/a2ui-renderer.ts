@@ -7,9 +7,16 @@ interface A2UIComponent {
   children?: A2UIComponent[];
 }
 
+interface SurfaceTheme {
+  accent?: string;
+  bg?: string;
+  mood?: string;
+}
+
 interface SurfaceUpdate {
   surfaceId: string;
   components: A2UIComponent[];
+  theme?: SurfaceTheme;
 }
 
 @customElement("ha-a2ui-renderer")
@@ -20,10 +27,9 @@ export class A2UIRenderer extends LitElement {
     :host { display: block; }
 
     .surface {
-      background: #141824;
-      border: 1px solid #2a2e3e;
       border-radius: 16px;
-      padding: 16px;
+      padding: 20px;
+      transition: background 0.5s ease;
     }
 
     .surface-header {
@@ -36,6 +42,15 @@ export class A2UIRenderer extends LitElement {
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+
+    /* Mood-based surfaces */
+    .surface.mood-morning { background: linear-gradient(135deg, #1a1408 0%, #141824 100%); border: 1px solid #3d2e0a; }
+    .surface.mood-forenoon { background: linear-gradient(135deg, #1a180a 0%, #141824 100%); border: 1px solid #3d380a; }
+    .surface.mood-noon { background: linear-gradient(135deg, #1a100a 0%, #141824 100%); border: 1px solid #3d200a; }
+    .surface.mood-afternoon { background: linear-gradient(135deg, #0a1420 0%, #141824 100%); border: 1px solid #0a2a4a; }
+    .surface.mood-evening { background: linear-gradient(135deg, #140a20 0%, #141824 100%); border: 1px solid #2a0a4a; }
+    .surface.mood-night { background: linear-gradient(135deg, #0a0a1a 0%, #141824 100%); border: 1px solid #1a1a3a; }
+    .surface.mood-latenight { background: linear-gradient(135deg, #080810 0%, #0e1018 100%); border: 1px solid #1a1a2a; }
 
     .card {
       background: #1c2236;
@@ -142,9 +157,9 @@ export class A2UIRenderer extends LitElement {
 
   render() {
     if (!this.surface || !this.surface.components?.length) return nothing;
+    const mood = this.surface.theme?.mood || "";
     return html`
-      <div class="surface">
-        <div class="surface-header">✨ A2UI Surface: ${this.surface.surfaceId}</div>
+      <div class="surface mood-${mood}">
         ${this.surface.components.map(c => this.renderComponent(c))}
       </div>
     `;

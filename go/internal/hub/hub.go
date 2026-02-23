@@ -170,12 +170,12 @@ func (h *Hub) Commission(ctx context.Context, code string) (*DeviceState, error)
 
 // SetOnOff sends on/off command to a device
 func (h *Hub) SetOnOff(ctx context.Context, nodeID int, on bool) error {
-	// OnOff cluster = 6, On = 1, Off = 0, Toggle = 2
-	commandID := 0 // Off
+	// OnOff cluster = 6, command names: "on", "off", "toggle"
+	cmd := "off"
 	if on {
-		commandID = 1 // On
+		cmd = "on"
 	}
-	return h.matter.SendCommand(ctx, nodeID, 1, 6, commandID, nil)
+	return h.matter.SendCommand(ctx, nodeID, 1, 6, cmd, nil)
 }
 
 // Devices returns current device states

@@ -317,6 +317,20 @@ homeagent-config/
 │   ├── conf/                 # 빌드 설정 (local.conf, bblayers.conf)
 │   └── sources/              # 레이어 소스 (심볼릭 링크)
 │
+├── go/                       # Go 컨트롤러
+│   ├── cmd/homeagent/        # 메인 바이너리
+│   ├── internal/matter/      # matterjs-server WebSocket 클라이언트
+│   ├── internal/hub/         # 중앙 코디네이터 (상태머신, SSE)
+│   ├── internal/config/      # 설정
+│   └── bin/                  # 크로스 컴파일 결과물 (aarch64)
+│
+├── ui/                       # Lit 프론트엔드
+│   ├── src/app.ts            # 메인 대시보드 (ha-app)
+│   ├── src/device-card.ts    # 디바이스 상태 카드
+│   ├── src/commission-dialog.ts  # 페어링 다이얼로그
+│   ├── src/api.ts            # API 클라이언트 (REST + SSE)
+│   └── dist/                 # 빌드 결과물
+│
 ├── matter/                   # Matter 도구
 │   ├── bin/                  # chip-tool 바이너리 + 런타임 라이브러리
 │   └── connectedhomeip/     # chip-tool 빌드 환경 (Docker)
@@ -402,21 +416,33 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
   - systemd 부팅 체인: otbr-agent → otbr-thread-init → otbr-srp-enable
 - [ ] zigbee2mqtt 설정 및 동작 확인
 
-### Phase 2: matterjs-server + HA 호환
+### Phase 2: Matter 안정화 + Go 컨트롤러 ◐
 
 - [x] matterjs-server Yocto 레시피 작성 (v0.3.5, npm-shrinkwrap, systemd)
-- [ ] matterjs-server WebSocket API 검증
-- [ ] zigbee2mqtt 2.8.0 업그레이드
-- [ ] npmsw 오프라인 빌드 환경 구축
-- [ ] HA API 호환 레이어 프로토타입 (Go)
+- [x] **matterjs-server WebSocket API 검증** (2026-02-23)
+  - commissioning, attribute read, start_listening 모두 chip-tool oracle과 100% 일치
+  - 도어센서 실시간 이벤트 수신 확인
+- [x] **Go HomeAgent 컨트롤러 v0.3.0** (2026-02-23)
+  - Matter WS 클라이언트 (connect, get_nodes, commission_with_code, start_listening)
+  - Hub 코디네이터 (DeviceState 관리, 이벤트 브로드캐스트)
+  - REST API: GET /api/devices, POST /api/commission, GET /api/events (SSE)
+  - RPi5 배포: 단일 바이너리 (aarch64 정적 링크, ~6MB)
+- [x] **Lit 프론트엔드** (2026-02-23)
+  - 대시보드: 디바이스 카드, 에이전트 메시지바, 실시간 이벤트 로그
+  - 페어링 다이얼로그: Setup Code 입력 → Matter commissioning
+  - SSE 실시간 업데이트: 도어 열림/닫힘 즉시 반영
+  - RPi5 서빙: http://192.168.69.6:8080/
+- [ ] A2UI 프로토콜 통합 (surfaceUpdate JSONL)
+- [ ] OpenClaw Gateway 연동 (에이전트 채팅)
+- [ ] npmsw 오프라인 빌드 환경 구축 (디퍼)
+- [ ] zigbee2mqtt 2.8.0 업그레이드 (디퍼)
 
-### Phase 3: AI + 에이전트 + 동적 UI
+### Phase 3: AI + 에이전트 + A2UI
 
-- [ ] Go HomeAgent 컨트롤러 프로토타입
-- [ ] EdgeAI Runtime (Hailo + ONNX/TFLite)
-- [ ] A2A 프로토콜 구현
-- [ ] A2UI 뷰어 (RPi5 디스플레이 + 웹 동시 지원)
+- [ ] A2A 프로토콜 구현 (Go SDK)
 - [ ] Constitutional AI 판단 프레임워크
+- [ ] EdgeAI Runtime (Hailo + ONNX/TFLite)
+- [ ] TTS 에이전트 (디바이스 상태 음성 안내)
 - [ ] sLLM 온디바이스 튜닝 (Hailo-10H GenAI)
 - [ ] 풀패키지 Yocto 이미지 배포
 

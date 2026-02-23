@@ -130,25 +130,30 @@ scp -r ui/dist/* root@<rpi5>:/opt/homeagent/ui/
 - chip-tool Matter commissioning verified
 - Matter full flow: BLE → PASE → Thread → CommissioningComplete
 
-### Phase 2: Matter + Go Controller ◐ (50%)
+### Phase 2: Matter + Go Controller ✅ (v0.8)
 - [x] matterjs-server WebSocket API (100% match with chip-tool oracle)
-- [x] Go controller v0.6 (Hub, SSE, REST, auto Thread/WiFi inject)
-- [x] Lit frontend (dashboard, pairing, On/Off toggle, event log)
+- [x] Go controller v0.8 (Hub, SSE, REST, auto Thread/WiFi inject, auto-reconnect)
+- [x] Lit frontend (dashboard, pairing, On/Off toggle, event log, chat panel)
 - [x] Multi-device: Thread ×2 + WiFi ×1 simultaneously
-- [x] LLM agent chat (Gemini Flash, natural language → device control)
-- [ ] Event-triggered agent (door open → LLM judgment → proactive alert)
-- [ ] A2UI dynamic rendering (LLM generates surfaceUpdate JSON)
-- [ ] TTS announcements ("The front door is open")
+- [x] LLM agent chat (Gemini 2.5 Flash, natural language → device control)
+- [x] Event-triggered agent (door open → LLM judgment → proactive alert)
+- [x] A2UI dynamic rendering (time-based Home Surface + LLM surfaceUpdate)
+- [x] Device aliases + room mapping (`aliases.json`)
+- [x] `run.sh ha-deploy` one-command build + deploy
+- [ ] ❄️ npmsw offline build (deferred)
+- [ ] ❄️ zigbee2mqtt (deferred — Matter-only for now)
 
-### Phase 3: AI + Agent + A2UI
-- [ ] A2A protocol (agent-to-agent cooperation)
-- [ ] Constitutional AI framework
-- [ ] On-device sLLM (Hailo-10H GenAI)
-- [ ] Full Yocto image with everything integrated
+### Phase 3: Agent Intelligence + Integration ← **current**
+- [ ] **A2A protocol + Constitutional AI** — agent identity & cooperation (ha-2h5)
+- [ ] **OpenClaw integration** — TTS, Telegram, chat bots delegated to Claw ecosystem (ha-3nc)
+- [ ] **Yocto image: homeagent recipe** — SD flash → boot → works (ha-2ua)
+- [ ] On-device sLLM fine-tuning pipeline (ha-17d)
+- [ ] EdgeAI Runtime: Hailo + ONNX/TFLite (ha-3lu)
+- [ ] Chat history persistence (ha-2o4)
 
 ### Phase 4: Production + Scale
 - [ ] RK3588 Yocto port (production target)
-- [ ] Zigbee support (zigbee2mqtt)
+- [ ] Hailo-8 M.2 NPU support
 - [ ] Zig firmware for custom Thread sensors
 
 ## Project Structure
@@ -186,6 +191,7 @@ homeagent-config/
 - **Privacy by default** — No cloud, no data leaving your home
 - **Reproducible** — Yocto image → SD card → boot → works
 - **Agent-first UI** — The agent decides what to show ([A2UI](https://a2ui.org))
+- **Focus + Delegate** — HomeAgent owns Matter + AI core; external channels (TTS, Telegram, Discord) are delegated to [OpenClaw](https://github.com/openclaw/openclaw) ecosystem for security and ecosystem leverage
 
 ## License
 

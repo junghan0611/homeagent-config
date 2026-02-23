@@ -418,44 +418,43 @@ bmaptool copy tmp/deploy/images/raspberrypi5/core-image-weston-raspberrypi5.wic.
   - systemd 부팅 체인: otbr-agent → otbr-thread-init → otbr-srp-enable
 - [ ] zigbee2mqtt 설정 및 동작 확인
 
-### Phase 2: Matter 안정화 + Go 컨트롤러 ◐ (60%)
+### Phase 2: Matter 안정화 + Go 컨트롤러 ✅ (v0.8)
 
-- [x] matterjs-server Yocto 레시피 작성 (v0.3.5, npm-shrinkwrap, systemd)
-- [x] **matterjs-server WebSocket API 검증** (2026-02-23)
-  - commissioning, attribute read, start_listening 모두 chip-tool oracle과 100% 일치
-  - BLE 활성화 (`--bluetooth-adapter 0`) + Thread dataset 자동 주입
-- [x] **Go HomeAgent 컨트롤러 v0.6** (2026-02-23)
-  - Matter WS 클라이언트 (단일 ReadLoop 아키텍처 — 커미셔닝+이벤트 동시)
-  - Hub 코디네이터 (DeviceState 관리, SSE 브로드캐스트)
-  - REST API: devices, commission, command, chat, events(SSE)
-  - 자동 Thread dataset + WiFi credentials 주입
-  - WS 끊김 시 5초 자동 재연결
+- [x] matterjs-server Yocto 레시피 + WebSocket API 검증 (chip-tool oracle 100% 일치)
+- [x] **Go HomeAgent 컨트롤러 v0.8** (2026-02-23)
+  - 단일 ReadLoop 아키텍처 (커미셔닝+이벤트 동시, WS 경합 해결)
+  - REST API: devices, commission, command, chat, home(surface), events(SSE)
+  - 자동 Thread dataset + WiFi credentials 주입, 5초 자동 재연결
   - RPi5 배포: 단일 바이너리 (aarch64 정적 링크, ~7MB)
-- [x] **Lit 프론트엔드** (2026-02-23)
-  - 대시보드: 디바이스 카드, 에이전트 메시지바, 실시간 이벤트 로그
-  - 페어링 다이얼로그: Setup Code 입력 → BLE → Thread/WiFi 커미셔닝
-  - On/Off 토글 스위치: 스마트플러그 실시간 제어
-  - 채팅 패널: 자연어 → LLM → 디바이스 제어
-- [x] **멀티 디바이스 커미셔닝** (2026-02-23)
-  - Thread 도어센서 ×2 + WiFi 스마트플러그 ×1 동시 관리
-  - 브라우저에서 페어링, 제어, 실시간 이벤트 모두 동작
-- [x] **LLM 에이전트 연동** (2026-02-23)
-  - OpenRouter → Gemini 2.5 Flash ($0.02/day)
-  - 자연어 디바이스 제어: "플러그 꺼줘" → 실제 꺼짐
-  - 상태 조회: "문 열려있어?" → 정확한 상태 응답
-- [ ] 이벤트 트리거 에이전트 (도어 열림 → LLM 판단 → 능동 알림)
-- [ ] A2UI 동적 렌더링 (LLM이 surfaceUpdate JSON 생성)
-- [ ] TTS 음성 안내 ("현관문이 열렸습니다")
-- [ ] npmsw 오프라인 빌드 환경 구축 (디퍼)
-- [ ] zigbee2mqtt 2.8.0 업그레이드 (디퍼)
+- [x] **Lit 프론트엔드**: 대시보드 + 페어링 + On/Off 토글 + 채팅 패널 + A2UI 렌더러
+- [x] **멀티 디바이스**: Thread 도어센서 ×2 + WiFi 스마트플러그 ×1 동시 관리
+- [x] **LLM 에이전트** (Gemini 2.5 Flash, ~$0.02/day)
+  - 자연어 제어: "플러그 꺼줘" → 실제 꺼짐
+  - 이벤트 트리거: 도어 열림 → LLM 판단 → 채팅 알림
+  - A2UI 동적 렌더링: surfaceUpdate JSON → Lit 렌더러
+- [x] **시간 기반 Home Surface**: 7가지 시간대 테마 + 디바이스 현황 카드
+- [x] **디바이스 별칭**: aliases.json (현관문 센서, 화장실 센서, 거실 플러그)
+- [x] **run.sh 통합 배포**: `ha-deploy` 원커맨드 (빌드+UI+aliases→RPi5→시작)
+- [ ] ❄️ npmsw 오프라인 빌드 (디퍼)
+- [ ] ❄️ zigbee2mqtt 2.8.0 업그레이드 (디퍼 — Matter 단일 경로)
 
-### Phase 3: AI + 에이전트 + A2UI
+### Phase 3: 에이전트 지능 + 통합 ← **현재**
 
-- [ ] A2A 프로토콜 구현 (Go SDK)
-- [ ] Constitutional AI 판단 프레임워크
-- [ ] EdgeAI Runtime (Hailo + ONNX/TFLite)
-- [ ] sLLM 온디바이스 튜닝 (Hailo-10H GenAI)
-- [ ] 풀패키지 Yocto 이미지 배포
+- [ ] **A2A 프로토콜 + Constitutional AI** (ha-2h5) — 에이전트 정체성과 협력
+- [ ] **OpenClaw 연동** (ha-3nc) — TTS/Telegram/채팅봇은 Claw 생태계에 위임
+  - 보안: 외부 채널 인증/권한은 OpenClaw이 관리
+  - 생태계: Claw 플러그인으로 TTS(Piper), Telegram, Discord 이미 지원
+  - 전략: HomeAgent는 Matter+AI 코어에 집중, 채널은 협력
+- [ ] **Yocto 이미지 통합** (ha-2ua) — SD 플래싱 → 부팅 → 즉시 동작
+- [ ] sLLM 파인튜닝 파이프라인 (ha-17d, GPU 클러스터 → HEF)
+- [ ] EdgeAI Runtime (ha-3lu, Hailo + ONNX/TFLite)
+- [ ] 채팅 히스토리 유지 (ha-2o4)
+
+### Phase 4: 양산 + 확장
+
+- [ ] RK3588 Yocto 포팅 (양산 타겟)
+- [ ] Hailo-8 M.2 NPU 지원
+- [ ] Zig 소형 디바이스 펌웨어 (Thread/Matter 엔드포인트)
 
 ---
 

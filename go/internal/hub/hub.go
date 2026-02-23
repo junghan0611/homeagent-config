@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/junghan0611/homeagent/internal/agent"
 	"github.com/junghan0611/homeagent/internal/config"
 	"github.com/junghan0611/homeagent/internal/matter"
 )
@@ -50,6 +51,9 @@ type Hub struct {
 	eventCh    chan Event
 	sseClients map[chan Event]struct{}
 	sseMu      sync.Mutex
+
+	// LLM Agent
+	agent *agent.Agent
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -62,12 +66,22 @@ type Event struct {
 
 // New creates a new Hub
 func New(cfg *config.Config) *Hub {
+	var ag *agent.Agent
+	if cfg.OpenRouterKey != "" {
+		ag = agent.New(agent.Config{
+			APIKey: cfg.OpenRouterKey,
+			Model:  cfg.LLMModel,
+		})
+		log.Printf("[hub] LLM agent enabled: %s", cfg.LLMModel)
+	}
+
 	return &Hub{
 		cfg:        cfg,
 		matter:     matter.NewClient(cfg.MatterWSURL),
 		devices:    make(map[int]*DeviceState),
 		eventCh:    make(chan Event, 100),
 		sseClients: make(map[chan Event]struct{}),
+		agent:      ag,
 	}
 }
 
@@ -306,6 +320,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
 	mux.HandleFunc("/api/commission", h.handleCommission)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
+	mux.HandleFunc("/api/chat", h.handleChat)
 	mux.HandleFunc("/api/events", h.handleSSE)
 }
 
@@ -351,6 +366,91 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning", "code": req.Code})
+}
+
+func (h *Hub) deviceInfos() []agent.DeviceInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	var infos []agent.DeviceInfo
+	for _, d := range h.devices {
+		desc := ""
+		switch d.Type {
+		case "contact_sensor":
+			if v, ok := d.State["contact"]; ok && v == true {
+				desc = "열림 (open)"
+			} else {
+				desc = "닫힘 (closed)"
+			}
+		case "on_off_plug", "on_off_light":
+			if v, ok := d.State["on"]; ok && v == true {
+				desc = "켜짐 (on)"
+			} else {
+				desc = "꺼짐 (off)"
+			}
+		default:
+			desc = fmt.Sprintf("%v", d.State)
+		}
+		infos = append(infos, agent.DeviceInfo{
+			NodeID:    d.NodeID,
+			Name:      d.Name,
+			Type:      d.Type,
+			Available: d.Available,
+			StateDesc: desc,
+		})
+	}
+	return infos
+}
+
+func (h *Hub) handleChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.agent == nil {
+		http.Error(w, `{"error":"LLM agent not configured (set OPENROUTER_API_KEY)"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Message == "" {
+		http.Error(w, `{"error":"message required"}`, http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.agent.Chat(r.Context(), req.Message, h.deviceInfos())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Execute actions
+	for _, act := range result.Actions {
+		switch act.ActionType {
+		case "on":
+			if err := h.SetOnOff(r.Context(), act.NodeID, true); err != nil {
+				log.Printf("[agent] action on node %d failed: %v", act.NodeID, err)
+			} else {
+				log.Printf("[agent] executed: on node %d", act.NodeID)
+			}
+		case "off":
+			if err := h.SetOnOff(r.Context(), act.NodeID, false); err != nil {
+				log.Printf("[agent] action off node %d failed: %v", act.NodeID, err)
+			} else {
+				log.Printf("[agent] executed: off node %d", act.NodeID)
+			}
+		}
+	}
+
+	// Push agent message via SSE
+	h.eventCh <- Event{Type: "agent_message", Value: result.Reply}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 func (h *Hub) handleDeviceCommand(w http.ResponseWriter, r *http.Request) {

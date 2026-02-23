@@ -23,6 +23,24 @@ export async function getDevices(): Promise<DeviceState[]> {
   return res.json();
 }
 
+export interface ChatResult {
+  reply: string;
+  actions?: { action: string; node_id: number }[];
+}
+
+export async function chat(message: string): Promise<ChatResult> {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "Chat failed");
+  }
+  return res.json();
+}
+
 export async function sendCommand(nodeId: number, command: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/devices/command`, {
     method: "POST",

@@ -3,6 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 import { getDevices, subscribeEvents, type DeviceState, type HubEvent } from "./api.js";
 import "./device-card.js";
 import "./commission-dialog.js";
+import "./chat-panel.js";
 
 @customElement("ha-app")
 export class App extends LitElement {
@@ -324,6 +325,10 @@ export class App extends LitElement {
     if (evt.type === "commission_error") {
       this.agentMessage = `⚠️ 페어링 실패: ${evt.value}`;
     }
+
+    if (evt.type === "agent_message") {
+      this.agentMessage = `🤖 ${evt.value}`;
+    }
   }
 
   private updateAgentMessage() {
@@ -388,6 +393,10 @@ export class App extends LitElement {
                 <p>Matter 디바이스를 페어링해 보세요</p>
               </div>
             `}
+
+        <!-- Chat -->
+        <ha-chat-panel></ha-chat-panel>
+        <br/>
 
         <!-- Event log -->
         ${this.eventLog.length > 0

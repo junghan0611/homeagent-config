@@ -18,6 +18,10 @@ type Config struct {
 	// WiFi credentials for Matter WiFi device commissioning
 	WifiSSID     string
 	WifiPassword string
+
+	// LLM Agent
+	OpenRouterKey string
+	LLMModel      string
 }
 
 func Load() *Config {
@@ -25,8 +29,10 @@ func Load() *Config {
 		HTTPAddr:     envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
 		MQTTBroker:   envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
 		MatterWSURL:  envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
-		WifiSSID:     os.Getenv("HOMEAGENT_WIFI_SSID"),
-		WifiPassword: os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
+		WifiSSID:      os.Getenv("HOMEAGENT_WIFI_SSID"),
+		WifiPassword:  os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
+		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
+		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.0-flash-001"),
 	}
 }
 

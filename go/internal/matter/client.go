@@ -120,7 +120,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		return fmt.Errorf("matter ws server info: %w", err)
 	}
 	c.info = &info
-	log.Printf("[matter] connected: %s (fabric=%d)", info.SDKVersion, info.FabricID)
+	log.Printf("[matter] connected: %s (fabric=%d, ble=%v, thread=%v)", info.SDKVersion, info.FabricID, info.BluetoothEnabled, info.ThreadCredentialsSet)
 	return nil
 }
 

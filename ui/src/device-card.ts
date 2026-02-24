@@ -13,8 +13,8 @@ export class DeviceCard extends LitElement {
     }
 
     .card {
-      background: #141824;
-      border: 1px solid #2a2e3e;
+      background: var(--surface, #141824);
+      border: 1px solid var(--border, #2a2e3e);
       border-radius: 16px;
       padding: 24px;
       transition: all 0.3s ease;

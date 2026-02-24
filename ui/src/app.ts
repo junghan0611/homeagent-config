@@ -35,12 +35,10 @@ export class App extends LitElement {
     :host {
       display: block;
       min-height: 100vh;
-      background:
-        radial-gradient(1200px 900px at 15% 20%, rgba(3, 169, 244, 0.08), transparent 55%),
-        radial-gradient(900px 700px at 85% 80%, rgba(76, 175, 80, 0.06), transparent 60%),
-        #0a0e1a;
-      color: #e5e7eb;
+      background: var(--bg, #0a0e1a);
+      color: var(--text, #e5e7eb);
       font-family: system-ui, -apple-system, "Roboto", sans-serif;
+      transition: background 0.8s ease;
     }
 
     .container {
@@ -66,7 +64,7 @@ export class App extends LitElement {
     .logo-icon {
       width: 44px;
       height: 44px;
-      background: linear-gradient(135deg, #03a9f4, #4caf50);
+      background: linear-gradient(135deg, var(--primary, #03a9f4), #4caf50);
       border-radius: 12px;
       display: flex;
       align-items: center;
@@ -110,8 +108,8 @@ export class App extends LitElement {
 
     /* Agent message */
     .agent-bar {
-      background: #141824;
-      border: 1px solid #2a2e3e;
+      background: var(--surface, #141824);
+      border: 1px solid var(--border, #2a2e3e);
       border-radius: 14px;
       padding: 16px 20px;
       margin-bottom: 24px;
@@ -203,8 +201,8 @@ export class App extends LitElement {
 
     /* Event log */
     .event-log {
-      background: #141824;
-      border: 1px solid #2a2e3e;
+      background: var(--surface, #141824);
+      border: 1px solid var(--border, #2a2e3e);
       border-radius: 14px;
       padding: 16px 20px;
     }
@@ -256,7 +254,17 @@ export class App extends LitElement {
   private async loadHomeSurface() {
     try {
       this.homeSurface = await getHomeSurface();
+      this.applyTheme(this.homeSurface?.theme);
     } catch { /* ignore */ }
+  }
+
+  private applyTheme(theme?: { accent?: string; bg?: string; mood?: string }) {
+    if (!theme) return;
+    const host = this.shadowRoot?.host as HTMLElement;
+    if (!host) return;
+    // Set mood class on host for global theming
+    host.className = host.className.replace(/mood-\S+/g, "").trim();
+    if (theme.mood) host.classList.add(`mood-${theme.mood}`);
   }
 
   private async loadDevices() {

@@ -23,6 +23,15 @@ export const globalStyles = css`
     margin: 0;
   }
 
+  /* Time-based page themes */
+  :host(.mood-morning) { --bg: #1a1208; --surface: #241a0c; --border: #4a3510; --primary: #FF9800; }
+  :host(.mood-forenoon) { --bg: #1a1808; --surface: #24200c; --border: #4a4510; --primary: #FFC107; }
+  :host(.mood-noon) { --bg: #1a1008; --surface: #24180c; --border: #4a2810; --primary: #FF5722; }
+  :host(.mood-afternoon) { --bg: #081420; --surface: #0c1c2c; --border: #163050; --primary: #03A9F4; }
+  :host(.mood-evening) { --bg: #100820; --surface: #180c2c; --border: #2a1650; --primary: #7C4DFF; }
+  :host(.mood-night) { --bg: #08081a; --surface: #0e0e24; --border: #1a1a40; --primary: #5C6BC0; }
+  :host(.mood-latenight) { --bg: #050508; --surface: #0a0a12; --border: #14141e; --primary: #37474F; }
+
   * {
     box-sizing: border-box;
   }

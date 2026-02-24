@@ -18,8 +18,8 @@ export class ChatPanel extends LitElement {
     :host { display: block; }
 
     .panel {
-      background: #141824;
-      border: 1px solid #2a2e3e;
+      background: var(--surface, #141824);
+      border: 1px solid var(--border, #2a2e3e);
       border-radius: 16px;
       overflow: hidden;
     }
@@ -61,7 +61,7 @@ export class ChatPanel extends LitElement {
 
     .msg.agent {
       align-self: flex-start;
-      background: #1c2236;
+      background: var(--surface-hover, #1c2236);
       color: #d1d5db;
       border-bottom-left-radius: 4px;
     }
@@ -95,8 +95,8 @@ export class ChatPanel extends LitElement {
       flex: 1;
       padding: 10px 14px;
       border-radius: 10px;
-      border: 1px solid #2a2e3e;
-      background: #0a0e1a;
+      border: 1px solid var(--border, #2a2e3e);
+      background: var(--bg, #0a0e1a);
       color: #e5e7eb;
       font-size: 14px;
       outline: none;

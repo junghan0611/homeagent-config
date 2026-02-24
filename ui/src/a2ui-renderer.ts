@@ -29,7 +29,9 @@ export class A2UIRenderer extends LitElement {
     .surface {
       border-radius: 16px;
       padding: 20px;
-      transition: background 0.5s ease;
+      background: #141824;
+      border: 1px solid #2a2e3e;
+      transition: background 0.5s ease, border-color 0.5s ease;
     }
 
     .surface-header {
@@ -43,14 +45,14 @@ export class A2UIRenderer extends LitElement {
       letter-spacing: 0.5px;
     }
 
-    /* Mood-based surfaces */
-    .surface.mood-morning { background: linear-gradient(135deg, #1a1408 0%, #141824 100%); border: 1px solid #3d2e0a; }
-    .surface.mood-forenoon { background: linear-gradient(135deg, #1a180a 0%, #141824 100%); border: 1px solid #3d380a; }
-    .surface.mood-noon { background: linear-gradient(135deg, #1a100a 0%, #141824 100%); border: 1px solid #3d200a; }
-    .surface.mood-afternoon { background: linear-gradient(135deg, #0a1420 0%, #141824 100%); border: 1px solid #0a2a4a; }
-    .surface.mood-evening { background: linear-gradient(135deg, #140a20 0%, #141824 100%); border: 1px solid #2a0a4a; }
-    .surface.mood-night { background: linear-gradient(135deg, #0a0a1a 0%, #141824 100%); border: 1px solid #1a1a3a; }
-    .surface.mood-latenight { background: linear-gradient(135deg, #080810 0%, #0e1018 100%); border: 1px solid #1a1a2a; }
+    /* Mood-based surfaces — distinct warm/cool gradients */
+    .surface.mood-morning { background: linear-gradient(135deg, #2d1f0a 0%, #1a1208 100%); border: 1px solid #6d4c1a; }
+    .surface.mood-forenoon { background: linear-gradient(135deg, #2a2408 0%, #1c1a0a 100%); border: 1px solid #5c5010; }
+    .surface.mood-noon { background: linear-gradient(135deg, #2d1808 0%, #1c1008 100%); border: 1px solid #6d3010; }
+    .surface.mood-afternoon { background: linear-gradient(135deg, #0c1e35 0%, #0a1525 100%); border: 1px solid #1a4070; }
+    .surface.mood-evening { background: linear-gradient(135deg, #1e0c35 0%, #150a25 100%); border: 1px solid #3a1a70; }
+    .surface.mood-night { background: linear-gradient(135deg, #0e0e25 0%, #0a0a18 100%); border: 1px solid #2525aa; }
+    .surface.mood-latenight { background: linear-gradient(135deg, #080810 0%, #050508 100%); border: 1px solid #1a1a2a; }
 
     .card {
       background: #1c2236;

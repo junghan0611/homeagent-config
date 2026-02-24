@@ -24,7 +24,10 @@ export class App extends LitElement {
   private agentMessage = "";
 
   @state()
-  private currentSurface: any = null;
+  private homeSurface: any = null;
+
+  @state()
+  private llmSurface: any = null;
 
   private eventSource?: EventSource;
 
@@ -252,7 +255,7 @@ export class App extends LitElement {
 
   private async loadHomeSurface() {
     try {
-      this.currentSurface = await getHomeSurface();
+      this.homeSurface = await getHomeSurface();
     } catch { /* ignore */ }
   }
 
@@ -352,10 +355,11 @@ export class App extends LitElement {
     }
 
     if (evt.type === "surface_update") {
-      this.currentSurface = evt.value;
+      this.llmSurface = evt.value;
+      // Auto-clear LLM surface after 30s
+      setTimeout(() => { this.llmSurface = null; }, 30_000);
     }
 
-    // Refresh home surface on device state changes
     if (evt.type === "device_state" || evt.type === "device_added") {
       this.loadHomeSurface();
     }
@@ -394,8 +398,11 @@ export class App extends LitElement {
           </div>
         </div>
 
-        <!-- A2UI Home Surface -->
-        <ha-a2ui-renderer .surface=${this.currentSurface}></ha-a2ui-renderer>
+        <!-- A2UI Home Surface (always visible) -->
+        <ha-a2ui-renderer .surface=${this.homeSurface}></ha-a2ui-renderer>
+
+        <!-- LLM Dynamic Surface (temporary) -->
+        ${this.llmSurface ? html`<ha-a2ui-renderer .surface=${this.llmSurface}></ha-a2ui-renderer>` : ""}
 
         <!-- Agent message bar -->
         <div class="agent-bar">

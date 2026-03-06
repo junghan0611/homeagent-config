@@ -75,6 +75,10 @@ help() {
     echo "  set-ip <ip>     디바이스 IP 설정"
     echo "  thread-init [IP] Thread 네트워크 초기화 + SRP 활성화"
     echo ""
+    echo -e "${GREEN}번들:${NC}"
+    echo "  bundle          백엔드 번들 (Go+Node.js+matterjs arm64)"
+    echo "  bundle [opts]   --skip-go --skip-node --skip-ui --skip-matter"
+    echo ""
     echo -e "${GREEN}Git:${NC}"
     echo "  diff            변경사항 확인"
     echo "  commit          커밋 (br sync 포함)"
@@ -921,6 +925,10 @@ case "${1:-help}" in
     deploy-chip-tool)
         shift
         "${SCRIPT_DIR}/scripts/deploy-chip-tool.sh" "$@"
+        ;;
+    bundle)
+        shift
+        "${SCRIPT_DIR}/scripts/bundle-backend.sh" "$@"
         ;;
     *)
         echo -e "${RED}[ERROR]${NC} 알 수 없는 명령: $1"

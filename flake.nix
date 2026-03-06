@@ -58,6 +58,10 @@
             # Yocto 필수 빌드 도구 (nix-environments/yocto 동등)
             attr bc binutils bzip2 chrpath cpio diffstat expect file
             gcc gdb git gnumake hostname kconfig-frontends
+            # FHS /usr/include C 헤더 — flutter-engine 번들 clang 호스트 빌드에 필요
+            # buildFHSEnv는 glibc 라이브러리는 자동 포함하지만 dev 헤더는 빠짐
+            # glibc.dev → /usr/include/{pthread.h,stdio.h,time.h,...}
+            glibc.dev linuxHeaders
             libxcrypt libxcrypt-legacy lz4' ncurses'
             (ncurses'.override { unicodeSupport = false; })
             openssh patch perl
@@ -74,6 +78,10 @@
           ];
 
           multiPkgs = pkgs: [ ];
+
+          # dev 출력(include 헤더)을 FHS /usr/include에 링크
+          # flutter-engine 번들 clang 호스트 빌드에 glibc C 헤더 필요
+          extraOutputsToInstall = [ "dev" ];
 
           runScript = pkgs.writeShellScript "homeagent-yocto-init" ''
             # Yocto 빌드 환경 변수 (nix-environments/yocto profile 동등)

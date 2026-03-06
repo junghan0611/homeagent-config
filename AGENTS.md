@@ -136,6 +136,18 @@ br sync --flush-only # JSONL 동기화
 
 ---
 
+## ⚠️ 헷갈리기 쉬운 것
+
+### Node.js 버전: devShell ≠ Yocto 타겟
+
+- `flake.nix` devShell: **Node 22** (로컬 개발용)
+- Yocto 이미지 (RPi5): **Node 20.18.2** (타겟 런타임)
+- **달라도 문제없다.** devShell은 개발 편의, Yocto는 자체 도구체인으로 빌드. 서로 독립.
+- matterjs-server만 Node 런타임 의존. 양쪽 버전 모두 engines 범위 안.
+- 상세: `VERSION.md` > "Node.js 버전 — 개발 vs 타겟" 섹션
+
+---
+
 ## 관련 프로젝트
 
 | 프로젝트 | 위치 | 활용 |

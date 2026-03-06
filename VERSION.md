@@ -89,6 +89,25 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
+## Node.js 버전 — 개발 vs 타겟 (빌드/런타임 분리)
+
+| 환경 | Node 버전 | 용도 |
+|------|-----------|------|
+| **devShell** (NixOS 로컬) | Node 22 (nodejs_22) | 로컬 개발/테스트 |
+| **Yocto 타겟** (RPi5 이미지) | Node 20.18.2 | matterjs-server 런타임 |
+
+**왜 달라도 괜찮은가:**
+- devShell ≠ 크로스컴파일 도구체인. Yocto는 자체 도구체인으로 이미지를 빌드함
+- Go 백엔드 → 정적 바이너리. Node 무관
+- Lit UI → `vite build` 정적 HTML/JS. 빌드 후 Node 불필요
+- Flutter 앱 → Dart AOT 컴파일. Node 무관
+- **matterjs-server만** Node 런타임 의존. Yocto 레시피가 Node 20을 타겟에 설치
+- matterjs-server engines: `>=20.19.0 <22.0.0 || >=22.13.0` → 양쪽 다 범위 안
+
+**결론:** devShell 노드 버전은 Yocto 타겟 이미지에 영향 없음. 각각 독립.
+
+---
+
 ## meta-flutter-sony
 
 | 항목 | 값 |

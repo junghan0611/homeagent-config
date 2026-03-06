@@ -116,17 +116,18 @@
           '';
         };
 
-        # 개발용 (Go + Node.js)
+        # 개발용 (Go + Node.js + Flutter)
         devShells.dev = pkgs.mkShell {
           name = "homeagent-dev";
           packages = with pkgs; [
             go gopls          # Go 컨트롤러
-            nodejs_20         # matter.js / z2m 개발
+            nodejs_22         # matter.js / z2m 개발
+            flutter           # 크로스플랫폼 앱 (Linux + Android)
             just              # 태스크 러너
             ripgrep fd        # 검색
           ];
           shellHook = ''
-            echo "HomeAgent Dev: Go $(go version | cut -d' ' -f3) / Node $(node -v)"
+            echo "HomeAgent Dev: Go $(go version | cut -d' ' -f3) / Node $(node -v) / Flutter $(flutter --version --machine 2>/dev/null | grep -o '"frameworkVersion":"[^"]*"' | cut -d'"' -f4)"
           '';
         };
       }

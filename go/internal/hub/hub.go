@@ -189,13 +189,75 @@ func (h *Hub) Commission(ctx context.Context, code string) (*DeviceState, error)
 }
 
 // SetOnOff sends on/off command to a device
+// Matter 클러스터 ID 상수
+const (
+	ClusterOnOff      = 6
+	ClusterLevelCtrl  = 8
+	ClusterColorCtrl  = 768  // 0x0300
+	ClusterDoorLock   = 257  // 0x0101
+	ClusterThermostat = 513  // 0x0201
+)
+
 func (h *Hub) SetOnOff(ctx context.Context, nodeID int, on bool) error {
-	// OnOff cluster = 6, command names: "on", "off", "toggle"
 	cmd := "off"
 	if on {
 		cmd = "on"
 	}
-	return h.matter.SendCommand(ctx, nodeID, 1, 6, cmd, nil)
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterOnOff, cmd, nil)
+}
+
+// SetLevel sets brightness level (0-254) with optional transition time (100ms units)
+func (h *Hub) SetLevel(ctx context.Context, nodeID int, level int, transitionTime int) error {
+	payload := map[string]interface{}{
+		"level":          level,
+		"transitionTime": transitionTime,
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterLevelCtrl, "moveToLevel", payload)
+}
+
+// SetColor sets hue (0-254) and saturation (0-254) with optional transition time
+func (h *Hub) SetColor(ctx context.Context, nodeID int, hue int, saturation int, transitionTime int) error {
+	payload := map[string]interface{}{
+		"hue":            hue,
+		"saturation":     saturation,
+		"transitionTime": transitionTime,
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterColorCtrl, "moveToHueAndSaturation", payload)
+}
+
+// SetColorTemperature sets color temperature in mireds (153-500)
+func (h *Hub) SetColorTemperature(ctx context.Context, nodeID int, mireds int, transitionTime int) error {
+	payload := map[string]interface{}{
+		"colorTemperatureMireds": mireds,
+		"transitionTime":         transitionTime,
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterColorCtrl, "moveToColorTemperature", payload)
+}
+
+// SetThermostat sets heating/cooling setpoint in 0.01°C units
+func (h *Hub) SetThermostat(ctx context.Context, nodeID int, mode string, temperature int) error {
+	var cmd string
+	var payload map[string]interface{}
+	switch mode {
+	case "heat":
+		cmd = "setpointRaiseLower"
+		payload = map[string]interface{}{"mode": 0, "amount": temperature}
+	case "cool":
+		cmd = "setpointRaiseLower"
+		payload = map[string]interface{}{"mode": 1, "amount": temperature}
+	default:
+		return fmt.Errorf("unknown thermostat mode: %s", mode)
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterThermostat, cmd, payload)
+}
+
+// LockDoor sends lock/unlock command
+func (h *Hub) LockDoor(ctx context.Context, nodeID int, lock bool) error {
+	cmd := "unlockDoor"
+	if lock {
+		cmd = "lockDoor"
+	}
+	return h.matter.SendCommand(ctx, nodeID, 1, ClusterDoorLock, cmd, nil)
 }
 
 // Devices returns current device states
@@ -387,6 +449,7 @@ func (h *Hub) eventBroadcaster(ctx context.Context) {
 // RegisterHTTP registers hub API endpoints
 func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
+	mux.HandleFunc("/api/devices/", h.handleDeviceByID) // /api/devices/:node_id
 	mux.HandleFunc("/api/commission", h.handleCommission)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/chat", h.handleChat)
@@ -395,8 +458,49 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 }
 
 func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {
+	// /api/devices 정확히 매치 (trailing slash 없음)
+	if r.URL.Path != "/api/devices" {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(h.Devices())
+}
+
+// handleDeviceByID handles GET /api/devices/:node_id
+func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
+	// /api/devices/command는 별도 핸들러가 처리
+	if strings.HasSuffix(r.URL.Path, "/command") {
+		h.handleDeviceCommand(w, r)
+		return
+	}
+
+	// /api/devices/7 → nodeID=7
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/devices/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	var nodeID int
+	if _, err := fmt.Sscanf(parts[0], "%d", &nodeID); err != nil {
+		http.Error(w, `{"error":"invalid node_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	h.mu.RLock()
+	dev, ok := h.devices[nodeID]
+	h.mu.RUnlock()
+
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "device not found"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dev)
 }
 
 func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
@@ -536,22 +640,65 @@ func (h *Hub) handleDeviceCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		NodeID  int    `json:"node_id"`
-		Command string `json:"command"` // "on", "off", "toggle"
+		NodeID         int    `json:"node_id"`
+		Command        string `json:"command"`
+		Level          *int   `json:"level,omitempty"`           // 0-254
+		Hue            *int   `json:"hue,omitempty"`             // 0-254
+		Saturation     *int   `json:"saturation,omitempty"`      // 0-254
+		ColorTemp      *int   `json:"color_temp,omitempty"`      // mireds 153-500
+		Temperature    *int   `json:"temperature,omitempty"`     // 0.01°C units
+		Mode           string `json:"mode,omitempty"`            // thermostat: "heat"/"cool"
+		TransitionTime int    `json:"transition_time,omitempty"` // 100ms units, default 0
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	ctx := r.Context()
 	var err error
+
 	switch req.Command {
 	case "on":
-		err = h.SetOnOff(r.Context(), req.NodeID, true)
+		err = h.SetOnOff(ctx, req.NodeID, true)
 	case "off":
-		err = h.SetOnOff(r.Context(), req.NodeID, false)
+		err = h.SetOnOff(ctx, req.NodeID, false)
+
+	case "set_level":
+		if req.Level == nil {
+			http.Error(w, `{"error":"level required (0-254)"}`, http.StatusBadRequest)
+			return
+		}
+		err = h.SetLevel(ctx, req.NodeID, *req.Level, req.TransitionTime)
+
+	case "set_color":
+		if req.Hue == nil || req.Saturation == nil {
+			http.Error(w, `{"error":"hue and saturation required (0-254)"}`, http.StatusBadRequest)
+			return
+		}
+		err = h.SetColor(ctx, req.NodeID, *req.Hue, *req.Saturation, req.TransitionTime)
+
+	case "set_color_temp":
+		if req.ColorTemp == nil {
+			http.Error(w, `{"error":"color_temp required (mireds 153-500)"}`, http.StatusBadRequest)
+			return
+		}
+		err = h.SetColorTemperature(ctx, req.NodeID, *req.ColorTemp, req.TransitionTime)
+
+	case "set_thermostat":
+		if req.Temperature == nil || req.Mode == "" {
+			http.Error(w, `{"error":"temperature and mode required"}`, http.StatusBadRequest)
+			return
+		}
+		err = h.SetThermostat(ctx, req.NodeID, req.Mode, *req.Temperature)
+
+	case "lock":
+		err = h.LockDoor(ctx, req.NodeID, true)
+	case "unlock":
+		err = h.LockDoor(ctx, req.NodeID, false)
+
 	default:
-		http.Error(w, `{"error":"unknown command"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"unknown command","commands":["on","off","set_level","set_color","set_color_temp","set_thermostat","lock","unlock"]}`, http.StatusBadRequest)
 		return
 	}
 

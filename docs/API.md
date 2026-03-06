@@ -33,8 +33,8 @@ RPi5 로컬: `http://localhost:8080`
 |--------|------|------|------|
 | GET | `/healthz` | 헬스체크 | ✅ 구현됨 |
 | GET | `/api/devices` | 디바이스 목록 + 상태 | ✅ 구현됨 |
-| GET | `/api/devices/:node_id` | 개별 디바이스 상세 | 🔲 계획 |
-| POST | `/api/devices/command` | 디바이스 제어 | ✅ 구현됨 (on/off) |
+| GET | `/api/devices/:node_id` | 개별 디바이스 상세 | ✅ 구현됨 |
+| POST | `/api/devices/command` | 디바이스 제어 | ✅ 구현됨 (8 commands) |
 | POST | `/api/commission` | 새 디바이스 페어링 | ✅ 구현됨 |
 | GET | `/api/events` | SSE 실시간 이벤트 | ✅ 구현됨 |
 | POST | `/api/chat` | LLM 에이전트 (자연어→제어) | ✅ 구현됨 |
@@ -114,7 +114,7 @@ RPi5 로컬: `http://localhost:8080`
 
 ### GET /api/devices/:node_id
 
-🔲 **계획** — 개별 디바이스 상세 조회.
+✅ **구현됨** — 개별 디바이스 상세 조회.
 
 ```
 GET /api/devices/8
@@ -144,25 +144,30 @@ GET /api/devices/8
 
 디바이스 제어 명령 전송.
 
-**요청:**
+**요청 예시:**
 ```json
-{
-  "node_id": 8,
-  "command": "off"
-}
+{"node_id": 8, "command": "on"}
+{"node_id": 8, "command": "set_level", "level": 128, "transition_time": 10}
+{"node_id": 8, "command": "set_color", "hue": 120, "saturation": 200}
+{"node_id": 8, "command": "set_color_temp", "color_temp": 300}
+{"node_id": 8, "command": "set_thermostat", "mode": "heat", "temperature": 2200}
+{"node_id": 8, "command": "lock"}
 ```
 
 **지원 명령:**
 
-| command | 대상 타입 | 설명 |
-|---------|----------|------|
-| `on` | on_off_plug, *_light | 켜기 |
-| `off` | on_off_plug, *_light | 끄기 |
-| `toggle` | on_off_plug, *_light | 🔲 계획 |
-| `set_level` | dimmable_light | 🔲 계획 (+ `value`: 0-254) |
-| `set_color` | color_light | 🔲 계획 (+ `hue`, `saturation`) |
-| `lock` / `unlock` | door_lock | 🔲 계획 |
-| `set_temperature` | thermostat | 🔲 계획 (+ `setpoint`) |
+| command | 대상 타입 | 추가 필드 | 상태 |
+|---------|----------|-----------|------|
+| `on` | on_off_plug, *_light | — | ✅ |
+| `off` | on_off_plug, *_light | — | ✅ |
+| `set_level` | dimmable_light, color_light | `level` (0-254), `transition_time` | ✅ |
+| `set_color` | color_light | `hue`, `saturation` (0-254), `transition_time` | ✅ |
+| `set_color_temp` | color_light | `color_temp` (mireds 153-500), `transition_time` | ✅ |
+| `set_thermostat` | thermostat | `mode` ("heat"/"cool"), `temperature` (0.01°C) | ✅ |
+| `lock` | door_lock | — | ✅ |
+| `unlock` | door_lock | — | ✅ |
+
+> `transition_time`: 100ms 단위. 기본 0 (즉시).
 
 **응답:**
 ```json

@@ -9,7 +9,10 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
         inherit (pkgs) lib;
 
         # Yocto HOSTTOOLS용 ncurses (termlib 포함)
@@ -17,6 +20,17 @@
           configureFlags = old.configureFlags ++ [ "--with-termlib" ];
           postFixup = "";
         });
+
+        # Android SDK (Flutter APK 빌드용)
+        androidEnv = pkgs.androidenv.override { licenseAccepted = true; };
+        androidComposition = androidEnv.composeAndroidPackages {
+          buildToolsVersions = [ "28.0.3" "34.0.0" "35.0.0" "36.0.0" ];
+          platformVersions = [ "34" "35" "36" ];
+          includeNDK = true;
+          ndkVersions = [ "27.0.12077973" "28.2.13676358" ];
+          cmakeVersions = [ "3.22.1" ];
+        };
+        androidSdk = androidComposition.androidsdk;
 
         # lz4c 심볼릭 링크 (Yocto HOSTTOOLS 요구)
         lz4' = pkgs.lz4.overrideAttrs (old: {
@@ -124,18 +138,25 @@
           '';
         };
 
-        # 개발용 (Go + Node.js + Flutter)
+        # 개발용 (Go + Node.js + Flutter + Android)
         devShells.dev = pkgs.mkShell {
           name = "homeagent-dev";
           packages = with pkgs; [
             go gopls          # Go 컨트롤러
             nodejs_22         # matter.js / z2m 개발
             flutter           # 크로스플랫폼 앱 (Linux + Android)
+            androidSdk        # Android SDK (APK 빌드)
+            jdk17             # Gradle 빌드
             just              # 태스크 러너
             ripgrep fd        # 검색
           ];
+          ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
+          ANDROID_SDK_ROOT = "${androidSdk}/libexec/android-sdk";
+          JAVA_HOME = pkgs.jdk17.home;
+          GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/35.0.0/aapt2";
           shellHook = ''
             echo "HomeAgent Dev: Go $(go version | cut -d' ' -f3) / Node $(node -v) / Flutter $(flutter --version --machine 2>/dev/null | grep -o '"frameworkVersion":"[^"]*"' | cut -d'"' -f4)"
+            echo "  Android SDK: $ANDROID_HOME"
           '';
         };
       }

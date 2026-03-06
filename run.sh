@@ -82,6 +82,11 @@ help() {
     echo "  flutter-server    Go 서버 로컬 실행 (Flutter 개발용)"
     echo "  flutter-analyze   코드 분석"
     echo ""
+    echo -e "${GREEN}Android APK:${NC}"
+    echo "  apk-build       Android APK 릴리즈 빌드"
+    echo "  apk-debug       Android APK 디버그 빌드"
+    echo "  apk-go          Go 바이너리 Android arm64 크로스컴파일"
+    echo ""
     echo -e "${GREEN}번들:${NC}"
     echo "  bundle          백엔드 번들 (Go+Node.js+matterjs arm64)"
     echo "  bundle [opts]   --skip-go --skip-node --skip-ui --skip-matter"
@@ -962,6 +967,36 @@ case "${1:-help}" in
         ;;
     flutter-analyze)
         nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter analyze"
+        ;;
+    apk-build)
+        echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드..."
+        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
+            cd ${SCRIPT_DIR}/flutter && flutter build apk --release
+        "
+        APK="${SCRIPT_DIR}/flutter/build/app/outputs/flutter-apk/app-release.apk"
+        if [[ -f "$APK" ]]; then
+            echo -e "${GREEN}[APK]${NC} 빌드 완료: $(ls -lh "$APK" | awk '{print $5}')"
+            echo "  $APK"
+        fi
+        ;;
+    apk-debug)
+        echo -e "${GREEN}[APK]${NC} Android APK 디버그 빌드..."
+        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
+            cd ${SCRIPT_DIR}/flutter && flutter build apk --debug
+        "
+        ;;
+    apk-go)
+        echo -e "${GREEN}[APK]${NC} Go 바이너리 Android arm64 크로스컴파일..."
+        OUTDIR="${SCRIPT_DIR}/dist"
+        mkdir -p "$OUTDIR"
+        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
+            cd ${SCRIPT_DIR}/go
+            GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -ldflags='-s -w' -o ${OUTDIR}/homeagent-android-arm64 ./cmd/homeagent/
+        "
+        if [[ -f "$OUTDIR/homeagent-android-arm64" ]]; then
+            echo -e "${GREEN}[APK]${NC} Go 바이너리: $(ls -lh "$OUTDIR/homeagent-android-arm64" | awk '{print $5}')"
+            echo "  $OUTDIR/homeagent-android-arm64"
+        fi
         ;;
     bundle)
         shift

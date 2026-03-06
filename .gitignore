@@ -89,3 +89,8 @@ go/homeagent
 ui/node_modules
 ui/dist
 dist/
+
+# Flutter Android 빌드 아티팩트
+flutter/build/
+flutter/android/build/
+flutter/.dart_tool/

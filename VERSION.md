@@ -108,6 +108,23 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
+## Flutter/Clang 버전 — 최신과의 갭 (2026-03-06)
+
+| 구성요소 | Yocto (현재) | 최신 안정 | 갭 | Android 15 호환 |
+|---|---|---|---|---|
+| **Flutter** | 3.38.3 | 3.41.4 | 3개 마이너 | ✅ API 35 지원 |
+| **Dart** | 3.10.1 | 3.13.x | 3개 마이너 | — |
+| **Clang** | 18.1.8 | 20.x | 2개 메이저 | — (Yocto 빌드용) |
+
+**GUI 호환성**: 문제 없음.
+- Flutter 3.38.3은 Android API 21~35 지원 → Android 15(API 35) 완전 호환
+- 경동 프로젝트: compileSdk=35, targetSdk=35, minSdk=31 → Flutter 3.38.3으로 빌드 가능
+- webview_flutter 4.13.1: OS 제공 WebView 사용, Flutter 버전 무관
+- Clang 18: ivi-homescreen 빌드용. Android APK는 NDK 자체 clang 사용하므로 무관
+- **Yocto와 Android의 Flutter 버전이 같다(3.38.3)** → 동일 코드베이스 양쪽 빌드 시 Dart API 호환 보장
+
+---
+
 ## meta-flutter (커뮤니티)
 
 | 항목 | 값 |

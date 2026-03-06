@@ -125,6 +125,49 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
+## Flutter 개발 환경 — Linux Desktop (2026-03-06)
+
+| 항목 | 값 |
+|------|-----|
+| **Flutter** | 3.38.9 (NixOS devShell) |
+| **Dart** | 3.10.8 |
+| **타겟** | Linux x64 (GTK3) |
+| **디스플레이** | X11 (i3wm) 확인됨, Wayland도 지원 |
+| **빌드 성공** | `flutter build linux` ✅ |
+| **실행 확인** | GTK3 창 실행 ✅ |
+
+**플랫폼별 UI 전략:**
+
+| 플랫폼 | UI 모드 | 렌더링 |
+|---|---|---|
+| **Linux Desktop** (개발) | `ShellNative` | Flutter 네이티브 위젯, Go API 직접 호출 |
+| **Android** (APK 배포) | `ShellWebView` | WebView → A2UI + Lit UI |
+| **Yocto RPi5** (ivi-homescreen) | `ShellWebView` | WebView → A2UI + Lit UI |
+
+**왜 Linux에서 WebView 안 쓰는가:**
+- `webview_flutter`는 Linux 미지원 (Android/iOS/Web만 공식)
+- Linux에서 `WebViewController` 생성 시 null crash
+- 대신 `ShellNative`로 Go REST API를 Flutter 위젯에서 직접 호출
+- 개발 시 hot reload 지원, 프로덕션과 동일 API 사용
+
+**개발 워크플로:**
+```bash
+# 터미널 1: Go 서버
+./run.sh flutter-server
+
+# 터미널 2: Flutter 앱 (hot reload)
+./run.sh flutter-run
+
+# 또는 빌드 후 실행
+./run.sh flutter-build
+./run.sh flutter-exec
+```
+
+**devShell 진입 필요:** Flutter 명령은 `nix develop .#dev` 환경에서 실행됨.
+`run.sh` 명령들이 자동으로 devShell을 감싸므로 직접 진입 불필요.
+
+---
+
 ## meta-flutter (커뮤니티)
 
 | 항목 | 값 |

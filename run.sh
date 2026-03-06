@@ -75,6 +75,13 @@ help() {
     echo "  set-ip <ip>     디바이스 IP 설정"
     echo "  thread-init [IP] Thread 네트워크 초기화 + SRP 활성화"
     echo ""
+    echo -e "${GREEN}Flutter 개발:${NC}"
+    echo "  flutter-run       Linux desktop 앱 실행 (hot reload)"
+    echo "  flutter-build     Linux desktop 빌드"
+    echo "  flutter-exec      빌드된 바이너리 직접 실행"
+    echo "  flutter-server    Go 서버 로컬 실행 (Flutter 개발용)"
+    echo "  flutter-analyze   코드 분석"
+    echo ""
     echo -e "${GREEN}번들:${NC}"
     echo "  bundle          백엔드 번들 (Go+Node.js+matterjs arm64)"
     echo "  bundle [opts]   --skip-go --skip-node --skip-ui --skip-matter"
@@ -925,6 +932,36 @@ case "${1:-help}" in
     deploy-chip-tool)
         shift
         "${SCRIPT_DIR}/scripts/deploy-chip-tool.sh" "$@"
+        ;;
+    flutter-run)
+        echo -e "${GREEN}Flutter Linux Desktop — hot reload${NC}"
+        echo "Go 서버가 :8080에서 실행 중이어야 합니다 (./run.sh flutter-server)"
+        nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter run -d linux"
+        ;;
+    flutter-build)
+        echo -e "${GREEN}Flutter Linux Desktop — release 빌드${NC}"
+        nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter build linux"
+        echo -e "${GREEN}빌드 완료:${NC} flutter/build/linux/x64/release/bundle/homeagent"
+        ;;
+    flutter-exec)
+        FLUTTER_BIN="${SCRIPT_DIR}/flutter/build/linux/x64/release/bundle/homeagent"
+        if [ ! -f "$FLUTTER_BIN" ]; then
+            echo -e "${RED}[ERROR]${NC} 빌드 먼저: ./run.sh flutter-build"
+            exit 1
+        fi
+        echo -e "${GREEN}Flutter 앱 실행${NC} (Go 서버: localhost:8080)"
+        DISPLAY="${DISPLAY:-:0}" "$FLUTTER_BIN"
+        ;;
+    flutter-server)
+        echo -e "${GREEN}Go 서버 로컬 실행${NC} (Flutter 개발용, :8080)"
+        echo "Matter 연결 없이 HTTP/healthz만 동작합니다"
+        cd "${SCRIPT_DIR}/go"
+        HOMEAGENT_UI_DIR="${SCRIPT_DIR}/ui/dist" \
+        HOMEAGENT_ALIASES_FILE="${SCRIPT_DIR}/aliases.json" \
+            go run ./cmd/homeagent/
+        ;;
+    flutter-analyze)
+        nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter analyze"
         ;;
     bundle)
         shift

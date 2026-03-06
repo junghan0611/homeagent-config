@@ -201,19 +201,37 @@ HOMEAGENT_UI_DIR=/opt/homeagent/ui \
 /opt/homeagent/homeagent
 ```
 
-### Option B: Development (cross-compile)
+### Option B: Flutter Development (Linux Desktop)
 
 ```bash
-# Build Go binary
-cd go
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/homeagent ./cmd/homeagent/
+# 터미널 1 — Go 서버 (Matter 없이 HTTP만)
+./run.sh flutter-server
 
-# Build UI
+# 터미널 2 — Flutter 앱 (hot reload)
+./run.sh flutter-run
+
+# 또는 빌드 후 실행
+./run.sh flutter-build
+./run.sh flutter-exec
+```
+
+Linux Desktop에서는 **ShellNative** (Flutter 네이티브 위젯)로 Go API를 직접 호출합니다.
+Android/Yocto에서는 **ShellWebView** (WebView → A2UI + Lit UI)로 렌더링합니다.
+
+### Option C: Cross-compile + Deploy to RPi5
+
+```bash
+# Go binary
+./run.sh go-build
+
+# UI
 cd ui && npm install && npx vite build
 
 # Deploy
-scp go/bin/homeagent root@<rpi5>:/opt/homeagent/
-scp -r ui/dist/* root@<rpi5>:/opt/homeagent/ui/
+./run.sh go-deploy
+
+# 또는 전체 번들 (Go + Node.js + matterjs + UI)
+./run.sh bundle
 ```
 
 ---

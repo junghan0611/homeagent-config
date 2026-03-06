@@ -20,12 +20,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.homeagent.homeagent"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        applicationId = "com.homeagent.app"
+        // Android 15 (API 35) 타겟. compileSdk 36은 빌드 도구, targetSdk가 호환성 결정
+        minSdk = 26              // Android 8.0+ (Matter 기기 대부분)
+        targetSdk = 35           // Android 15 (VanillaIceCream)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

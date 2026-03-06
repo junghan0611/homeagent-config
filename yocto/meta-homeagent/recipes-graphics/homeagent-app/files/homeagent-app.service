@@ -1,0 +1,19 @@
+[Unit]
+Description=HomeAgent Flutter App (ivi-homescreen on Weston)
+After=network.target weston.service homeagent.service
+Requires=weston.service
+Wants=homeagent.service
+
+[Service]
+Type=simple
+# ivi-homescreen: Wayland 위에서 Flutter 앱 실행
+# homeagent-app 번들을 release 모드로 로드
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=WAYLAND_DISPLAY=wayland-1
+ExecStart=/usr/bin/homescreen --b=/usr/share/flutter/homeagent-app --f
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=graphical.target

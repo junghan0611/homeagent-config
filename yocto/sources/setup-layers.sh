@@ -12,7 +12,7 @@ HAILO_BRANCH="hailo8-scarthgap"  # Hailo-8/8L (HailoRT 4.23.0)
 
 # 기존 클론 위치 (심볼릭 링크용)
 EXISTING_META_RPI="/home/junghan/repos/3rd/meta-raspberrypi"
-EXISTING_META_FLUTTER="/home/junghan/repos/3rd/meta-flutter-sony"
+EXISTING_META_FLUTTER="/home/junghan/repos/3rd/meta-flutter"  # 커뮤니티 버전 (scarthgap)
 EXISTING_META_HAILO="/home/junghan/repos/3rd/meta-hailo"
 
 echo "============================================"
@@ -35,13 +35,13 @@ setup_link() {
         git clone git://git.yoctoproject.org/meta-raspberrypi -b ${YOCTO_BRANCH}
     fi
 
-    # meta-flutter-sony
+    # meta-flutter (커뮤니티 — scarthgap 지원)
     if [ -d "$EXISTING_META_FLUTTER" ]; then
         ln -sfn "$EXISTING_META_FLUTTER" meta-flutter
-        echo "  - meta-flutter -> $EXISTING_META_FLUTTER"
+        echo "  - meta-flutter -> $EXISTING_META_FLUTTER (scarthgap branch)"
     else
-        echo "  [WARN] meta-flutter-sony not found, will clone"
-        git clone https://github.com/sony/meta-flutter.git -b kirkstone meta-flutter
+        echo "  [WARN] meta-flutter not found, will clone"
+        git clone https://github.com/meta-flutter/meta-flutter.git -b scarthgap meta-flutter
     fi
 
     # meta-hailo
@@ -89,12 +89,10 @@ setup_clone() {
         echo "  - meta-clang exists, skipping"
     fi
 
-    # meta-flutter (Sony)
-    # Note: Sony 버전은 kirkstone 기준이므로 호환성 확인 필요
+    # meta-flutter (커뮤니티 — scarthgap 지원, ivi-homescreen 포함)
     if [ ! -d "meta-flutter" ] && [ ! -L "meta-flutter" ]; then
-        echo "  - Cloning meta-flutter (Sony)..."
-        git clone https://github.com/sony/meta-flutter.git -b kirkstone meta-flutter
-        echo "  [WARN] meta-flutter-sony is kirkstone based, may need patches for ${YOCTO_BRANCH}"
+        echo "  - Cloning meta-flutter (community)..."
+        git clone https://github.com/meta-flutter/meta-flutter.git -b scarthgap meta-flutter
     else
         echo "  - meta-flutter exists, skipping"
     fi

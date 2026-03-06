@@ -80,6 +80,21 @@ IMAGE_INSTALL:append = " \
     bluez-firmware-rpidistro-bcm4345c0-hcd \
     "
 
+# Flutter App (ivi-homescreen embedder + homeagent app)
+# ivi-homescreen: Weston/Wayland 위에서 Flutter 앱 실행, WebView 플러그인 지원
+IMAGE_INSTALL:append = " \
+    flutter-engine \
+    ivi-homescreen \
+    homeagent-app \
+    liberation-fonts \
+    "
+
+# USB 입력장치 (마우스/키보드)
+IMAGE_INSTALL:append = " \
+    libinput \
+    xkeyboard-config \
+    "
+
 # SD card image format
 IMAGE_FSTYPES = "wic.bz2 wic.bmap"
 

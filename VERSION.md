@@ -108,21 +108,31 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
-## meta-flutter-sony
+## meta-flutter (커뮤니티)
 
 | 항목 | 값 |
 |------|-----|
-| **브랜치** | kirkstone (scarthgap 미지원) |
-| **Flutter Engine** | cb4b5fff73 (3.27.1 stable) |
-| **백엔드** | Wayland, DRM-GBM, DRM-EGLStream |
-| **의존성** | meta-clang |
+| **리포** | https://github.com/meta-flutter/meta-flutter |
+| **브랜치** | scarthgap |
+| **Flutter Engine** | 3.38.3 (Dart 3.10.1) |
+| **embedder** | ivi-homescreen 2.0 (Toyota, Wayland) |
+| **의존성** | meta-clang (scarthgap) |
+| **LAYERSERIES_COMPAT** | nanbield scarthgap |
 
-**주의**: Sony 버전은 kirkstone 기준. Scarthgap 호환성 패치 필요할 수 있음.
+**변경 이력 (2026-03-06):**
+- ~~meta-flutter-sony (kirkstone)~~ → meta-flutter 커뮤니티 (scarthgap)로 전환
+- 이유: scarthgap 호환 + ivi-homescreen WebView 플러그인 필요
+- flutter-pi(DRM 직접)는 WebView 미지원이므로 ivi-homescreen(Wayland) 선택
+- 경동 프로젝트 APK와 동일 Flutter 코드베이스 유지를 위한 결정
 
-**대안**: meta-flutter (커뮤니티 버전)
-- 브랜치: scarthgap 지원
-- RPi3/4/5 테스트됨
-- ivi-homescreen 기반
+**ivi-homescreen vs flutter-pi:**
+
+| | ivi-homescreen | flutter-pi |
+|---|---|---|
+| 디스플레이 | Wayland (Weston 위) | DRM 직접 (Weston 불필요) |
+| WebView | ✅ webview_flutter_view | ❌ 미지원 |
+| 빌드 의존 | meta-clang (clang 도구체인) | GCC로 충분 |
+| 용도 | **선택됨** — WebView Shell | RPi 전용 경량 |
 
 ---
 

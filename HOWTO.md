@@ -34,9 +34,10 @@ cd homeagent-config
 | poky | scarthgap | Yocto 기본 |
 | meta-openembedded | scarthgap | meta-oe, meta-python, meta-networking |
 | meta-raspberrypi | scarthgap | RPi5 BSP |
-| meta-clang | scarthgap | Flutter 빌드용 |
+| meta-clang | scarthgap | ivi-homescreen 빌드 의존 (clang 도구체인) |
+| meta-flutter | scarthgap | Flutter engine + ivi-homescreen + flutter-app 클래스 |
 | meta-hailo | hailo8-scarthgap | NPU 지원 (미활성) |
-| meta-homeagent | - | 커스텀 레시피 (이 리포 내) |
+| meta-homeagent | - | 커스텀 레시피: matterjs-server, homeagent-app 등 |
 
 ## 2. 빌드 설정 확인
 

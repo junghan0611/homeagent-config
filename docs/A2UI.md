@@ -194,6 +194,7 @@ GET /api/events (SSE, 기존)
 
 ## 참고
 
+- [Flutter Shell](FLUTTER.md) — Flutter 크로스플랫폼 배포 계층 (A2UI의 delivery shell)
 - [A2UI Specification v0.8](https://github.com/google/A2UI/tree/main/specification/0.8)
 - [OpenRouter API Docs](https://openrouter.ai/docs)
 - [OpenClaw Canvas Docs](https://docs.openclaw.ai/platforms/mac/canvas)

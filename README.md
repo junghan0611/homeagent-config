@@ -241,8 +241,9 @@ cd ui && npm install && npx vite build
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/devices` | GET | List all devices with current state |
+| `/api/devices/:node_id` | GET | Single device detail |
 | `/api/commission` | POST | Pair new device `{"code": "0000-000-0000"}` |
-| `/api/devices/command` | POST | Control device `{"node_id": 8, "command": "on"}` |
+| `/api/devices/command` | POST | Control: on/off/set_level/set_color/set_color_temp/set_thermostat/lock/unlock |
 | `/api/chat` | POST | LLM agent `{"message": "turn off the plug"}` |
 | `/api/home` | GET | A2UI Home Surface (time-based theme + device status) |
 | `/api/events` | GET | SSE stream (real-time state changes) |
@@ -267,7 +268,8 @@ cd ui && npm install && npx vite build
 - [x] `run.sh ha-deploy` one-command build + deploy
 
 ### Phase 3: Agent Intelligence + Cross-platform ← **current**
-- [ ] **Flutter cross-platform app** — ivi-homescreen(Yocto) + APK(Android), WebView shell (ha-1uk)
+- [x] **Flutter cross-platform app** — Linux Desktop ✅, Android APK ✅ (43.7MB), Yocto flutter-engine ✅
+- [x] **REST API expansion** — 8 device commands, individual device query (ha-1uk.1)
 - [ ] **A2A protocol + Constitutional AI** — agent identity & cooperation (ha-2h5)
 - [ ] **OpenClaw integration** — TTS/Telegram/chat bots delegated to Claw ecosystem (ha-3nc)
 - [ ] **Yocto image: homeagent recipe** — SD flash → boot → works (ha-2ua)
@@ -340,9 +342,10 @@ homeagent-config/
 
 | Doc | Content |
 |-----|---------|
-| [docs/API.md](docs/API.md) | REST API 명세 (외부 플랫폼 연동) |
+| [docs/API.md](docs/API.md) | REST API 명세 (8 commands, OHF 호환) |
+| [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS Yocto 빌드 |
 | [HOWTO.md](HOWTO.md) | Full setup guide (clean state → working RPi5) |
-| [VERSION.md](VERSION.md) | Yocto/RPi5/Hailo version matrix |
+| [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter version matrix |
 | [docs/A2A.md](docs/A2A.md) | Agent protocol, Constitutional AI |
 | [docs/A2UI.md](docs/A2UI.md) | Dynamic UI strategy, LLM → surfaceUpdate |
 | [docs/MATTER-VERIFY.md](docs/MATTER-VERIFY.md) | Matter verification (chip-tool oracle vs matterjs-server) |

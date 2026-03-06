@@ -20,6 +20,9 @@ DISTRO_FEATURES:append = " ipv6"
 BB_NUMBER_THREADS ?= "8"
 PARALLEL_MAKE ?= "-j 8"
 
+# clang-native: 6329 컴파일 단위, 메모리 압박 시 posix_spawn 실패 방지
+PARALLEL_MAKE:pn-clang-native = "-j 4"
+
 # Download/cache directories (persistent)
 DL_DIR ?= "${TOPDIR}/../downloads"
 SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"

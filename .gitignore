@@ -88,3 +88,4 @@ go/homeagent
 .claude/
 ui/node_modules
 ui/dist
+dist/

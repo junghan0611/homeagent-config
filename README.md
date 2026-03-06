@@ -340,6 +340,7 @@ homeagent-config/
 
 | Doc | Content |
 |-----|---------|
+| [docs/API.md](docs/API.md) | REST API 명세 (외부 플랫폼 연동) |
 | [HOWTO.md](HOWTO.md) | Full setup guide (clean state → working RPi5) |
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Hailo version matrix |
 | [docs/A2A.md](docs/A2A.md) | Agent protocol, Constitutional AI |

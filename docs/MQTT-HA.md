@@ -2,6 +2,13 @@
 
 HomeAgent의 디바이스 통합 전략: **검증된 HA 프로토콜 재사용 + 오프라인 Thread/Matter 스택**
 
+> **히스토리**
+> - **2026-02**: Phase 1에서 Zigbee/MQTT로 디바이스 검증. zigbee2mqtt + mosquitto 기반.
+> - **2026-02 후반**: Phase 2에서 Matter-only(matterjs-server)로 전환. 제어 스택 단순화.
+> - **2026-03 계획**: Zigbee를 **데이터 수집 계층**으로 재투입. Matter가 커버 못 하는 센서(온습도, 조도, PM2.5 등)의 커버리지 확대에 Zigbee 3000+ 디바이스 생태계 활용. 제어는 Matter, 수집은 Zigbee — 이중 스택.
+>
+> 이 문서의 아키텍처는 여전히 유효하며, Zigbee 데이터 수집 재투입 시 그대로 적용.
+
 ---
 
 ## 전체 아키텍처

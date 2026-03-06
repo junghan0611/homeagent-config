@@ -1,5 +1,9 @@
 # sks-hub-zig → zigbee2mqtt Upstream 기여 가이드
 
+> **히스토리**
+> - **2026-02**: Phase 1 Zigbee 검증 시 작성. sks-hub-zig 디바이스 컨버터 upstream 기여용.
+> - **2026-03**: Matter-only 제어 스택 전환 후 일시 중단. Zigbee는 데이터 수집 계층으로 재투입 예정 — 재개 시 이 가이드 그대로 활용.
+
 ## 개요
 
 sks-hub-zig의 Zigbee 디바이스 지원을 zigbee2mqtt 오픈소스 프로젝트에 upstream으로 기여하기 위한 작업 지침입니다.

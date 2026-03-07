@@ -1,94 +1,43 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
 
-	"github.com/junghan0611/homeagent/internal/config"
-	"github.com/junghan0611/homeagent/internal/hub"
+	"github.com/spf13/cobra"
 )
 
 var version = "dev"
 
 func main() {
-	showVersion := flag.Bool("version", false, "버전 출력")
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Println(version)
-		os.Exit(0)
+	rootCmd := &cobra.Command{
+		Use:   "homeagent",
+		Short: "HomeAgent — 오프라인 스마트홈 에이전트",
+		Long:  "Matter 디바이스를 제어하는 오프라인 에이전트. REST API, TUI, CLI 지원.",
+		// 인자 없이 실행하면 serve (하위 호환)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runServe(cmd, args)
+		},
 	}
 
-	cfg := config.Load()
+	rootCmd.AddCommand(serveCmd())
+	rootCmd.AddCommand(tuiCmd())
+	rootCmd.AddCommand(devicesCmd())
+	rootCmd.AddCommand(controlCmd())
+	rootCmd.AddCommand(versionCmd())
 
-	log.Printf("homeagent %s 시작", version)
-	cfg.Print()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Graceful shutdown
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
-		log.Println("종료 중...")
-		cancel()
-	}()
-
-	// Hub (Matter + 상태머신)
-	h := hub.New(cfg)
-
-	// HTTP API
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
-	})
-	h.RegisterHTTP(mux)
-
-	// Static file serving (UI)
-	uiDir := os.Getenv("HOMEAGENT_UI_DIR")
-	if uiDir == "" {
-		// Try relative to binary
-		if exe, err := os.Executable(); err == nil {
-			candidate := filepath.Join(filepath.Dir(exe), "ui")
-			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-				uiDir = candidate
-			}
-		}
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	if uiDir != "" {
-		log.Printf("UI 서빙: %s", uiDir)
-		fs := http.FileServer(http.Dir(uiDir))
-		mux.Handle("/", fs)
-	}
+}
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: mux}
-	go func() {
-		log.Printf("HTTP 서버: %s", cfg.HTTPAddr)
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("HTTP 서버 오류: %v", err)
-		}
-	}()
-	go func() {
-		<-ctx.Done()
-		srv.Close()
-	}()
-
-	// Run hub (blocking — listens for Matter events)
-	if err := h.Run(ctx); err != nil {
-		if ctx.Err() != nil {
-			log.Println("homeagent 종료")
-		} else {
-			log.Fatalf("hub 오류: %v", err)
-		}
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "버전 출력",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(version)
+		},
 	}
 }

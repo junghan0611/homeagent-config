@@ -2,6 +2,7 @@
 /// matter.js Spake2p.js 포팅 (순수 Dart, pointycastle 사용)
 library;
 
+import 'dart:convert' show utf8;
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
@@ -147,7 +148,7 @@ Uint8List _hkdf(Uint8List ikm, Uint8List salt, String info, int length) {
   return out;
 }
 
-Uint8List _utf8Encode(String s) => Uint8List.fromList(s.codeUnits);
+Uint8List _utf8Encode(String s) => Uint8List.fromList(utf8.encode(s));
 
 Uint8List _hexToBytes(String hex) {
   final bytes = Uint8List(hex.length ~/ 2);

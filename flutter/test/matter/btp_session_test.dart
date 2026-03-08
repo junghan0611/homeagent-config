@@ -13,7 +13,7 @@ void main() {
         disconnect: () async {},
         fragmentSize: 100,
       );
-      session.initFromHandshakeResponse(100, 6);
+      session.initFromHandshakeResponse(103, 6); // 103 - 3 = 100
 
       final msg = Uint8List.fromList([1, 2, 3, 4, 5]);
       await session.sendMessage(msg);
@@ -32,7 +32,7 @@ void main() {
         disconnect: () async {},
         fragmentSize: 10, // 작은 fragment로 강제 분할
       );
-      session.initFromHandshakeResponse(10, 6);
+      session.initFromHandshakeResponse(13, 6); // 13 - 3 = 10
 
       // 20바이트 메시지 → 여러 세그먼트
       final msg = Uint8List.fromList(List.generate(20, (i) => i));

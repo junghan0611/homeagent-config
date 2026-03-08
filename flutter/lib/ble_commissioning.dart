@@ -345,7 +345,9 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            color: _scanning ? Colors.blue.shade50 : Colors.grey.shade100,
+            color: _scanning
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Text(_status, style: const TextStyle(fontSize: 14)),
           ),
 
@@ -357,7 +359,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.bluetooth_searching,
-                            size: 64, color: Colors.grey.shade400),
+                            size: 64, color: Theme.of(context).colorScheme.outline),
                         const SizedBox(height: 16),
                         const Text('Matter 디바이스를 페어링 모드로\n설정한 후 스캔하세요',
                             textAlign: TextAlign.center),
@@ -369,7 +371,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                     itemBuilder: (ctx, i) {
                       final d = _devices[i];
                       return ListTile(
-                        leading: const Icon(Icons.bluetooth, color: Colors.blue),
+                        leading: Icon(Icons.bluetooth, color: Theme.of(context).colorScheme.primary),
                         title: Text(d.name),
                         subtitle: Text(
                           'RSSI: ${d.rssi} dBm'

@@ -41,8 +41,9 @@ class BtpSession {
   bool get isActive => _isActive;
 
   /// BTP 핸드셰이크 응답 처리 후 세션 초기화
+  /// ATT 헤더 3바이트를 빼야 BTP payload 최대 크기가 됨
   void initFromHandshakeResponse(int attMtu, int win) {
-    fragmentSize = attMtu;
+    fragmentSize = attMtu - 3; // ATT header (opcode 1B + handle 2B)
     windowSize = win;
     _prevIncomingSeq = 0;
     _prevAckedSeq = -1;
@@ -152,6 +153,8 @@ class BtpSession {
   }
 
   Future<void> _sendAck() async {
+    // Standalone ACK: hasAck만 true, begin/end/continuing 전부 false
+    // (matter.js BtpSessionHandler.btpSendAckTimeoutTriggered 동일)
     final pkt = BtpPacket(
       header: const BtpPacketHeader(hasAck: true),
       ackNumber: _prevIncomingSeq,

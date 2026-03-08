@@ -148,9 +148,9 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
   /// WiFi + Pairing Code 입력 다이얼로그
   Future<({String pairingCode, String ssid, String password})?>
       _showCommissionDialog() async {
-    final codeController = TextEditingController();
-    final ssidController = TextEditingController();
-    final pwController = TextEditingController();
+    final codeController = TextEditingController(text: '0564-154-0754');
+    final ssidController = TextEditingController(text: 'TP-Link_E426');
+    final pwController = TextEditingController(text: '93666367');
 
     return showDialog<({String pairingCode, String ssid, String password})>(
       context: context,

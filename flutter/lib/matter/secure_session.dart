@@ -32,6 +32,21 @@ class SecureSession {
     required this.peerSessionId,
   });
 
+  /// 테스트용 — 키를 직접 지정
+  factory SecureSession.createForTest({
+    required Uint8List encryptKey,
+    required Uint8List decryptKey,
+    required int sessionId,
+    required int peerSessionId,
+  }) {
+    return SecureSession._(
+      encryptKey: encryptKey,
+      decryptKey: decryptKey,
+      sessionId: sessionId,
+      peerSessionId: peerSessionId,
+    );
+  }
+
   /// Ke에서 세션 키 생성 (PASE 직후 호출)
   factory SecureSession.fromKe(
     Uint8List ke, {

@@ -52,6 +52,9 @@ class PaseEngine {
   final _msgCounter = MessageCounter();
   int _exchangeId = 0;
 
+  /// WiFi 커미셔닝에서 exchangeId 이어받기 위해 노출
+  int get exchangeId => _exchangeId;
+
   PaseEngine({
     required this.btp,
     required this.setupPin,

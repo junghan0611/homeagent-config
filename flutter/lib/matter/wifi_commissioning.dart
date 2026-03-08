@@ -55,6 +55,46 @@ class WifiCommissioner {
     return connectResult;
   }
 
+  /// InvokeRequest TLV 인코딩
+  Uint8List encodeInvokeRequest({
+    required int endpointId,
+    required int clusterId,
+    required int commandId,
+    required Uint8List commandFields,
+  }) {
+    final tlv = TlvEncoder();
+    tlv.startStructure();
+    tlv.writeBool(0, false); // suppressResponse
+    tlv.writeBool(1, false); // timedRequest
+
+    // invokeRequests: array (tag 2)
+    tlv.startContextArray(2);
+
+    // CommandDataIB (anonymous structure in array)
+    tlv.startAnonymousStructure();
+
+    // CommandPathIB (tag 0, list)
+    tlv.startContextList(0);
+    tlv.writeUInt16(0, endpointId);
+    tlv.writeUInt32(1, clusterId);
+    tlv.writeUInt32(2, commandId);
+    tlv.endContainer(); // end list
+
+    // commandFields (tag 1, structure)
+    tlv.startContextStructure(1);
+    tlv.writeRawBytes(commandFields);
+    tlv.endContainer(); // end commandFields structure
+
+    tlv.endContainer(); // end CommandDataIB
+    tlv.endContainer(); // end array
+
+    // interactionModelRevision (tag 255, uint8)
+    tlv.writeUInt8(255, 11);
+
+    tlv.endContainer(); // end InvokeRequest
+    return tlv.toBytes();
+  }
+
   /// InvokeRequest 전송 + InvokeResponse 수신
   Future<bool> _invokeCommand({
     required int endpointId,
@@ -64,51 +104,18 @@ class WifiCommissioner {
   }) async {
     _exchangeId = (_exchangeId + 1) & 0xFFFF;
 
-    // InvokeRequest TLV:
-    // {0: suppressResponse=false, 1: timedRequest=false,
-    //  2: [{0: {0: endpointId, 1: clusterId, 2: commandId}, 1: commandFields}],
-    //  255: interactionModelRevision=11}
-    final invokeReq = TlvEncoder();
-    invokeReq.startStructure();
-    invokeReq.writeBool(0, false); // suppressResponse
-    invokeReq.writeBool(1, false); // timedRequest
-
-    // invokeRequests array
-    invokeReq.buf.addByte(0x36); // context-specific array, tag=2
-    invokeReq.buf.addByte(2);
-
-    // CommandDataIB structure (anonymous in array)
-    invokeReq.buf.addByte(0x15); // anonymous structure
-
-    // CommandPathIB (tag 0, list)
-    invokeReq.buf.addByte(0x37); // context-specific list, tag=0
-    invokeReq.buf.addByte(0);
-    invokeReq.writeUInt16(0, endpointId); // endpointId
-    invokeReq.writeUInt32(1, clusterId);  // clusterId
-    invokeReq.writeUInt32(2, commandId);  // commandId
-    invokeReq.endContainer(); // end list
-
-    // commandFields (tag 1, structure)
-    invokeReq.buf.addByte(0x35); // context-specific structure, tag=1
-    invokeReq.buf.addByte(1);
-    invokeReq.buf.add(commandFields); // 이미 내부 필드만
-    invokeReq.endContainer(); // end structure
-
-    invokeReq.endContainer(); // end CommandDataIB
-    invokeReq.endContainer(); // end array
-
-    // interactionModelRevision (tag 255)
-    invokeReq.buf.addByte(0x24); // context-specific uint8
-    invokeReq.buf.addByte(0xFF); // tag 255
-    invokeReq.buf.addByte(11);   // revision 11
-
-    invokeReq.endContainer(); // end InvokeRequest
+    final invokeReqPayload = encodeInvokeRequest(
+      endpointId: endpointId,
+      clusterId: clusterId,
+      commandId: commandId,
+      commandFields: commandFields,
+    );
 
     // 암호화
     final encrypted = session.encryptMessage(
       exchangeId: _exchangeId,
       messageType: _invokeRequestType,
-      payload: invokeReq.toBytes(),
+      payload: invokeReqPayload,
       protocolId: _imProtocolId,
     );
 
@@ -125,7 +132,7 @@ class WifiCommissioner {
 
     // InvokeResponse 확인
     if (response.payloadHeader.messageType == _invokeResponseType) {
-      // TODO: 응답 TLV에서 status 확인
+      // TODO: InvokeResponse TLV에서 status 코드 파싱
       return true;
     }
 

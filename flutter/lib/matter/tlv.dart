@@ -75,6 +75,40 @@ class TlvEncoder {
     buf.addByte(tag);
   }
 
+  /// Raw byte 직접 추가 (InvokeRequest 등 복합 구조용)
+  void writeRawByte(int byte) => buf.addByte(byte);
+  void writeRawBytes(Uint8List bytes) => buf.add(bytes);
+
+  /// context-specific structure 시작 (tag 포함)
+  void startContextStructure(int tag) {
+    buf.addByte(0x35); // context-specific structure
+    buf.addByte(tag);
+  }
+
+  /// context-specific array 시작 (tag 포함)
+  void startContextArray(int tag) {
+    buf.addByte(0x36); // context-specific array
+    buf.addByte(tag);
+  }
+
+  /// context-specific list 시작 (tag 포함)
+  void startContextList(int tag) {
+    buf.addByte(0x37); // context-specific list
+    buf.addByte(tag);
+  }
+
+  /// anonymous structure 시작 (배열 내 아이템용)
+  void startAnonymousStructure() {
+    buf.addByte(0x15); // anonymous structure
+  }
+
+  /// context-specific uint8 (tag 포함)
+  void writeUInt8(int tag, int value) {
+    buf.addByte(TlvTagControl.contextSpecific | TlvType.unsignedInt); // 0x24
+    buf.addByte(tag);
+    buf.addByte(value & 0xFF);
+  }
+
   Uint8List toBytes() => buf.toBytes();
 }
 

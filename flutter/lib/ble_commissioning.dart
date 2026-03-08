@@ -1,17 +1,16 @@
 /// Matter BLE 커미셔닝 화면
 ///
 /// Phase 1: BLE 스캔으로 Matter 디바이스 발견 (UUID FFF6)
-/// Phase 2: BTP 핸드셰이크 + PASE + WiFi credentials 전달 (TODO)
-/// Phase 3: matterjs-server on-network 커미셔닝 호출 (TODO)
+/// Phase 2: BTP 핸드셰이크 + PASE (세션 키 획득)
+/// Phase 3: 암호화 채널로 WiFi credentials 전달 + on-network 커미셔닝
 library;
 
 import 'dart:async';
+import 'dart:convert' show jsonEncode;
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
-import 'dart:convert' show jsonEncode;
-import 'dart:io';
 
 import 'matter/btp_codec.dart';
 import 'matter/btp_session.dart';
@@ -22,9 +21,8 @@ import 'matter/wifi_commissioning.dart';
 /// Matter BLE 상수
 class MatterBle {
   static const serviceUuid = '0000fff6-0000-1000-8000-00805f9b34fb';
-  static const c1Uuid = '18ee2ef5-263d-4559-959f-4f9c429f9d11'; // write (controller→device)
-  static const c2Uuid = '18ee2ef5-263d-4559-959f-4f9c429f9d12'; // indicate (device→controller)
-  static const c3Uuid = '64630238-8772-45f2-b87d-748a83218f04'; // additional data
+  static const c1Uuid = '18ee2ef5-263d-4559-959f-4f9c429f9d11';
+  static const c2Uuid = '18ee2ef5-263d-4559-959f-4f9c429f9d12';
 }
 
 /// 발견된 Matter 디바이스 정보
@@ -48,11 +46,9 @@ class MatterBleDevice {
 
 /// Matter BLE advertisement 파싱
 MatterBleDevice? parseMatterAdvertisement(ScanResult result) {
-  // Matter BLE advertisement에서 discriminator/vendor 정보 추출
   final serviceData = result.advertisementData.serviceData;
   final matterServiceGuid = Guid(MatterBle.serviceUuid);
 
-  // Service data에서 Matter 정보 파싱
   int? discriminator;
   int? vendorId;
   int? productId;
@@ -60,11 +56,6 @@ MatterBleDevice? parseMatterAdvertisement(ScanResult result) {
   for (final entry in serviceData.entries) {
     if (entry.key == matterServiceGuid && entry.value.length >= 8) {
       final data = entry.value;
-      // Matter BLE advertisement format (CSA spec):
-      // byte 0: version + flags
-      // byte 1-2: discriminator (12 bit)
-      // byte 3-4: vendor ID
-      // byte 5-6: product ID
       discriminator = (data[1] | (data[2] << 8)) & 0x0FFF;
       vendorId = data[3] | (data[4] << 8);
       productId = data[5] | (data[6] << 8);
@@ -112,7 +103,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       _status = 'Matter 디바이스 스캔 중...';
     });
 
-    // BT 어댑터 상태 확인
     final adapterState = await FlutterBluePlus.adapterState.first;
     if (adapterState != BluetoothAdapterState.on) {
       setState(() {
@@ -124,14 +114,12 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
 
     _scanSub = FlutterBluePlus.onScanResults.listen((results) {
       for (final r in results) {
-        // Matter BLE Service UUID (FFF6) 필터
         final hasMatterService = r.advertisementData.serviceUuids
             .any((uuid) => uuid.toString().toLowerCase().contains('fff6'));
 
         if (hasMatterService) {
           final device = parseMatterAdvertisement(r);
           if (device != null) {
-            // 중복 제거
             final exists = _devices.any(
                 (d) => d.device.remoteId == device.device.remoteId);
             if (!exists) {
@@ -145,7 +133,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       }
     });
 
-    // 30초 스캔 (Matter BLE service UUID 필터)
     await FlutterBluePlus.startScan(
       withServices: [Guid(MatterBle.serviceUuid)],
       timeout: const Duration(seconds: 30),
@@ -159,33 +146,76 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     });
   }
 
+  /// 디바이스 선택 → PIN + WiFi 입력 → 전체 커미셔닝 실행
   Future<void> _onDeviceSelected(MatterBleDevice device) async {
     setState(() => _status = '${device.name} 선택됨');
 
-    // Setup PIN 입력 다이얼로그
+    // 1. Setup PIN + Manual Pairing Code 입력
+    final setupInfo = await _showSetupDialog(device);
+    if (setupInfo == null) return;
+
+    // 2. WiFi credentials 입력 (PASE 전에 미리 받아둠)
+    final wifiInfo = await _showWifiDialog();
+    if (wifiInfo == null) return;
+
+    // 3. 전체 커미셔닝 실행 (BLE → BTP → PASE → WiFi → disconnect)
+    setState(() => _status = '커미셔닝 시작...');
+    await FlutterBluePlus.stopScan();
+
+    final success = await _runFullCommissioning(
+      device.device,
+      setupInfo.pin,
+      wifiInfo.ssid,
+      wifiInfo.password,
+    );
+
+    if (!success) return;
+
+    // 4. Go 서버에 on-network 커미셔닝 요청
+    await _requestOnNetworkCommissioning(setupInfo.manualCode);
+  }
+
+  /// Setup PIN + Manual Pairing Code 입력 다이얼로그
+  Future<({int pin, String manualCode})?> _showSetupDialog(
+      MatterBleDevice device) async {
     final pinController = TextEditingController();
-    final pin = await showDialog<int>(
+    final codeController = TextEditingController();
+
+    return showDialog<({int pin, String manualCode})>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(device.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('MAC: ${device.device.remoteId}'),
-            Text('RSSI: ${device.rssi} dBm'),
-            if (device.discriminator != null)
-              Text('Discriminator: ${device.discriminator}'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              decoration: const InputDecoration(
-                labelText: 'Setup PIN (숫자)',
-                hintText: '예: 5641540 (페어링 코드에서 추출)',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('MAC: ${device.device.remoteId}'),
+              Text('RSSI: ${device.rssi} dBm'),
+              if (device.discriminator != null)
+                Text('Discriminator: ${device.discriminator}'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                decoration: const InputDecoration(
+                  labelText: 'Setup PIN',
+                  hintText: '예: 5641540',
+                  helperText: '디바이스 라벨의 숫자 코드',
+                ),
+                keyboardType: TextInputType.number,
               ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: codeController,
+                decoration: const InputDecoration(
+                  labelText: 'Manual Pairing Code (11자리)',
+                  hintText: '예: 05641540754',
+                  helperText: 'matterjs on-network 커미셔닝용',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -194,86 +224,20 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              final text = pinController.text.replaceAll('-', '').replaceAll(' ', '');
-              final parsed = int.tryParse(text);
-              if (parsed != null) Navigator.pop(ctx, parsed);
+              final pinText =
+                  pinController.text.replaceAll('-', '').replaceAll(' ', '');
+              final pin = int.tryParse(pinText);
+              final code =
+                  codeController.text.replaceAll('-', '').replaceAll(' ', '');
+              if (pin != null && code.isNotEmpty) {
+                Navigator.pop(ctx, (pin: pin, manualCode: code));
+              }
             },
             child: const Text('페어링'),
           ),
         ],
       ),
     );
-
-    if (pin == null) return;
-
-    // PASE 커미셔닝 실행
-    setState(() => _status = 'PASE 커미셔닝 시작...');
-    await FlutterBluePlus.stopScan();
-
-    final result = await _runPaseCommissioning(device.device, pin);
-
-    if (result.success) {
-      setState(() => _status = '✅ PASE 성공! WiFi 설정으로 진행...');
-
-      // WiFi credentials 입력
-      final wifiResult = await _showWifiDialog();
-      if (wifiResult == null) {
-        setState(() => _status = 'WiFi 설정 취소됨');
-        return;
-      }
-
-      // WiFi credentials 전달 (암호화 세션)
-      setState(() => _status = 'WiFi credentials 전달 중...');
-      // Note: WiFi 전달은 BLE 연결이 아직 살아있어야 함
-      // 현재 구조에서는 _runPaseCommissioning 내부에서 처리해야 함
-      // 일단은 on-network 커미셔닝만 호출
-
-      // Go 서버에 on-network 커미셔닝 요청
-      setState(() => _status = 'on-network 커미셔닝 요청 중...');
-      try {
-        final pairingCode = 'MT:${pin.toString().padLeft(8, '0')}';
-        final client = HttpClient();
-        final request = await client.postUrl(
-          Uri.parse('${widget.serverUrl}/api/commission'),
-        );
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode({
-          'code': pairingCode,
-          'network_only': true,
-        }));
-        final response = await request.close();
-        final statusCode = response.statusCode;
-        await response.drain();
-
-        if (statusCode == 202) {
-          setState(() => _status = '✅ 커미셔닝 진행 중 (백그라운드)');
-          if (mounted) {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('커미셔닝 시작'),
-                content: const Text(
-                  'PASE 성공 + on-network 커미셔닝이 백그라운드에서 진행 중입니다.\n'
-                  '완료되면 디바이스 목록에 나타납니다.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('확인'),
-                  ),
-                ],
-              ),
-            );
-          }
-        } else {
-          setState(() => _status = '❌ 커미셔닝 요청 실패: $statusCode');
-        }
-      } catch (e) {
-        setState(() => _status = '❌ 커미셔닝 요청 실패: $e');
-      }
-    } else {
-      setState(() => _status = '❌ 실패: ${result.error}');
-    }
   }
 
   /// WiFi SSID/Password 입력 다이얼로그
@@ -321,9 +285,14 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     );
   }
 
-  /// BLE → BTP → PASE 전체 실행 + 리소스 확실히 정리
-  Future<PaseResult> _runPaseCommissioning(
-      BluetoothDevice bleDevice, int pin) async {
+  /// 전체 BLE 커미셔닝: BTP → PASE → WiFi 전달 → disconnect
+  /// BLE 연결을 유지한 채 WiFi까지 보내고 나서 disconnect
+  Future<bool> _runFullCommissioning(
+    BluetoothDevice bleDevice,
+    int pin,
+    String ssid,
+    String password,
+  ) async {
     StreamSubscription? indicateSub;
     BtpSession? btp;
 
@@ -334,6 +303,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       await Future.delayed(const Duration(milliseconds: 500));
 
       final mtu = await bleDevice.requestMtu(247);
+      print('[COMM] BLE connected, MTU=$mtu');
 
       // 2. 서비스/특성 발견
       final services = await bleDevice.discoverServices();
@@ -343,25 +313,21 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       );
 
       final c1 = matterSvc.characteristics.firstWhere(
-        (c) => c.uuid.toString().toLowerCase() ==
-            '18ee2ef5-263d-4559-959f-4f9c429f9d11',
+        (c) => c.uuid.toString().toLowerCase() == MatterBle.c1Uuid,
         orElse: () => throw Exception('C1 특성 없음'),
       );
       final c2 = matterSvc.characteristics.firstWhere(
-        (c) => c.uuid.toString().toLowerCase() ==
-            '18ee2ef5-263d-4559-959f-4f9c429f9d12',
+        (c) => c.uuid.toString().toLowerCase() == MatterBle.c2Uuid,
         orElse: () => throw Exception('C2 특성 없음'),
       );
 
-      // 3. BTP 세션 생성
-      // C1 write 속성 확인 (write vs writeWithoutResponse)
-      final c1WriteType = c1.properties.write
-          ? false  // Write with response
-          : true;  // Write without response
-      print('[PASE] C1 props: write=${c1.properties.write} '
+      // C1 write 속성 자동 감지
+      final c1WriteType = c1.properties.write ? false : true;
+      print('[COMM] C1 write=${c1.properties.write} '
           'writeNoResp=${c1.properties.writeWithoutResponse} '
           'using withoutResponse=$c1WriteType');
 
+      // 3. BTP 세션
       btp = BtpSession(
         writeToDevice: (data) => c1.write(data, withoutResponse: c1WriteType),
         disconnect: () async {
@@ -369,18 +335,17 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
         },
       );
 
-      // C2 indicate 구독 — 핸드셰이크 응답과 데이터 패킷 분기
+      // C2 indicate 구독
       Completer<Uint8List>? handshakeCompleter;
       await c2.setNotifyValue(true);
       indicateSub = c2.onValueReceived.listen((data) {
         final bytes = Uint8List.fromList(data);
-        print('[PASE] C2 received ${bytes.length}B: ${bytes.take(10).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        print('[COMM] C2 rx ${bytes.length}B: '
+            '${bytes.take(10).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
         if (bytes.isNotEmpty && bytes[0] == 0x65 && handshakeCompleter != null) {
-          // BTP 핸드셰이크 응답
           handshakeCompleter!.complete(bytes);
           handshakeCompleter = null;
         } else {
-          // BTP 데이터 패킷
           btp?.handleIncomingData(bytes);
         }
       });
@@ -389,7 +354,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       setState(() => _status = 'BTP 핸드셰이크...');
       handshakeCompleter = Completer<Uint8List>();
       final hsReq = encodeBtpHandshakeRequest(attMtu: mtu, clientWindowSize: 6);
-      print('[PASE] BTP handshake req: ${hsReq.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+      print('[COMM] BTP HS req: ${hsReq.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
       await c1.write(hsReq, withoutResponse: c1WriteType);
 
       final hsRespData = await handshakeCompleter!.future
@@ -398,8 +363,10 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
 
       final hsResp = decodeBtpHandshakeResponse(hsRespData);
       btp.initFromHandshakeResponse(hsResp.attMtu, hsResp.windowSize);
+      print('[COMM] BTP session: fragSize=${hsResp.attMtu - 3}, win=${hsResp.windowSize}');
 
-      // 5. PASE 실행
+      // 5. PASE
+      setState(() => _status = 'PASE 인증 중...');
       final engine = PaseEngine(
         btp: btp,
         setupPin: pin,
@@ -408,14 +375,93 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
         },
       );
 
-      return await engine.run();
+      final paseResult = await engine.run();
+      if (!paseResult.success || paseResult.sessionKey == null) {
+        setState(() => _status = '❌ PASE 실패: ${paseResult.error}');
+        return false;
+      }
+
+      print('[COMM] PASE success! sessionId=${paseResult.initiatorSessionId} '
+          'peerSessionId=${paseResult.responderSessionId}');
+
+      // 6. 암호화 세션 생성 + WiFi 전달 (BLE 아직 연결 상태!)
+      setState(() => _status = 'WiFi credentials 전달 중...');
+      final session = SecureSession.fromKe(
+        paseResult.sessionKey!,
+        sessionId: paseResult.initiatorSessionId,
+        peerSessionId: paseResult.responderSessionId,
+      );
+
+      final wifiComm = WifiCommissioner(
+        btp: btp,
+        session: session,
+        exchangeId: engine.exchangeId,
+      );
+
+      final wifiOk = await wifiComm.sendWifiCredentials(ssid, password);
+      if (!wifiOk) {
+        setState(() => _status = '❌ WiFi credentials 전달 실패');
+        return false;
+      }
+
+      print('[COMM] WiFi credentials sent successfully!');
+      setState(() => _status = '✅ WiFi 설정 완료');
+      return true;
     } catch (e) {
-      return PaseResult(success: false, error: e.toString());
+      setState(() => _status = '❌ 커미셔닝 실패: $e');
+      print('[COMM] Error: $e');
+      return false;
     } finally {
-      // 리소스 확실히 정리 — 순서 중요
+      // 리소스 정리 — WiFi 전달 후 disconnect
       indicateSub?.cancel();
       await btp?.close();
       try { await bleDevice.disconnect(); } catch (_) {}
+    }
+  }
+
+  /// Go 서버에 on-network 커미셔닝 요청
+  Future<void> _requestOnNetworkCommissioning(String manualCode) async {
+    setState(() => _status = 'on-network 커미셔닝 요청 중...');
+    try {
+      final client = HttpClient();
+      final request = await client.postUrl(
+        Uri.parse('${widget.serverUrl}/api/commission'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        'code': manualCode,
+        'network_only': true,
+      }));
+      final response = await request.close();
+      final statusCode = response.statusCode;
+      await response.drain();
+
+      if (statusCode == 202) {
+        setState(() => _status = '✅ 커미셔닝 진행 중 (백그라운드)');
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('커미셔닝 진행 중'),
+              content: Text(
+                '디바이스가 WiFi($manualCode)에 연결 후\n'
+                'on-network 커미셔닝이 백그라운드에서 진행됩니다.\n\n'
+                '완료되면 디바이스 목록에 나타납니다.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('확인'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        setState(() => _status = '❌ 커미셔닝 요청 실패: HTTP $statusCode');
+      }
+    } catch (e) {
+      setState(() => _status = '❌ 커미셔닝 요청 실패: $e');
     }
   }
 
@@ -455,7 +501,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.bluetooth_searching,
-                            size: 64, color: Theme.of(context).colorScheme.outline),
+                            size: 64,
+                            color: Theme.of(context).colorScheme.outline),
                         const SizedBox(height: 16),
                         const Text('Matter 디바이스를 페어링 모드로\n설정한 후 스캔하세요',
                             textAlign: TextAlign.center),
@@ -467,7 +514,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                     itemBuilder: (ctx, i) {
                       final d = _devices[i];
                       return ListTile(
-                        leading: Icon(Icons.bluetooth, color: Theme.of(context).colorScheme.primary),
+                        leading: Icon(Icons.bluetooth,
+                            color: Theme.of(context).colorScheme.primary),
                         title: Text(d.name),
                         subtitle: Text(
                           'RSSI: ${d.rssi} dBm'

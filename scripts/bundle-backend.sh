@@ -132,6 +132,44 @@ if [ "$SKIP_MATTER" = false ]; then
     npm init -y --silent >/dev/null 2>&1
     npm install "matter-server@${MATTER_SERVER_VERSION}" --omit=dev  2>&1 | tail -3
 
+    # @matter/nodejs — optional이라 자동 설치 안 됨, 명시 설치
+    MATTER_JS_VERSION="0.16.9-alpha.0-20260204-fd5b6ed86"
+    npm install "@matter/nodejs@${MATTER_JS_VERSION}" 2>&1 | tail -3
+
+    # ─── 4a. Remote BLE 주입 ───────────────────────────────
+    log "Remote BLE 코드 주입..."
+
+    # 더미 @matter/nodejs-ble — noble import 방지
+    NODEJS_BLE_DIR="$BUNDLE_DIR/matterjs-server/node_modules/@matter/nodejs-ble"
+    mkdir -p "$NODEJS_BLE_DIR/dist/esm" "$NODEJS_BLE_DIR/dist/cjs"
+    cp "$PROJECT_DIR/matterjs-server/remote-ble/dummy-nodejs-ble-index.js" \
+       "$NODEJS_BLE_DIR/dist/esm/index.js"
+    cp "$PROJECT_DIR/matterjs-server/remote-ble/dummy-nodejs-ble-index.js" \
+       "$NODEJS_BLE_DIR/dist/cjs/index.js"
+    cat > "$NODEJS_BLE_DIR/package.json" << 'DUMMYPKG'
+{
+  "name": "@matter/nodejs-ble",
+  "version": "0.0.0-dummy",
+  "description": "Dummy — replaced by RemoteBle for Android BLE relay",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./require": "./dist/cjs/index.js"
+  }
+}
+DUMMYPKG
+    log "더미 @matter/nodejs-ble 설치됨"
+
+    # remote-ble 코드 복사
+    mkdir -p "$BUNDLE_DIR/matterjs-server/remote-ble"
+    cp "$PROJECT_DIR/matterjs-server/remote-ble/"*.js \
+       "$BUNDLE_DIR/matterjs-server/remote-ble/"
+    log "remote-ble/ 코드 복사됨"
+
     # 엔트리포인트 확인
     ENTRY="$BUNDLE_DIR/matterjs-server/node_modules/matter-server/dist/esm/MatterServer.js"
     if [ -f "$ENTRY" ]; then
@@ -167,6 +205,9 @@ MATTER_LOG_LEVEL=info
 # LLM (OpenRouter)
 OPENROUTER_API_KEY=
 
+# BLE relay (Flutter ↔ matterjs Remote BLE)
+BLE_WS_PORT=5581
+
 # WiFi (Matter 커미셔닝용)
 HOMEAGENT_WIFI_SSID=
 HOMEAGENT_WIFI_PASSWORD=
@@ -197,10 +238,15 @@ MATTER_ENTRY="./matterjs-server/node_modules/matter-server/dist/esm/MatterServer
 log() { echo "[homeagent] $1"; }
 
 # matterjs-server 시작 (백그라운드)
-log "matterjs-server 시작 (port ${MATTER_WS_PORT:-5580})..."
-"$NODE_BIN" "$MATTER_ENTRY" \
+# --import로 RemoteBle WS bridge를 먼저 로드 (BLE relay 포트 5581)
+# --bluetooth-adapter 0으로 ble.enable=true 활성화
+log "matterjs-server 시작 (WS=${MATTER_WS_PORT:-5580}, BLE relay=${BLE_WS_PORT:-5581})..."
+"$NODE_BIN" \
+    --import ./matterjs-server/remote-ble/ws-bridge.js \
+    "$MATTER_ENTRY" \
     --storage-path "${MATTER_STORAGE_PATH:-./data/matter}" \
-    --port "${MATTER_WS_PORT:-5580}" &
+    --port "${MATTER_WS_PORT:-5580}" \
+    --bluetooth-adapter 0 &
 MATTER_PID=$!
 
 # matterjs-server 준비 대기

@@ -451,6 +451,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
 	mux.HandleFunc("/api/devices/", h.handleDeviceByID) // /api/devices/:node_id
 	mux.HandleFunc("/api/commission", h.handleCommission)
+	mux.HandleFunc("/api/wifi-credentials", h.handleWifiCredentials)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/chat", h.handleChat)
 	mux.HandleFunc("/api/home", h.handleHomeSurface)
@@ -501,6 +502,35 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dev)
+}
+
+func (h *Hub) handleWifiCredentials(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		SSID     string `json:"ssid"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.SSID == "" {
+		http.Error(w, `{"error":"ssid required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := h.matter.SetWifiCredentials(r.Context(), req.SSID, req.Password); err != nil {
+		log.Printf("[hub] set wifi credentials failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[hub] wifi credentials set: %s", req.SSID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {

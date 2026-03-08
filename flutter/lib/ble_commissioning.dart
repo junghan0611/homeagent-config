@@ -11,6 +11,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import 'matter/btp_codec.dart';
+import 'matter/btp_session.dart';
 import 'matter/pase_commissioning.dart';
 
 /// Matter BLE 상수
@@ -204,15 +206,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     setState(() => _status = 'PASE 커미셔닝 시작...');
     await FlutterBluePlus.stopScan();
 
-    final commissioner = BlePaseCommissioner(
-      device: device.device,
-      setupPin: pin,
-      onStateChange: (state, message) {
-        setState(() => _status = message);
-      },
-    );
-
-    final result = await commissioner.run();
+    final result = await _runPaseCommissioning(device.device, pin);
 
     if (result.success) {
       setState(() => _status = '✅ PASE 성공! 세션 키 획득');
@@ -238,6 +232,94 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       }
     } else {
       setState(() => _status = '❌ 실패: ${result.error}');
+    }
+  }
+
+  /// BLE → BTP → PASE 전체 실행 + 리소스 확실히 정리
+  Future<PaseResult> _runPaseCommissioning(
+      BluetoothDevice bleDevice, int pin) async {
+    StreamSubscription? indicateSub;
+    BtpSession? btp;
+
+    try {
+      // 1. BLE 연결
+      setState(() => _status = 'BLE 연결 중...');
+      await bleDevice.connect(timeout: const Duration(seconds: 15));
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final mtu = await bleDevice.requestMtu(247);
+
+      // 2. 서비스/특성 발견
+      final services = await bleDevice.discoverServices();
+      final matterSvc = services.firstWhere(
+        (s) => s.uuid.toString().toLowerCase().contains('fff6'),
+        orElse: () => throw Exception('Matter BLE 서비스 없음'),
+      );
+
+      final c1 = matterSvc.characteristics.firstWhere(
+        (c) => c.uuid.toString().toLowerCase() ==
+            '18ee2ef5-263d-4559-959f-4f9c429f9d11',
+        orElse: () => throw Exception('C1 특성 없음'),
+      );
+      final c2 = matterSvc.characteristics.firstWhere(
+        (c) => c.uuid.toString().toLowerCase() ==
+            '18ee2ef5-263d-4559-959f-4f9c429f9d12',
+        orElse: () => throw Exception('C2 특성 없음'),
+      );
+
+      // 3. BTP 세션 생성
+      btp = BtpSession(
+        writeToDevice: (data) => c1.write(data, withoutResponse: false),
+        disconnect: () async {
+          try { await bleDevice.disconnect(); } catch (_) {}
+        },
+      );
+
+      // C2 indicate 구독 — 핸드셰이크 응답과 데이터 패킷 분기
+      Completer<Uint8List>? handshakeCompleter;
+      await c2.setNotifyValue(true);
+      indicateSub = c2.onValueReceived.listen((data) {
+        final bytes = Uint8List.fromList(data);
+        if (bytes.isNotEmpty && bytes[0] == 0x65 && handshakeCompleter != null) {
+          // BTP 핸드셰이크 응답
+          handshakeCompleter!.complete(bytes);
+          handshakeCompleter = null;
+        } else {
+          // BTP 데이터 패킷
+          btp?.handleIncomingData(bytes);
+        }
+      });
+
+      // 4. BTP 핸드셰이크
+      setState(() => _status = 'BTP 핸드셰이크...');
+      handshakeCompleter = Completer<Uint8List>();
+      final hsReq = encodeBtpHandshakeRequest(attMtu: mtu, clientWindowSize: 6);
+      await c1.write(hsReq, withoutResponse: false);
+
+      final hsRespData = await handshakeCompleter!.future
+          .timeout(const Duration(seconds: 5),
+              onTimeout: () => throw Exception('BTP 핸드셰이크 타임아웃'));
+
+      final hsResp = decodeBtpHandshakeResponse(hsRespData);
+      btp.initFromHandshakeResponse(hsResp.attMtu, hsResp.windowSize);
+
+      // 5. PASE 실행
+      final engine = PaseEngine(
+        btp: btp,
+        setupPin: pin,
+        onStateChange: (state, message) {
+          if (mounted) setState(() => _status = message);
+        },
+      );
+
+      return await engine.run();
+    } catch (e) {
+      return PaseResult(success: false, error: e.toString());
+    } finally {
+      // 리소스 확실히 정리 — 순서 중요
+      indicateSub?.cancel();
+      await btp?.close();
+      try { await bleDevice.disconnect(); } catch (_) {}
     }
   }
 

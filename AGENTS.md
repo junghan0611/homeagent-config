@@ -15,13 +15,52 @@ cat .current-device-ip
 ### 이슈 트래킹 (beads_rust)
 
 ```bash
-br list              # 이슈 목록
-br show <issue-id>   # 이슈 상세
-br create "제목"     # 이슈 생성
-br update <id> -s in_progress  # 상태 변경
-br close <id>        # 완료
-br sync --flush-only # JSONL 동기화
+# 기본
+br list                          # 이슈 목록
+br show <id>                     # 이슈 상세
+br show <id> --json              # JSON 출력
+
+# 생성
+br create "제목"                 # 기본 생성
+br create "제목" -p p0 -l "tag1,tag2" -t epic   # 우선순위+라벨+타입
+
+# 상태 변경
+br update <id> -s in_progress    # 상태: open, in_progress, blocked, deferred, closed
+br update <id> -p p1             # 우선순위: p0~p4
+br update <id> --title "새 제목"
+
+# 닫기 — ⚠️ design/acceptance_criteria/notes 필드 NOT NULL 제약!
+# 이전에 create만 한 이슈는 close 시 DB 에러 발생
+# 해결: update로 필수 필드 채운 후 close
+br update <id> \
+  --design "설계 요약" \
+  --acceptance-criteria "완료 조건" \
+  --notes "작업 노트"
+br close <id>                    # 이제 close 가능
+br close <id> --force            # 의존성 무시하고 닫기
+
+# 코멘트
+br comments <id>                 # 코멘트 목록
+br comments add <id> "코멘트 텍스트"          # 코멘트 추가
+br comments add <id> --message "코멘트 텍스트" # --message 플래그도 가능
+br comments add <id> -f comment.md            # 파일에서 읽기
+
+# 동기화
+br sync --flush-only             # JSONL 내보내기 (git commit 전 필수)
+
+# 검사
+br lint <id>                     # 누락 필드 확인
+br list --status open            # 열린 이슈만
 ```
+
+#### br 자주 하는 실수
+
+| 실수 | 원인 | 해결 |
+|------|------|------|
+| `br close` → NOT NULL constraint | design/acceptance_criteria/notes 비어있음 | `br update`로 필수 필드 채운 후 close |
+| `br comment <id> "text"` | comment**s** add 필요 | `br comments add <id> "text"` |
+| `br update <id> -s done` | done은 유효하지 않음 | `br close <id>` 또는 `-s closed` |
+| `br comment <id> -m "text"` | -m 옵션 없음 | `br comments add <id> --message "text"` |
 
 ## 에이전트 원칙
 

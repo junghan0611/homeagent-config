@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -51,7 +56,26 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#6124DF")).
 			Padding(1, 2)
+
+	onlineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
+	offlineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4672"))
+	feedbackOK   = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+	feedbackErr  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4672")).Bold(true)
 )
+
+// --- Messages ---
+
+type devicesFetchedMsg struct {
+	devices []deviceItem
+	err     error
+}
+
+type commandResultMsg struct {
+	msg string
+	err error
+}
+
+type tickMsg time.Time
 
 // --- Model ---
 
@@ -70,6 +94,8 @@ type tuiModel struct {
 	width      int
 	height     int
 	quitting   bool
+	feedback   string // 하단 피드백 메시지
+	connected  bool   // 서버 연결 상태
 }
 
 // deviceItem implements list.Item
@@ -79,31 +105,79 @@ type deviceItem struct {
 	room      string
 	devType   string
 	available bool
-	state     string
+	state     map[string]interface{}
 }
 
 func (d deviceItem) Title() string {
-	icon := "●"
-	if !d.available {
-		icon = "○"
+	var icon string
+	if d.available {
+		icon = onlineStyle.Render("●")
+	} else {
+		icon = offlineStyle.Render("○")
 	}
 	return fmt.Sprintf("%s %s", icon, d.name)
 }
+
 func (d deviceItem) Description() string {
-	return fmt.Sprintf("%s · %s · %s", d.room, d.devType, d.state)
+	return fmt.Sprintf("%s · %s · %s", d.room, d.devType, stateString(d.devType, d.state))
 }
+
 func (d deviceItem) FilterValue() string { return d.name }
 
-func initialModel(serverURL string) tuiModel {
-	// 초기 디바이스 (서버 연결 전 placeholder)
-	items := []list.Item{
-		deviceItem{nodeID: 1, name: "현관문 센서", room: "현관", devType: "contact_sensor", available: true, state: "닫힘"},
-		deviceItem{nodeID: 7, name: "화장실 센서", room: "화장실", devType: "contact_sensor", available: true, state: "닫힘"},
-		deviceItem{nodeID: 8, name: "거실 플러그", room: "거실", devType: "on_off_plug", available: true, state: "켜짐"},
+func stateString(devType string, state map[string]interface{}) string {
+	if state == nil {
+		return "—"
 	}
+	switch devType {
+	case "contact_sensor":
+		if v, ok := state["contact"]; ok {
+			if v == true {
+				return "열림"
+			}
+			return "닫힘"
+		}
+	case "on_off_plug", "on_off_light":
+		if v, ok := state["on"]; ok {
+			if v == true {
+				return "켜짐"
+			}
+			return "꺼짐"
+		}
+		if v, ok := state["on_off"]; ok {
+			if v == true {
+				return "켜짐"
+			}
+			return "꺼짐"
+		}
+	case "dimmable_light":
+		s := ""
+		if v, ok := state["on_off"]; ok && v == true {
+			s = "켜짐"
+		} else {
+			s = "꺼짐"
+		}
+		if v, ok := state["level"]; ok {
+			s += fmt.Sprintf(" L:%v", v)
+		}
+		return s
+	case "door_lock":
+		if v, ok := state["locked"]; ok && v == true {
+			return "🔒 잠김"
+		}
+		return "🔓 열림"
+	}
+	// fallback: JSON
+	b, _ := json.Marshal(state)
+	s := string(b)
+	if len(s) > 30 {
+		s = s[:30] + "…"
+	}
+	return s
+}
 
+func initialModel(serverURL string) tuiModel {
 	delegate := list.NewDefaultDelegate()
-	l := list.New(items, delegate, 0, 0)
+	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "디바이스"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
@@ -113,34 +187,164 @@ func initialModel(serverURL string) tuiModel {
 		serverURL:  serverURL,
 		activeTab:  tabDevices,
 		deviceList: l,
+		feedback:   "서버 연결 중...",
 	}
 }
 
+// --- API calls ---
+
+func fetchDevices(serverURL string) tea.Cmd {
+	return func() tea.Msg {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(serverURL + "/api/devices")
+		if err != nil {
+			return devicesFetchedMsg{err: err}
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+
+		var rawDevices []struct {
+			NodeID    int                    `json:"node_id"`
+			Name      string                 `json:"name"`
+			Room      string                 `json:"room"`
+			Type      string                 `json:"type"`
+			Available bool                   `json:"available"`
+			State     map[string]interface{} `json:"state"`
+		}
+		if err := json.Unmarshal(body, &rawDevices); err != nil {
+			return devicesFetchedMsg{err: err}
+		}
+
+		items := make([]deviceItem, len(rawDevices))
+		for i, d := range rawDevices {
+			items[i] = deviceItem{
+				nodeID:    d.NodeID,
+				name:      d.Name,
+				room:      d.Room,
+				devType:   d.Type,
+				available: d.Available,
+				state:     d.State,
+			}
+		}
+		return devicesFetchedMsg{devices: items}
+	}
+}
+
+func sendCommand(serverURL string, nodeID int, command string) tea.Cmd {
+	return func() tea.Msg {
+		payload, _ := json.Marshal(map[string]interface{}{
+			"node_id": nodeID,
+			"command": command,
+		})
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Post(serverURL+"/api/devices/command", "application/json",
+			bytes.NewReader(payload))
+		if err != nil {
+			return commandResultMsg{err: err}
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return commandResultMsg{err: fmt.Errorf("%s", string(body))}
+		}
+		return commandResultMsg{msg: fmt.Sprintf("✅ Node %d: %s", nodeID, command)}
+	}
+}
+
+func tickEvery(d time.Duration) tea.Cmd {
+	return tea.Every(d, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// --- Tea interface ---
+
 func (m tuiModel) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		fetchDevices(m.serverURL),
+		tickEvery(5*time.Second),
+	)
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case devicesFetchedMsg:
+		if msg.err != nil {
+			m.feedback = feedbackErr.Render(fmt.Sprintf("연결 실패: %v", msg.err))
+			m.connected = false
+			return m, nil
+		}
+		m.connected = true
+		items := make([]list.Item, len(msg.devices))
+		for i, d := range msg.devices {
+			items[i] = d
+		}
+		m.deviceList.SetItems(items)
+		m.feedback = fmt.Sprintf("디바이스 %d개 로드됨", len(msg.devices))
+		return m, nil
+
+	case commandResultMsg:
+		if msg.err != nil {
+			m.feedback = feedbackErr.Render(fmt.Sprintf("명령 실패: %v", msg.err))
+		} else {
+			m.feedback = feedbackOK.Render(msg.msg)
+		}
+		// 명령 후 디바이스 새로고침
+		return m, fetchDevices(m.serverURL)
+
+	case tickMsg:
+		// 5초마다 디바이스 상태 갱신
+		return m, tea.Batch(
+			fetchDevices(m.serverURL),
+			tickEvery(5*time.Second),
+		)
+
 	case tea.KeyMsg:
+		// 리스트 필터링 중이면 키바인딩 무시
+		if m.deviceList.FilterState() == list.Filtering {
+			break
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+
 		case "tab":
 			m.activeTab = (m.activeTab + 1) % 3
 			return m, nil
 		case "shift+tab":
 			m.activeTab = (m.activeTab + 2) % 3
 			return m, nil
+
+		case "r", "R":
+			m.feedback = "새로고침..."
+			return m, fetchDevices(m.serverURL)
+
+		// 디바이스 제어 키바인딩
+		case "o": // on
+			if item, ok := m.deviceList.SelectedItem().(deviceItem); ok {
+				m.feedback = fmt.Sprintf("Node %d: on 전송중...", item.nodeID)
+				return m, sendCommand(m.serverURL, item.nodeID, "on")
+			}
+		case "f": // off
+			if item, ok := m.deviceList.SelectedItem().(deviceItem); ok {
+				m.feedback = fmt.Sprintf("Node %d: off 전송중...", item.nodeID)
+				return m, sendCommand(m.serverURL, item.nodeID, "off")
+			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// 리스트에 사이즈 절반 할당
 		listWidth := msg.Width/2 - 4
 		listHeight := msg.Height - 8
+		if listHeight < 5 {
+			listHeight = 5
+		}
 		m.deviceList.SetSize(listWidth, listHeight)
 	}
 
@@ -172,7 +376,11 @@ func (m tuiModel) View() string {
 	}
 
 	// 타이틀
-	title := titleStyle.Render(fmt.Sprintf(" HomeAgent %s ", version))
+	connIcon := offlineStyle.Render("⊘")
+	if m.connected {
+		connIcon = onlineStyle.Render("⦿")
+	}
+	title := titleStyle.Render(fmt.Sprintf(" HomeAgent %s ", version)) + " " + connIcon
 
 	// 메인 컨텐츠
 	var content string
@@ -186,7 +394,14 @@ func (m tuiModel) View() string {
 	}
 
 	// 상태 바
-	status := statusBarStyle.Render(fmt.Sprintf(" %s │ Tab: 전환 │ q: 종료 ", m.serverURL))
+	helpText := "Tab:전환 r:새로고침 o:켜기 f:끄기 /:검색 q:종료"
+	status := statusBarStyle.Render(fmt.Sprintf(" %s │ %s ", m.serverURL, helpText))
+
+	// 피드백
+	fb := ""
+	if m.feedback != "" {
+		fb = "  " + m.feedback
+	}
 
 	return appStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
@@ -195,23 +410,41 @@ func (m tuiModel) View() string {
 			"",
 			content,
 			"",
+			fb,
 			status,
 		),
 	)
 }
 
 func (m tuiModel) devicesView() string {
-	// split view: 리스트 | 상세
 	listView := m.deviceList.View()
 
 	// 선택된 디바이스 상세
 	detail := "디바이스를 선택하세요"
 	if item, ok := m.deviceList.SelectedItem().(deviceItem); ok {
-		detail = detailStyle.Render(fmt.Sprintf(
-			"Node %d — %s\n\nType: %s\nRoom: %s\nAvailable: %v\nState: %s\n\n[o]n  [f]off  [l]evel  [c]olor",
+		availText := offlineStyle.Render("오프라인")
+		if item.available {
+			availText = onlineStyle.Render("온라인")
+		}
+
+		stateJSON, _ := json.MarshalIndent(item.state, "", "  ")
+
+		detailWidth := m.width/2 - 6
+		if detailWidth < 20 {
+			detailWidth = 20
+		}
+
+		detail = detailStyle.Width(detailWidth).Render(fmt.Sprintf(
+			"Node %d — %s\n\n"+
+				"Type:      %s\n"+
+				"Room:      %s\n"+
+				"Status:    %s\n"+
+				"State:     %s\n\n"+
+				"[o] 켜기  [f] 끄기",
 			item.nodeID, item.name,
 			item.devType, item.room,
-			item.available, item.state,
+			availText,
+			string(stateJSON),
 		))
 	}
 

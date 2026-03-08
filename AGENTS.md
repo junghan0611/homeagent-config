@@ -4,6 +4,12 @@
 
 ---
 
+# 현재 디바이스 확인
+
+``` bash
+cat .current-device-ip
+```
+
 ## 프로젝트 관리
 
 ### 이슈 트래킹 (beads_rust)

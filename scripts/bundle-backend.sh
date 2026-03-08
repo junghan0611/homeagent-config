@@ -130,7 +130,7 @@ if [ "$SKIP_MATTER" = false ]; then
     # npm으로 프로덕션 의존성만 설치
     cd "$BUNDLE_DIR/matterjs-server"
     npm init -y --silent >/dev/null 2>&1
-    npm install "matter-server@${MATTER_SERVER_VERSION}" --omit=dev --no-optional 2>&1 | tail -3
+    npm install "matter-server@${MATTER_SERVER_VERSION}" --omit=dev  2>&1 | tail -3
 
     # 엔트리포인트 확인
     ENTRY="$BUNDLE_DIR/matterjs-server/node_modules/matter-server/dist/esm/MatterServer.js"

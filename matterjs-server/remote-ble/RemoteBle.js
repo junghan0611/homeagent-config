@@ -12,6 +12,7 @@ export class RemoteBle extends Ble {
   #scanner;
   #centralInterface;
   #options;
+  #pendingWs = null; // Flutter WS가 centralInterface보다 먼저 연결될 때 보관
 
   constructor(options) {
     super();
@@ -21,6 +22,10 @@ export class RemoteBle extends Ble {
   get scanner() {
     if (!this.#scanner) {
       this.#scanner = new RemoteBleScanner();
+      // pending WS가 있으면 주입
+      if (this.#pendingWs) {
+        this.#scanner.setFlutterConnection(this.#pendingWs);
+      }
     }
     return this.#scanner;
   }
@@ -28,6 +33,10 @@ export class RemoteBle extends Ble {
   get centralInterface() {
     if (!this.#centralInterface) {
       this.#centralInterface = new RemoteBleCentralInterface(this.scanner);
+      // pending WS가 있으면 주입
+      if (this.#pendingWs) {
+        this.#centralInterface.setFlutterConnection(this.#pendingWs);
+      }
     }
     return this.#centralInterface;
   }
@@ -38,10 +47,14 @@ export class RemoteBle extends Ble {
   }
 
   /**
-   * Flutter WS 연결을 받아 scanner와 transport에 주입
+   * Flutter WS 연결을 받아 scanner와 transport에 주입.
+   * lazy 인스턴스가 아직 없으면 pendingWs에 보관 → getter에서 나중에 주입.
    */
   setFlutterConnection(ws) {
-    this.scanner.setFlutterConnection(ws);
+    this.#pendingWs = ws;
+    if (this.#scanner) {
+      this.#scanner.setFlutterConnection(ws);
+    }
     if (this.#centralInterface) {
       this.#centralInterface.setFlutterConnection(ws);
     }

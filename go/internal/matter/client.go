@@ -24,7 +24,7 @@ const (
 // ServerInfo is the initial message from matterjs-server
 type ServerInfo struct {
 	FabricID             int    `json:"fabric_id"`
-	CompressedFabricID   int64  `json:"compressed_fabric_id"`
+	CompressedFabricID   uint64 `json:"compressed_fabric_id"`
 	FabricIndex          int    `json:"fabric_index"`
 	SchemaVersion        int    `json:"schema_version"`
 	SDKVersion           string `json:"sdk_version"`

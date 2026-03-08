@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'backend_process.dart';
 import 'shell_webview.dart';
 import 'shell_native.dart';
+import 'ble_commissioning.dart';
 
 void main() {
   runApp(const HomeAgentApp());
@@ -183,7 +184,27 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
     // 서버 준비 완료 — 플랫폼별 UI
     if (_serverReady) {
       if (_useWebView) {
-        return ShellWebView(serverUrl: _serverUrl);
+        return Stack(
+          children: [
+            ShellWebView(serverUrl: _serverUrl),
+            // BLE 페어링 FAB
+            if (Platform.isAndroid)
+              Positioned(
+                right: 16,
+                bottom: 80,
+                child: FloatingActionButton(
+                  mini: true,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BleCommissioningScreen(serverUrl: _serverUrl),
+                    ),
+                  ),
+                  child: const Icon(Icons.bluetooth_searching, size: 20),
+                ),
+              ),
+          ],
+        );
       } else {
         return ShellNative(serverUrl: _serverUrl);
       }

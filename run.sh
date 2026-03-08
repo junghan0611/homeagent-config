@@ -82,6 +82,13 @@ help() {
     echo "  flutter-server    Go 서버 로컬 실행 (Flutter 개발용)"
     echo "  flutter-analyze   코드 분석"
     echo ""
+    echo -e "${GREEN}RK3576 (Android):${NC}"
+    echo "  rk-deploy       전체 배포 (Go+matterjs+APK → 시작)"
+    echo "  rk-start        서비스 (재)시작"
+    echo "  rk-stop         서비스 종료"
+    echo "  rk-status       상태 확인"
+    echo "  rk-logs [t]     로그 (matter/go/all)"
+    echo ""
     echo -e "${GREEN}Android APK:${NC}"
     echo "  apk-build       Android APK 릴리즈 빌드"
     echo "  apk-debug       Android APK 디버그 빌드"
@@ -998,6 +1005,23 @@ case "${1:-help}" in
             echo -e "${GREEN}[APK]${NC} Go 바이너리: $(ls -lh "$OUTDIR/homeagent-android-arm64" | awk '{print $5}')"
             echo "  $OUTDIR/homeagent-android-arm64"
         fi
+        ;;
+    rk-deploy)
+        shift
+        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" deploy "$@"
+        ;;
+    rk-start)
+        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" start
+        ;;
+    rk-stop)
+        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" stop
+        ;;
+    rk-status)
+        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" status
+        ;;
+    rk-logs)
+        shift
+        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" logs "${1:-all}"
         ;;
     bundle)
         shift

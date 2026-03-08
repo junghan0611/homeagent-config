@@ -25,57 +25,57 @@ class TlvTagControl {
 
 /// TLV 인코더 — PASE 메시지 전용
 class TlvEncoder {
-  final BytesBuilder _buf = BytesBuilder();
+  final BytesBuilder buf = BytesBuilder();
 
   void startStructure() {
-    _buf.addByte(TlvType.structure); // anonymous structure
+    buf.addByte(TlvType.structure); // anonymous structure
   }
 
   void endContainer() {
-    _buf.addByte(TlvType.endOfContainer);
+    buf.addByte(TlvType.endOfContainer);
   }
 
   void writeBytes(int tag, Uint8List value) {
     // context-specific tag + byte string
     final len = value.length;
     if (len <= 0xFF) {
-      _buf.addByte(TlvTagControl.contextSpecific | TlvType.byteString); // 0x30
-      _buf.addByte(tag);
-      _buf.addByte(len);
+      buf.addByte(TlvTagControl.contextSpecific | TlvType.byteString); // 0x30
+      buf.addByte(tag);
+      buf.addByte(len);
     } else if (len <= 0xFFFF) {
-      _buf.addByte(TlvTagControl.contextSpecific | TlvType.byteString | 0x01); // 0x31
-      _buf.addByte(tag);
-      _buf.addByte(len & 0xFF);
-      _buf.addByte((len >> 8) & 0xFF);
+      buf.addByte(TlvTagControl.contextSpecific | TlvType.byteString | 0x01); // 0x31
+      buf.addByte(tag);
+      buf.addByte(len & 0xFF);
+      buf.addByte((len >> 8) & 0xFF);
     } else {
       throw ArgumentError('byte string too long: $len');
     }
-    _buf.add(value);
+    buf.add(value);
   }
 
   void writeUInt16(int tag, int value) {
-    _buf.addByte(TlvTagControl.contextSpecific | TlvType.unsignedInt | 0x01); // 0x25
-    _buf.addByte(tag);
-    _buf.addByte(value & 0xFF);
-    _buf.addByte((value >> 8) & 0xFF);
+    buf.addByte(TlvTagControl.contextSpecific | TlvType.unsignedInt | 0x01); // 0x25
+    buf.addByte(tag);
+    buf.addByte(value & 0xFF);
+    buf.addByte((value >> 8) & 0xFF);
   }
 
   void writeUInt32(int tag, int value) {
-    _buf.addByte(TlvTagControl.contextSpecific | TlvType.unsignedInt | 0x02); // 0x26
-    _buf.addByte(tag);
-    _buf.addByte(value & 0xFF);
-    _buf.addByte((value >> 8) & 0xFF);
-    _buf.addByte((value >> 16) & 0xFF);
-    _buf.addByte((value >> 24) & 0xFF);
+    buf.addByte(TlvTagControl.contextSpecific | TlvType.unsignedInt | 0x02); // 0x26
+    buf.addByte(tag);
+    buf.addByte(value & 0xFF);
+    buf.addByte((value >> 8) & 0xFF);
+    buf.addByte((value >> 16) & 0xFF);
+    buf.addByte((value >> 24) & 0xFF);
   }
 
   void writeBool(int tag, bool value) {
     // true = 0x09, false = 0x08
-    _buf.addByte(TlvTagControl.contextSpecific | TlvType.boolean | (value ? 0x01 : 0x00));
-    _buf.addByte(tag);
+    buf.addByte(TlvTagControl.contextSpecific | TlvType.boolean | (value ? 0x01 : 0x00));
+    buf.addByte(tag);
   }
 
-  Uint8List toBytes() => _buf.toBytes();
+  Uint8List toBytes() => buf.toBytes();
 }
 
 /// TLV 디코더 — 최소한 필요한 필드만 파싱

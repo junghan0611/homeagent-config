@@ -204,9 +204,14 @@ func (c *Client) GetNodes(ctx context.Context) ([]Node, error) {
 	return nodes, nil
 }
 
-// CommissionWithCode commissions a device using its setup code
-func (c *Client) CommissionWithCode(ctx context.Context, code string) (*Node, error) {
-	id, ch, err := c.send("commission_with_code", map[string]string{"code": code})
+// CommissionWithCode commissions a device using its setup code.
+// If networkOnly is true, skip BLE and use on-network (IP) commissioning only.
+func (c *Client) CommissionWithCode(ctx context.Context, code string, networkOnly bool) (*Node, error) {
+	args := map[string]interface{}{"code": code}
+	if networkOnly {
+		args["network_only"] = true
+	}
+	id, ch, err := c.send("commission_with_code", args)
 	if err != nil {
 		return nil, err
 	}

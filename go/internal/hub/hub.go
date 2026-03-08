@@ -173,8 +173,8 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 }
 
 // Commission triggers a new device commissioning
-func (h *Hub) Commission(ctx context.Context, code string) (*DeviceState, error) {
-	node, err := h.matter.CommissionWithCode(ctx, code)
+func (h *Hub) Commission(ctx context.Context, code string, networkOnly bool) (*DeviceState, error) {
+	node, err := h.matter.CommissionWithCode(ctx, code, networkOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +510,8 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Code string `json:"code"`
+		Code        string `json:"code"`
+		NetworkOnly bool   `json:"network_only"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -523,12 +524,12 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 
 	// Commission is long-running (60-120s). Use background context
 	// so browser disconnect doesn't cancel it. Return 202 immediately.
-	log.Printf("[hub] commission requested: %s", req.Code)
+	log.Printf("[hub] commission requested: %s (network_only=%v)", req.Code, req.NetworkOnly)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 		defer cancel()
-		ds, err := h.Commission(ctx, req.Code)
+		ds, err := h.Commission(ctx, req.Code, req.NetworkOnly)
 		if err != nil {
 			log.Printf("[hub] commission failed: %v", err)
 			h.eventCh <- Event{Type: "commission_error", Key: "error", Value: err.Error()}

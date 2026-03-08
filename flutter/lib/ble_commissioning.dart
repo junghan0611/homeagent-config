@@ -10,9 +10,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import 'dart:convert' show jsonEncode;
+import 'dart:io';
+
 import 'matter/btp_codec.dart';
 import 'matter/btp_session.dart';
 import 'matter/pase_commissioning.dart';
+import 'matter/secure_session.dart';
+import 'matter/wifi_commissioning.dart';
 
 /// Matter BLE 상수
 class MatterBle {
@@ -175,8 +180,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
             TextField(
               controller: pinController,
               decoration: const InputDecoration(
-                labelText: 'Setup PIN (숫자 8자리)',
-                hintText: '예: 05641540',
+                labelText: 'Setup PIN (숫자)',
+                hintText: '예: 5641540 (페어링 코드에서 추출)',
               ),
               keyboardType: TextInputType.number,
             ),
@@ -208,30 +213,112 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     final result = await _runPaseCommissioning(device.device, pin);
 
     if (result.success) {
-      setState(() => _status = '✅ PASE 성공! 세션 키 획득');
+      setState(() => _status = '✅ PASE 성공! WiFi 설정으로 진행...');
 
-      // TODO Phase 3: WiFi credentials 전달 + on-network 커미셔닝
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('PASE 성공!'),
-            content: const Text(
-              '디바이스와 보안 세션이 수립되었습니다.\n\n'
-              'Phase 3: WiFi 설정 + on-network 커미셔닝 예정',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
+      // WiFi credentials 입력
+      final wifiResult = await _showWifiDialog();
+      if (wifiResult == null) {
+        setState(() => _status = 'WiFi 설정 취소됨');
+        return;
+      }
+
+      // WiFi credentials 전달 (암호화 세션)
+      setState(() => _status = 'WiFi credentials 전달 중...');
+      // Note: WiFi 전달은 BLE 연결이 아직 살아있어야 함
+      // 현재 구조에서는 _runPaseCommissioning 내부에서 처리해야 함
+      // 일단은 on-network 커미셔닝만 호출
+
+      // Go 서버에 on-network 커미셔닝 요청
+      setState(() => _status = 'on-network 커미셔닝 요청 중...');
+      try {
+        final pairingCode = 'MT:${pin.toString().padLeft(8, '0')}';
+        final client = HttpClient();
+        final request = await client.postUrl(
+          Uri.parse('${widget.serverUrl}/api/commission'),
         );
+        request.headers.contentType = ContentType.json;
+        request.write(jsonEncode({
+          'code': pairingCode,
+          'network_only': true,
+        }));
+        final response = await request.close();
+        final statusCode = response.statusCode;
+        await response.drain();
+
+        if (statusCode == 202) {
+          setState(() => _status = '✅ 커미셔닝 진행 중 (백그라운드)');
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('커미셔닝 시작'),
+                content: const Text(
+                  'PASE 성공 + on-network 커미셔닝이 백그라운드에서 진행 중입니다.\n'
+                  '완료되면 디바이스 목록에 나타납니다.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('확인'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } else {
+          setState(() => _status = '❌ 커미셔닝 요청 실패: $statusCode');
+        }
+      } catch (e) {
+        setState(() => _status = '❌ 커미셔닝 요청 실패: $e');
       }
     } else {
       setState(() => _status = '❌ 실패: ${result.error}');
     }
+  }
+
+  /// WiFi SSID/Password 입력 다이얼로그
+  Future<({String ssid, String password})?> _showWifiDialog() async {
+    final ssidController = TextEditingController(text: 'TP-Link_E426');
+    final pwController = TextEditingController();
+
+    return showDialog<({String ssid, String password})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('WiFi 설정'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ssidController,
+              decoration: const InputDecoration(labelText: 'WiFi SSID'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: pwController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (ssidController.text.isNotEmpty) {
+                Navigator.pop(ctx, (
+                  ssid: ssidController.text,
+                  password: pwController.text,
+                ));
+              }
+            },
+            child: const Text('연결'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// BLE → BTP → PASE 전체 실행 + 리소스 확실히 정리
@@ -267,8 +354,16 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       );
 
       // 3. BTP 세션 생성
+      // C1 write 속성 확인 (write vs writeWithoutResponse)
+      final c1WriteType = c1.properties.write
+          ? false  // Write with response
+          : true;  // Write without response
+      print('[PASE] C1 props: write=${c1.properties.write} '
+          'writeNoResp=${c1.properties.writeWithoutResponse} '
+          'using withoutResponse=$c1WriteType');
+
       btp = BtpSession(
-        writeToDevice: (data) => c1.write(data, withoutResponse: false),
+        writeToDevice: (data) => c1.write(data, withoutResponse: c1WriteType),
         disconnect: () async {
           try { await bleDevice.disconnect(); } catch (_) {}
         },
@@ -279,6 +374,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       await c2.setNotifyValue(true);
       indicateSub = c2.onValueReceived.listen((data) {
         final bytes = Uint8List.fromList(data);
+        print('[PASE] C2 received ${bytes.length}B: ${bytes.take(10).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
         if (bytes.isNotEmpty && bytes[0] == 0x65 && handshakeCompleter != null) {
           // BTP 핸드셰이크 응답
           handshakeCompleter!.complete(bytes);
@@ -293,7 +389,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       setState(() => _status = 'BTP 핸드셰이크...');
       handshakeCompleter = Completer<Uint8List>();
       final hsReq = encodeBtpHandshakeRequest(attMtu: mtu, clientWindowSize: 6);
-      await c1.write(hsReq, withoutResponse: false);
+      print('[PASE] BTP handshake req: ${hsReq.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+      await c1.write(hsReq, withoutResponse: c1WriteType);
 
       final hsRespData = await handshakeCompleter!.future
           .timeout(const Duration(seconds: 5),

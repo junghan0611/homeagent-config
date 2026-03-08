@@ -29,7 +29,15 @@ class PaseResult {
   final bool success;
   final String? error;
   final Uint8List? sessionKey;
-  PaseResult({required this.success, this.error, this.sessionKey});
+  final int initiatorSessionId;
+  final int responderSessionId;
+  PaseResult({
+    required this.success,
+    this.error,
+    this.sessionKey,
+    this.initiatorSessionId = 0,
+    this.responderSessionId = 0,
+  });
 }
 
 /// PASE 상태 리스너
@@ -56,12 +64,20 @@ class PaseEngine {
     onStateChange?.call(state, msg);
   }
 
+  int _mySessionId = 0;
+  int _peerSessionId = 0;
+
   /// PASE 교환 실행 (BTP 세션이 이미 수립된 상태에서 호출)
   Future<PaseResult> run() async {
     try {
       final ke = await _paseExchange();
       _setState(PaseState.success, 'PASE 성공');
-      return PaseResult(success: true, sessionKey: ke);
+      return PaseResult(
+        success: true,
+        sessionKey: ke,
+        initiatorSessionId: _mySessionId,
+        responderSessionId: _peerSessionId,
+      );
     } catch (e) {
       _setState(PaseState.failed, e.toString());
       return PaseResult(success: false, error: e.toString());
@@ -72,12 +88,12 @@ class PaseEngine {
     // 1. PbkdfParamRequest
     _setState(PaseState.pbkdfRequest, 'PBKDF 파라미터 요청...');
     final initiatorRandom = _secureRandom(32);
-    final initiatorSessionId = Random.secure().nextInt(0xFFFF);
+    _mySessionId = Random.secure().nextInt(0xFFFF);
 
     final reqTlv = TlvEncoder();
     reqTlv.startStructure();
     reqTlv.writeBytes(1, initiatorRandom);
-    reqTlv.writeUInt16(2, initiatorSessionId);
+    reqTlv.writeUInt16(2, _mySessionId);
     reqTlv.writeUInt16(3, 0); // passcodeId default
     reqTlv.writeBool(4, false); // hasPbkdfParameters
     reqTlv.endContainer();
@@ -92,6 +108,7 @@ class PaseEngine {
     // 2. PbkdfParamResponse 파싱
     final responsePayload = respMsg.payload;
     final respFields = TlvDecoder(responsePayload).decodeStructure();
+    _peerSessionId = respFields[3]?.intValue ?? 0;
     final pbkdfParams = respFields[4]?.structValue;
     if (pbkdfParams == null) {
       throw Exception('PBKDF 파라미터가 응답에 없습니다');

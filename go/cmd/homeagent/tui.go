@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -75,6 +76,14 @@ type commandResultMsg struct {
 	err error
 }
 
+type sseEventMsg struct {
+	line string
+}
+
+type sseErrorMsg struct {
+	err error
+}
+
 type tickMsg time.Time
 
 // --- Model ---
@@ -91,11 +100,14 @@ type tuiModel struct {
 	serverURL  string
 	activeTab  tab
 	deviceList list.Model
+	eventLog   []string   // SSE 이벤트 로그 (최신이 위)
+	sseCh      chan tea.Msg // SSE 이벤트 채널
 	width      int
 	height     int
 	quitting   bool
 	feedback   string // 하단 피드백 메시지
 	connected  bool   // 서버 연결 상태
+	sseActive  bool   // SSE 연결 상태
 }
 
 // deviceItem implements list.Item
@@ -187,6 +199,7 @@ func initialModel(serverURL string) tuiModel {
 		serverURL:  serverURL,
 		activeTab:  tabDevices,
 		deviceList: l,
+		sseCh:      make(chan tea.Msg, 10),
 		feedback:   "서버 연결 중...",
 	}
 }
@@ -253,6 +266,75 @@ func sendCommand(serverURL string, nodeID int, command string) tea.Cmd {
 	}
 }
 
+// sseSubscribe starts a background goroutine that reads SSE and sends to a channel.
+// Returns a tea.Cmd that waits for the next event.
+func sseSubscribe(serverURL string, ch chan tea.Msg) tea.Cmd {
+	// Start reader goroutine (only once — guarded by caller)
+	go func() {
+		client := &http.Client{Timeout: 0}
+		resp, err := client.Get(serverURL + "/api/events")
+		if err != nil {
+			ch <- sseErrorMsg{err: err}
+			return
+		}
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 64*1024), 64*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				summary := parseEventSummary(data)
+				if summary != "" {
+					ch <- sseEventMsg{line: summary}
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			ch <- sseErrorMsg{err: err}
+		} else {
+			ch <- sseErrorMsg{err: fmt.Errorf("SSE stream closed")}
+		}
+	}()
+	return waitSSE(ch)
+}
+
+// waitSSE returns a Cmd that blocks until the next SSE message
+func waitSSE(ch chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		return <-ch
+	}
+}
+
+func parseEventSummary(data string) string {
+	var evt map[string]interface{}
+	if err := json.Unmarshal([]byte(data), &evt); err != nil {
+		return ""
+	}
+
+	evtType, _ := evt["type"].(string)
+	now := time.Now().Format("15:04:05")
+
+	switch evtType {
+	case "snapshot":
+		if devs, ok := evt["devices"].([]interface{}); ok {
+			return fmt.Sprintf("%s 📸 스냅샷 — 디바이스 %d개", now, len(devs))
+		}
+		return fmt.Sprintf("%s 📸 스냅샷", now)
+	case "device_state":
+		nodeID := evt["device_id"]
+		key, _ := evt["key"].(string)
+		value := evt["value"]
+		return fmt.Sprintf("%s 🔔 Node %v: %s = %v", now, nodeID, key, value)
+	case "device_added":
+		nodeID := evt["device_id"]
+		return fmt.Sprintf("%s ➕ 디바이스 추가: Node %v", now, nodeID)
+	case "commission_result":
+		return fmt.Sprintf("%s 🔗 커미셔닝 결과: %v", now, evt["value"])
+	default:
+		return fmt.Sprintf("%s 📡 %s", now, evtType)
+	}
+}
+
 func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Every(d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -265,6 +347,7 @@ func (m tuiModel) Init() tea.Cmd {
 	return tea.Batch(
 		fetchDevices(m.serverURL),
 		tickEvery(5*time.Second),
+		sseSubscribe(m.serverURL, m.sseCh),
 	)
 }
 
@@ -286,6 +369,26 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feedback = fmt.Sprintf("디바이스 %d개 로드됨", len(msg.devices))
 		return m, nil
 
+	case sseEventMsg:
+		// 이벤트 로그에 추가 (최신이 위, 최대 50개)
+		m.eventLog = append([]string{msg.line}, m.eventLog...)
+		if len(m.eventLog) > 50 {
+			m.eventLog = m.eventLog[:50]
+		}
+		m.sseActive = true
+		// 다음 이벤트 대기 (같은 채널에서, 재연결 아님)
+		return m, waitSSE(m.sseCh)
+
+	case sseErrorMsg:
+		m.sseActive = false
+		m.eventLog = append([]string{
+			fmt.Sprintf("%s ⚠️ SSE 끊김: %v", time.Now().Format("15:04:05"), msg.err),
+		}, m.eventLog...)
+		// 3초 후 재연결
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
+
 	case commandResultMsg:
 		if msg.err != nil {
 			m.feedback = feedbackErr.Render(fmt.Sprintf("명령 실패: %v", msg.err))
@@ -296,11 +399,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchDevices(m.serverURL)
 
 	case tickMsg:
-		// 5초마다 디바이스 상태 갱신
-		return m, tea.Batch(
-			fetchDevices(m.serverURL),
-			tickEvery(5*time.Second),
-		)
+		// 5초마다 디바이스 상태 갱신 + SSE 끊겼으면 재연결
+		cmds := []tea.Cmd{fetchDevices(m.serverURL), tickEvery(5 * time.Second)}
+		if !m.sseActive {
+			cmds = append(cmds, sseSubscribe(m.serverURL, m.sseCh))
+		}
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		// 리스트 필터링 중이면 키바인딩 무시
@@ -380,7 +484,11 @@ func (m tuiModel) View() string {
 	if m.connected {
 		connIcon = onlineStyle.Render("⦿")
 	}
-	title := titleStyle.Render(fmt.Sprintf(" HomeAgent %s ", version)) + " " + connIcon
+	sseIcon := ""
+	if m.sseActive {
+		sseIcon = " " + onlineStyle.Render("SSE")
+	}
+	title := titleStyle.Render(fmt.Sprintf(" HomeAgent %s ", version)) + " " + connIcon + sseIcon
 
 	// 메인 컨텐츠
 	var content string
@@ -452,7 +560,33 @@ func (m tuiModel) devicesView() string {
 }
 
 func (m tuiModel) eventsView() string {
-	return detailStyle.Render("🔴 실시간 이벤트 (SSE 연결 예정)\n\n구현 예정: 서버 SSE → 터미널 이벤트 로그")
+	sseIcon := offlineStyle.Render("⊘ SSE 끊김")
+	if m.sseActive {
+		sseIcon = onlineStyle.Render("⦿ SSE 연결됨")
+	}
+
+	maxLines := m.height - 10
+	if maxLines < 5 {
+		maxLines = 5
+	}
+
+	lines := m.eventLog
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+
+	content := sseIcon + "\n\n"
+	if len(lines) == 0 {
+		content += "이벤트 대기 중..."
+	} else {
+		content += strings.Join(lines, "\n")
+	}
+
+	w := m.width - 8
+	if w < 30 {
+		w = 30
+	}
+	return detailStyle.Width(w).Render(content)
 }
 
 func (m tuiModel) chatView() string {

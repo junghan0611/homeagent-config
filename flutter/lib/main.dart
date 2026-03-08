@@ -44,7 +44,17 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
   String _status = '초기화 중...';
 
   static const int _goPort = 8080;
-  String get _serverUrl => 'http://localhost:$_goPort';
+
+  /// Android: 환경변수 또는 기본 서버 주소
+  /// Yocto/Linux: localhost (Go 서버가 같은 디바이스)
+  String get _serverUrl {
+    if (Platform.isAndroid) {
+      // Android에서는 Go 서버가 외부(RPi5 등)에 있을 수 있음
+      // 추후 설정 화면에서 변경 가능하도록
+      return 'http://${const String.fromEnvironment('SERVER_HOST', defaultValue: 'localhost')}:$_goPort';
+    }
+    return 'http://localhost:$_goPort';
+  }
 
   /// Linux desktop → Flutter 네이티브 UI
   /// Android/Yocto → WebView Shell

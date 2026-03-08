@@ -969,9 +969,10 @@ case "${1:-help}" in
         nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter analyze"
         ;;
     apk-build)
-        echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드..."
+        SERVER_HOST="${2:-192.168.0.105}"
+        echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드 (server: ${SERVER_HOST})..."
         nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
-            cd ${SCRIPT_DIR}/flutter && flutter build apk --release
+            cd ${SCRIPT_DIR}/flutter && flutter build apk --release --dart-define=SERVER_HOST=${SERVER_HOST}
         "
         APK="${SCRIPT_DIR}/flutter/build/app/outputs/flutter-apk/app-release.apk"
         if [[ -f "$APK" ]]; then

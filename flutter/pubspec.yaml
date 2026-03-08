@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   webview_flutter: ^4.13.1
   flutter_blue_plus: ^1.35.0
+  pointycastle: ^3.9.1
+  convert: ^3.1.2
 
 dev_dependencies:
   flutter_test:

@@ -11,6 +11,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import 'matter/pase_commissioning.dart';
+
 /// Matter BLE 상수
 class MatterBle {
   static const serviceUuid = '0000fff6-0000-1000-8000-00805f9b34fb';
@@ -152,11 +154,11 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
   }
 
   Future<void> _onDeviceSelected(MatterBleDevice device) async {
-    // Phase 2: BLE 연결 + PASE + WiFi credentials
-    // 지금은 정보 표시만
-    setState(() => _status = '${device.name} 선택됨 (커미셔닝 준비 중...)');
+    setState(() => _status = '${device.name} 선택됨');
 
-    showDialog(
+    // Setup PIN 입력 다이얼로그
+    final pinController = TextEditingController();
+    final pin = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(device.name),
@@ -168,26 +170,75 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
             Text('RSSI: ${device.rssi} dBm'),
             if (device.discriminator != null)
               Text('Discriminator: ${device.discriminator}'),
-            if (device.vendorId != null)
-              Text('Vendor ID: 0x${device.vendorId!.toRadixString(16)}'),
-            if (device.productId != null)
-              Text('Product ID: 0x${device.productId!.toRadixString(16)}'),
             const SizedBox(height: 16),
-            const Text(
-              'Phase 2: BLE 커미셔닝 구현 예정\n'
-              '(BTP → PASE → WiFi → on-network)',
-              style: TextStyle(color: Colors.orange, fontSize: 12),
+            TextField(
+              controller: pinController,
+              decoration: const InputDecoration(
+                labelText: 'Setup PIN (숫자 8자리)',
+                hintText: '예: 05641540',
+              ),
+              keyboardType: TextInputType.number,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('닫기'),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = pinController.text.replaceAll('-', '').replaceAll(' ', '');
+              final parsed = int.tryParse(text);
+              if (parsed != null) Navigator.pop(ctx, parsed);
+            },
+            child: const Text('페어링'),
           ),
         ],
       ),
     );
+
+    if (pin == null) return;
+
+    // PASE 커미셔닝 실행
+    setState(() => _status = 'PASE 커미셔닝 시작...');
+    await FlutterBluePlus.stopScan();
+
+    final commissioner = BlePaseCommissioner(
+      device: device.device,
+      setupPin: pin,
+      onStateChange: (state, message) {
+        setState(() => _status = message);
+      },
+    );
+
+    final result = await commissioner.run();
+
+    if (result.success) {
+      setState(() => _status = '✅ PASE 성공! 세션 키 획득');
+
+      // TODO Phase 3: WiFi credentials 전달 + on-network 커미셔닝
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('PASE 성공!'),
+            content: const Text(
+              '디바이스와 보안 세션이 수립되었습니다.\n\n'
+              'Phase 3: WiFi 설정 + on-network 커미셔닝 예정',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      setState(() => _status = '❌ 실패: ${result.error}');
+    }
   }
 
   @override

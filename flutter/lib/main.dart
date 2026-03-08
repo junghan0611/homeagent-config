@@ -64,6 +64,7 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    debugPrint('[HomeAgent] serverUrl=$_serverUrl, useWebView=$_useWebView');
     _startBackend();
   }
 
@@ -82,32 +83,19 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
   }
 
   Future<void> _startBackend() async {
-    final mode = detectBackendMode();
+    // 항상 외부 서버 모드로 시작 (서버 URL은 dart-define으로 지정)
+    // 추후 번들 모드 추가 시 detectBackendMode() 사용
+    setState(() => _status = '서버 연결 중... $_serverUrl');
+    debugPrint('[HomeAgent] 서버 연결 시도: $_serverUrl');
 
-    if (mode == BackendMode.bundle) {
-      setState(() => _status = '백엔드 시작 중...');
-      final bundlePath = '${_appFilesDir()}/backend';
-      _backend = BackendProcess(bundlePath: bundlePath, goPort: _goPort);
+    for (int i = 0; i < 10; i++) {
       try {
-        await _backend!.start();
-        setState(() {
-          _serverReady = true;
-          _isLoading = false;
-          _status = '';
-        });
-      } catch (e) {
-        setState(() {
-          _isLoading = false;
-          _error = '백엔드 시작 실패: $e';
-        });
-      }
-    } else {
-      // External mode: healthcheck 후 연결
-      setState(() => _status = '서버 확인 중...');
-      final checker = BackendProcess(bundlePath: '', goPort: _goPort);
-
-      for (int i = 0; i < 10; i++) {
-        if (await checker.checkHealth()) {
+        final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+        final request = await client.getUrl(Uri.parse('$_serverUrl/api/devices'));
+        final response = await request.close();
+        await response.drain();
+        if (response.statusCode == 200) {
+          debugPrint('[HomeAgent] 서버 연결 성공!');
           setState(() {
             _serverReady = true;
             _isLoading = false;
@@ -115,14 +103,17 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
           });
           return;
         }
-        await Future.delayed(const Duration(seconds: 1));
+      } catch (e) {
+        debugPrint('[HomeAgent] 연결 시도 ${i + 1}/10: $e');
       }
-
-      setState(() {
-        _isLoading = false;
-        _error = '서버를 찾을 수 없습니다 ($_serverUrl)\nGo 서버를 먼저 실행하세요';
-      });
+      await Future.delayed(const Duration(seconds: 1));
     }
+
+    debugPrint('[HomeAgent] 서버 연결 실패: $_serverUrl');
+    setState(() {
+      _isLoading = false;
+      _error = '서버를 찾을 수 없습니다\n$_serverUrl\nGo 서버를 먼저 실행하세요';
+    });
   }
 
   String _appFilesDir() {

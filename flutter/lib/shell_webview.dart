@@ -22,11 +22,23 @@ class _ShellWebViewState extends State<ShellWebView> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) => setState(() => _isLoading = true),
-          onPageFinished: (_) => setState(() => _isLoading = false),
-          onWebResourceError: (error) => setState(() => _isLoading = false),
+          onPageStarted: (url) {
+            debugPrint('[WebView] 페이지 로딩 시작: $url');
+            setState(() => _isLoading = true);
+          },
+          onPageFinished: (url) {
+            debugPrint('[WebView] 페이지 로딩 완료: $url');
+            setState(() => _isLoading = false);
+          },
+          onWebResourceError: (error) {
+            debugPrint('[WebView] 에러: ${error.errorCode} ${error.description}');
+            setState(() => _isLoading = false);
+          },
         ),
       )
+      ..setOnConsoleMessage((message) {
+        debugPrint('[WebView:JS] ${message.level}: ${message.message}');
+      })
       ..loadRequest(Uri.parse(widget.serverUrl));
   }
 

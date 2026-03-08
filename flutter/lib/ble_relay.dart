@@ -116,19 +116,35 @@ class BleRelay {
         if (!hasMatter) continue;
 
         // FFF6 서비스 데이터 추출
-        final matterGuid = Guid(_MatterBle.serviceUuid);
+        // Android에서 serviceData key 포맷이 다를 수 있으므로 fff6 포함 여부로 매칭
         final serviceData = r.advertisementData.serviceData;
+        List<int>? matterData;
+
         for (final entry in serviceData.entries) {
-          if (entry.key == matterGuid) {
-            _send({
-              'event': 'ble_scan_result',
-              'address': r.device.remoteId.toString(),
-              'serviceData': entry.value.toList(),
-              'rssi': r.rssi,
-              'name': r.device.platformName,
-            });
+          final keyStr = entry.key.toString().toLowerCase();
+          if (keyStr.contains('fff6')) {
+            matterData = entry.value.toList();
+            break;
           }
         }
+
+        if (matterData == null) {
+          // serviceUuids에는 있지만 serviceData에 없는 경우
+          print('[BLE-RELAY] FFF6 service found but no serviceData for '
+              '${r.device.remoteId} (keys: ${serviceData.keys.map((k) => k.toString()).join(", ")})');
+          continue;
+        }
+
+        print('[BLE-RELAY] scan: ${r.device.remoteId} rssi=${r.rssi} '
+            'data=${matterData.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")}');
+
+        _send({
+          'event': 'ble_scan_result',
+          'address': r.device.remoteId.toString(),
+          'serviceData': matterData,
+          'rssi': r.rssi,
+          'name': r.device.platformName,
+        });
       }
     });
 

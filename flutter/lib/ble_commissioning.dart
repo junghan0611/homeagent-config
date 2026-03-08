@@ -84,35 +84,65 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       // 3. Commission 요청 (network_only=false → matterjs가 BLE 커미셔닝)
       await _requestCommission(info.pairingCode);
 
-      setState(() => _status = '✅ 커미셔닝 진행 중 (백그라운드)');
+      setState(() => _status = '⏳ 커미셔닝 진행 중...');
 
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('커미셔닝 진행 중'),
-            content: Text(
-              'matterjs가 BLE → WiFi → on-network 커미셔닝을\n'
-              '백그라운드에서 진행합니다.\n\n'
-              'BLE relay가 바이트를 중계 중입니다.\n'
-              '완료되면 디바이스 목록에 나타납니다.\n\n'
-              'Pairing: ${info.pairingCode}\n'
-              'WiFi: ${info.ssid}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
-        );
-      }
+      // SSE로 커미셔닝 결과 추적
+      _listenCommissionResult(info.pairingCode, info.ssid);
     } catch (e) {
       setState(() => _status = '❌ 커미셔닝 실패: $e');
     } finally {
       setState(() => _commissioning = false);
     }
+  }
+
+  /// SSE로 커미셔닝 결과 추적
+  void _listenCommissionResult(String code, String ssid) {
+    final client = HttpClient();
+    final sseUri = Uri.parse('${widget.serverUrl}/api/events');
+
+    client.getUrl(sseUri).then((request) {
+      return request.close();
+    }).then((response) {
+      response
+          .transform(const SystemEncoding().decoder)
+          .listen((chunk) {
+        // SSE 파싱: "data: {...}\n\n"
+        for (final line in chunk.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          final data = line.substring(6);
+          if (data.contains('device_added') || data.contains('commission_result')) {
+            if (mounted) {
+              setState(() => _status = '✅ 커미셔닝 성공!');
+              _showResultDialog('커미셔닝 완료', '디바이스가 추가되었습니다.\nWiFi: $ssid');
+            }
+          } else if (data.contains('commission_error')) {
+            if (mounted) {
+              setState(() => _status = '❌ 커미셔닝 실패');
+              _showResultDialog('커미셔닝 실패', '자세한 내용은 로그를 확인하세요.\nCode: $code');
+            }
+          }
+        }
+      });
+    }).catchError((e) {
+      print('[COMM] SSE connection failed: $e');
+    });
+  }
+
+  void _showResultDialog(String title, String content) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// WiFi + Pairing Code 입력 다이얼로그

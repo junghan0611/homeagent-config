@@ -208,6 +208,9 @@ export class RemoteBleCentralInterface {
     }
 
     // 3. BTP 세션 생성
+    // channel을 먼저 선언 — disconnect/message 콜백에서 참조 (TDZ 방지)
+    let channel;
+
     const btpSession = await BtpSessionHandler.createAsCentral(
       new Uint8Array(hsResponse),
       // writeBleCallback — C1 write
@@ -221,12 +224,14 @@ export class RemoteBleCentralInterface {
       // disconnectBleCallback
       async () => {
         this.#sendToFlutter({ cmd: "ble_disconnect", address: peripheralAddress });
-        channel.setDisconnected();
+        if (channel) {
+          channel.setDisconnected();
+        }
         this.#openChannels.delete(peripheralAddress);
       },
       // handleMatterMessagePayload — 조립된 Matter 메시지
       async (data) => {
-        if (this.#onMatterMessageListener) {
+        if (this.#onMatterMessageListener && channel) {
           this.#onMatterMessageListener(channel, data);
         }
       },
@@ -237,7 +242,7 @@ export class RemoteBleCentralInterface {
       btpSession.handleIncomingBleData(new Uint8Array(data));
     });
 
-    const channel = new RemoteBleChannel(peripheralAddress, btpSession);
+    channel = new RemoteBleChannel(peripheralAddress, btpSession);
     this.#openChannels.set(peripheralAddress, channel);
 
     logger.info(`BLE channel established to ${peripheralAddress}`);

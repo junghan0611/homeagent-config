@@ -140,7 +140,10 @@ if [ "$SKIP_MATTER" = false ]; then
     log "Remote BLE 코드 주입..."
 
     # 더미 @matter/nodejs-ble — noble import 방지
+    # npm install이 원본을 다시 가져올 수 있으므로 먼저 삭제
     NODEJS_BLE_DIR="$BUNDLE_DIR/matterjs-server/node_modules/@matter/nodejs-ble"
+    rm -rf "$NODEJS_BLE_DIR"
+    rm -rf "$BUNDLE_DIR/matterjs-server/node_modules/@stoprocent"
     mkdir -p "$NODEJS_BLE_DIR/dist/esm" "$NODEJS_BLE_DIR/dist/cjs"
     cp "$PROJECT_DIR/matterjs-server/remote-ble/dummy-nodejs-ble-index.js" \
        "$NODEJS_BLE_DIR/dist/esm/index.js"

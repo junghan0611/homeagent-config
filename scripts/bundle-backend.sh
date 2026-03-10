@@ -8,6 +8,7 @@
 #   ├── node/                      # Node.js arm64 바이너리
 #   ├── matterjs-server/           # matter-server npm 패키지
 #   ├── aliases.json               # 디바이스 별칭
+#   ├── otbr/                      # Thread OTBR (otbr-agent + ot-ctl)
 #   ├── start.sh                   # 원커맨드 시작 스크립트
 #   └── .env                       # 환경변수 템플릿
 #

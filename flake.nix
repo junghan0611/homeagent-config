@@ -27,7 +27,7 @@
           buildToolsVersions = [ "28.0.3" "34.0.0" "35.0.0" "36.0.0" ];
           platformVersions = [ "34" "35" "36" ];
           includeNDK = true;
-          ndkVersions = [ "27.0.12077973" "28.2.13676358" ];
+          ndkVersions = [ "27.0.12077973" ];
           cmakeVersions = [ "3.22.1" ];
         };
         androidSdk = androidComposition.androidsdk;

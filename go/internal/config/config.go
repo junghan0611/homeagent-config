@@ -25,6 +25,9 @@ type Config struct {
 
 	// Device aliases
 	AliasesFile string
+
+	// OTBR ot-ctl path (for Thread dataset retrieval)
+	OtCtlPath string
 }
 
 func Load() *Config {
@@ -37,6 +40,7 @@ func Load() *Config {
 		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
 		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.5-flash"),
 		AliasesFile:   envOr("HOMEAGENT_ALIASES", "/opt/homeagent/aliases.json"),
+		OtCtlPath:     envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
 	}
 }
 

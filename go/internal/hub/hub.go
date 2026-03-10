@@ -17,8 +17,8 @@ import (
 )
 
 // getOTBRDataset fetches the active Thread dataset from ot-ctl
-func getOTBRDataset() (string, error) {
-	out, err := exec.Command("ot-ctl", "dataset", "active", "-x").Output()
+func getOTBRDataset(otCtlPath string) (string, error) {
+	out, err := exec.Command(otCtlPath, "dataset", "active", "-x").Output()
 	if err != nil {
 		return "", fmt.Errorf("ot-ctl: %w", err)
 	}
@@ -131,7 +131,7 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 
 	// 3.5. Inject Thread dataset from OTBR if not set
 	if info := h.matter.Info(); info != nil && !info.ThreadCredentialsSet {
-		if dataset, err := getOTBRDataset(); err != nil {
+		if dataset, err := getOTBRDataset(h.cfg.OtCtlPath); err != nil {
 			log.Printf("[hub] OTBR dataset fetch failed: %v (continuing)", err)
 		} else if dataset != "" {
 			if err := h.matter.SetThreadDataset(ctx, dataset); err != nil {

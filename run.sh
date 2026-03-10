@@ -1023,6 +1023,18 @@ case "${1:-help}" in
         shift
         "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" logs "${1:-all}"
         ;;
+    rk-thread)
+        shift
+        adb push "${SCRIPT_DIR}/scripts/rk3576-thread.sh" /data/local/tmp/rk3576-thread.sh
+        adb shell "sh /data/local/tmp/rk3576-thread.sh ${1:-status}"
+        ;;
+    rk-thread-start)
+        adb push "${SCRIPT_DIR}/scripts/rk3576-thread.sh" /data/local/tmp/rk3576-thread.sh
+        adb shell "sh /data/local/tmp/rk3576-thread.sh start"
+        ;;
+    rk-thread-stop)
+        adb shell "sh /data/local/tmp/rk3576-thread.sh stop"
+        ;;
     bundle)
         shift
         "${SCRIPT_DIR}/scripts/bundle-backend.sh" "$@"

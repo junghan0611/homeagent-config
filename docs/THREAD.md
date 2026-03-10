@@ -1,0 +1,130 @@
+# Thread Border Router — HomeAgent
+
+## 아키텍처
+
+```
+ESP32-H2 (Thread RCP)
+  └─ Spinel HDLC (UART)
+       └─ otbr-agent
+            ├─ wpan0 (TUN interface)
+            ├─ SRP Server (Thread mDNS proxy)
+            ├─ Border Routing (IPv6)
+            └─ ot-ctl (CLI)
+                 └─ Go Hub getOTBRDataset()
+                      └─ matterjs set_thread_dataset
+                           └─ BLE commissioning → Thread join
+```
+
+## 플랫폼별 구성
+
+| 항목 | RPi5 (Yocto) | RK3576 (Android) |
+|------|-------------|-----------------|
+| RCP 디바이스 | /dev/ttyUSB0 | /dev/ttyS5 |
+| RCP baudrate | 460800 | 460800 |
+| backbone IF | eth0 | wlan0 |
+| mDNS | avahi-daemon | mDNSResponder |
+| init system | systemd | scripts/rk3576-thread.sh |
+| otbr-agent | Yocto 패키지 | NDK arm64 빌드 |
+
+## 환경변수
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `HOMEAGENT_OT_CTL` | `ot-ctl` | ot-ctl 바이너리 경로 |
+
+RPi5: `ot-ctl`이 PATH에 있으므로 기본값 사용.
+RK3576: `HOMEAGENT_OT_CTL=/data/local/tmp/otbr/ot-ctl`
+
+## RPi5 (Yocto)
+
+systemd 서비스로 자동 시작:
+- `otbr-agent.service` — Thread Border Router
+- `otbr-thread-init.service` — Thread 네트워크 초기화
+- `otbr-srp-enable.service` — SRP Server 활성화
+
+설정 파일: `yocto/meta-homeagent/recipes-connectivity/openthread/ot-br-posix/`
+
+## RK3576 (Android)
+
+### NDK 빌드
+
+```bash
+# devShell 진입
+cd ~/repos/gh/homeagent-config
+nix develop .#dev --impure
+
+# ot-br-posix 빌드
+cd ~/repos/3rd/ot-br-posix
+cmake -B build-android \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/28.2.13676358/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-35 \
+  -DANDROID_STL=c++_static \
+  -DBUILD_TESTING=OFF \
+  -DOTBR_DBUS=OFF -DOTBR_REST=OFF -DOTBR_WEB=OFF \
+  -DOTBR_MDNS=mDNSResponder \
+  -DOTBR_BACKBONE_ROUTER=ON -DOTBR_BORDER_ROUTING=ON \
+  -DOTBR_SRP_ADVERTISING_PROXY=ON -DOTBR_BORDER_AGENT=ON \
+  -DOT_SRP_SERVER=ON -DOT_ECDSA=ON -DOT_SERVICE=ON \
+  -DOTBR_INFRA_IF_NAME=wlan0 -DOTBR_NO_AUTO_ATTACH=1
+
+cmake --build build-android -j$(nproc)
+```
+
+산출물:
+- `build-android/src/agent/otbr-agent`
+- `build-android/third_party/openthread/repo/src/posix/ot-ctl`
+
+### 배포
+
+```bash
+adb push otbr-agent /data/local/tmp/otbr/
+adb push ot-ctl /data/local/tmp/otbr/
+```
+
+### 실행
+
+```bash
+# Thread 시작
+./run.sh rk-thread-start
+
+# 상태 확인
+./run.sh rk-thread status
+
+# 중지
+./run.sh rk-thread-stop
+```
+
+또는 직접:
+```bash
+adb shell sh /data/local/tmp/rk3576-thread.sh start
+```
+
+### 주의사항
+
+1. **Android Thread HAL 중지 필수** — `/dev/ttyS5` 독점 방지
+   ```bash
+   adb shell stop vendor.threadnetwork_hal
+   ```
+
+2. **SELinux permissive** — otbr-agent가 TUN/UART 접근 필요
+   ```bash
+   adb shell setenforce 0
+   ```
+
+3. **baudrate** — HAL rc 기준 460800. 안 되면 115200 시도.
+
+## Go 통합
+
+`hub.go`가 자동으로:
+1. `ot-ctl dataset active -x`로 Thread dataset 추출
+2. matterjs `set_thread_dataset`으로 주입
+3. BLE commissioning 시 Thread credentials 자동 전달
+
+```go
+// config.go
+OtCtlPath: envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
+
+// hub.go
+getOTBRDataset(h.cfg.OtCtlPath)
+```

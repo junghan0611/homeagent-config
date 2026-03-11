@@ -89,6 +89,7 @@ go/homeagent
 ui/node_modules
 ui/dist
 dist/
+office/
 
 # Flutter Android 빌드 아티팩트
 flutter/build/

@@ -6,6 +6,7 @@ Agent2Agent Protocol 적용 — 에이전트 간 통신 구현 가이드
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-03-11 | **ACP vs A2A 비교 추가**: "누가 에이전트인가?" 관점, HomeAgent 선택 근거 |
 | 2026-03-11 | **v1.0 RC 기준 전면 개편**: Go SDK(a2a-go/v2), 3계층 spec, 로컬 검증 액션플랜 |
 | 2026-02-09 | 런타임 스택 확정: Go(컨트롤러) + Node.js(프로토콜) + Zig(소형 디바이스 펌웨어) |
 | 2026-02-05 | Constitutional AI 섹션 추가, 증류 개념 구체화 |
@@ -13,20 +14,137 @@ Agent2Agent Protocol 적용 — 에이전트 간 통신 구현 가이드
 
 ---
 
-## A2A vs MCP — 왜 A2A인가
+## 누가 에이전트인가? — ACP vs A2A
 
-| 프로토콜 | 역할 | 비유 |
-|----------|------|------|
-| **MCP** (Anthropic) | 에이전트 → 도구/리소스 | 정비사가 **렌치를 사용**하는 것 |
-| **A2A** (Google/LF) | 에이전트 ↔ 에이전트 | 정비사가 **부품상에 전화**하는 것 |
+에이전트 통신 프로토콜은 결국 하나의 질문으로 귀결된다: **"누가 에이전트인가?"**
 
-HomeAgent의 핵심 가치는 **에이전트 간 협업**이다:
-- 집의 센서 데이터를 가진 HomeAgent ↔ 추론 능력을 가진 Master Agent
-- HomeAgent ↔ OpenClaw 봇 (TTS, Telegram, 채팅)
-- HomeAgent ↔ durable-iot-migrate (마이그레이션 오케스트레이션)
+### 세 프로토콜의 본질
 
-MCP는 도구 호출 — HomeAgent가 이미 하고 있는 것 (REST API, LLM tool calling).
-A2A는 에이전트 협업 — HomeAgent가 **아직 못 하는 것**. 이게 다음 단계다.
+```
+MCP:  Human → [Agent] → Tool      "에이전트가 도구를 쓴다"
+ACP:  Human → [Agent] ↔ [Agent]   "에이전트가 에이전트를 호출한다"
+A2A:  Human → [Agent] ↔ [Agent]   "에이전트가 에이전트와 협업한다"
+```
+
+MCP는 **에이전트의 팔**이다 — 도구를 잡는 손. ACP와 A2A는 둘 다 **에이전트 간 통신**이지만, "에이전트"를 바라보는 철학이 다르다.
+
+### ACP (Agent Communication Protocol) — "에이전트는 함수다"
+
+| 항목 | 값 |
+|------+---|
+| 출처 | IBM Research / BeeAI (2025) |
+| 관리 | Linux Foundation |
+| 철학 | REST-native, local-first, 프레임워크 불문 |
+| SDK | Python, TypeScript (Go SDK 없음 — Coder의 ACP-Go는 다른 프로토콜) |
+| 참조 구현 | BeeAI Platform |
+
+ACP에서 에이전트는 **REST 엔드포인트**다:
+
+```
+POST /runs                    → 실행 시작
+GET  /runs/{id}               → 상태 조회
+POST /runs/{id}/cancel        → 취소
+GET  /agents                  → 에이전트 목록 (디스커버리)
+```
+
+에이전트 호출은 함수 호출과 같다. `POST /runs`에 입력을 넣으면 출력이 나온다.
+세션, 스트리밍, 비동기 — 모두 지원하지만, 핵심 모델은 **입력 → 처리 → 출력**.
+
+**ACP의 "에이전트"**: 잘 정의된 입출력을 가진 처리 단위. 내부가 LLM이든 규칙 엔진이든 상관없다.
+프레임워크 불문 — LangChain 에이전트든 CrewAI 에이전트든 ACP 서버로 감싸면 된다.
+
+### A2A (Agent2Agent Protocol) — "에이전트는 존재다"
+
+| 항목 | 값 |
+|------+---|
+| 출처 | Google (2025.04) |
+| 관리 | Linux Foundation |
+| 철학 | JSON-RPC/gRPC/REST, enterprise-scale, opaque execution |
+| SDK | Go, Python, JavaScript, Java, .NET (5개 언어 Stable) |
+| 버전 | v1.0 Release Candidate |
+
+A2A에서 에이전트는 **정체성을 가진 참여자**다:
+
+```json
+{
+  "name": "HomeAgent",
+  "description": "On-device smart home agent",
+  "skills": [...],
+  "capabilities": {...},
+  "securitySchemes": {...}
+}
+```
+
+AgentCard는 이력서다. "나는 이런 일을 할 수 있고, 이렇게 연락하면 된다."
+에이전트가 다른 에이전트를 **발견**하고, **협상**하고, **위임**한다.
+
+**A2A의 "에이전트"**: 자기 소개를 할 수 있고, 거절할 수 있고, 오래 걸리면 "좀 기다려" 할 수 있는 존재.
+내부는 철저히 불투명(opaque) — 상대방의 도구, 메모리, 계획에 접근하지 않는다.
+
+### 핵심 차이: 투명성 vs 불투명성
+
+| 관점 | ACP | A2A |
+|------+-----+-----|
+| **에이전트 내부** | 선택적 투명 (trajectory 메타데이터) | 철저히 불투명 (opaque execution) |
+| **호출 모델** | REST 함수 호출 | 메시지 교환 (대화) |
+| **발견** | 서버의 `/agents` 엔드포인트 | `/.well-known/agent.json` (자기 소개) |
+| **상태 관리** | 세션 기반 | Task 기반 (lifecycle: submitted→working→completed) |
+| **멀티턴** | 세션 내 메시지 누적 | contextId + taskId로 대화 연속 |
+| **스트리밍** | SSE/WebSocket | SSE (JSON-RPC), gRPC stream |
+| **배포 규모** | 로컬/클러스터 | 인터넷 규모 (enterprise) |
+| **Go SDK** | ❌ 없음 (Python/TS만) | ✅ Stable (a2a-go/v2) |
+
+### 비유로 이해하기
+
+**ACP**: 회사 내부 슬랙 봇들. 각자 채널에서 명령을 받고 결과를 뱉는다. 서로를 호출할 수 있다. 같은 사무실에 있다.
+
+**A2A**: 회사 간 계약 관계. 각자 명함(AgentCard)을 교환하고, 정식으로 일을 요청하고, 진행 상황을 보고받는다. 상대방 사무실 내부는 모른다.
+
+### HomeAgent는 왜 A2A를 선택했는가
+
+| 기준 | ACP | A2A | HomeAgent 적합도 |
+|------+-----+-----+------------------|
+| **Go SDK** | ❌ | ✅ | HomeAgent는 Go |
+| **불투명 실행** | △ | ✅ | 프라이버시 — 집 내부 데이터를 외부에 노출하지 않음 |
+| **AgentCard 자기 소개** | △ | ✅ | 에이전트가 스스로 능력을 선언 |
+| **enterprise 규모** | △ | ✅ | 클라이언트 프로젝트 확장 가능 |
+| **로컬 최적화** | ✅ | △ | HomeAgent는 로컬이지만, 외부 에이전트와 통신해야 함 |
+| **프레임워크 불문** | ✅ | ✅ | 둘 다 지원 |
+
+**결정적 이유 3가지**:
+
+1. **Go SDK** — HomeAgent는 Go. ACP에 Go SDK가 없다 (Coder의 ACP-Go는 코딩 에이전트용 별개 프로토콜).
+2. **Opaque Execution** — 집 센서 데이터를 외부에 노출하지 않는 것이 HomeAgent의 존재 이유. A2A의 불투명 실행 원칙이 정확히 맞는다.
+3. **AgentCard = 정체성** — HomeAgent는 단순 API가 아니라 **존재**다. 자기 소개를 하고, 능력을 선언하고, Constitutional AI 원칙에 따라 판단하는 에이전트. A2A의 모델이 이 철학과 맞닿는다.
+
+### ACP가 더 나은 경우
+
+ACP가 적합한 시나리오도 있다:
+
+- **Python/TS 에코시스템**: LangChain, CrewAI, LlamaIndex 에이전트를 빠르게 연결할 때
+- **BeeAI 플랫폼**: IBM의 에이전트 마켓플레이스를 활용할 때
+- **내부 클러스터**: Kubernetes에서 에이전트들을 마이크로서비스처럼 운영할 때
+- **trajectory 투명성**: 에이전트의 사고 과정(tool calling, reasoning steps)을 추적해야 할 때
+
+HomeAgent는 이 시나리오에 해당하지 않는다. 하지만 durable-iot-migrate의 Worker가 Python이라면 ACP도 고려할 수 있다.
+
+### 공존 가능성
+
+ACP와 A2A는 경쟁이 아니라 계층이 다르다:
+
+```
+인터넷/엔터프라이즈 ──── A2A ────── 에이전트 간 계약
+                                      │
+로컬 클러스터 ──────── ACP ────── 에이전트 간 호출
+                                      │
+모델 ↔ 도구 ──────── MCP ────── 도구 호출
+```
+
+하나의 에이전트가 A2A로 외부에 자신을 노출하면서, 내부적으로 ACP로 sub-agent들을 조율할 수 있다. 충돌하지 않는다.
+
+HomeAgent의 현재 선택: **A2A 먼저** (외부 통신). ACP는 내부 sub-agent가 필요해지면 그때.
+
+---
 
 ## 프로토콜 현황 (2026-03)
 

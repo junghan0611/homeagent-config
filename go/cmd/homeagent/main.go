@@ -24,6 +24,8 @@ func main() {
 	rootCmd.AddCommand(tuiCmd())
 	rootCmd.AddCommand(devicesCmd())
 	rootCmd.AddCommand(controlCmd())
+	rootCmd.AddCommand(a2aTestCmd())
+	rootCmd.AddCommand(a2aCardCmd())
 	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.Execute(); err != nil {

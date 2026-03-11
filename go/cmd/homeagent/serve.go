@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	homeagentA2A "github.com/junghan0611/homeagent/internal/a2a"
 	"github.com/junghan0611/homeagent/internal/config"
 	"github.com/junghan0611/homeagent/internal/hub"
 	"github.com/spf13/cobra"
@@ -52,6 +55,26 @@ func runServe(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
 	})
 	h.RegisterHTTP(mux)
+
+	// A2A Protocol endpoint
+	baseURL := fmt.Sprintf("http://localhost%s", cfg.HTTPAddr)
+	agentCard := homeagentA2A.NewAgentCard(baseURL)
+
+	adapter := &homeagentA2A.HubAdapter{
+		DevicesFn: func() (json.RawMessage, error) {
+			devices := h.Devices()
+			return json.Marshal(devices)
+		},
+		// ChatFn: set to nil for Phase 0 (no LLM dependency)
+	}
+	executor := &homeagentA2A.HomeAgentExecutor{
+		Devices: adapter,
+		Chat:    adapter,
+	}
+	a2aHandler := a2asrv.NewHandler(executor)
+	mux.Handle("/.well-known/agent.json", a2asrv.NewStaticAgentCardHandler(agentCard))
+	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2aHandler))
+	log.Printf("A2A 엔드포인트: %s/a2a", baseURL)
 
 	// Static file serving (UI)
 	uiDir := os.Getenv("HOMEAGENT_UI_DIR")

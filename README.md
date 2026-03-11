@@ -1,8 +1,8 @@
 # HomeAgent
 
-**Open-source Matter smart home platform with on-device AI agent.**
+**Open-source Matter smart home hub with on-device AI agent.**
 
-RPi5 · Yocto · Go · Matter · LLM Agent · Flutter · Lit Frontend
+RPi5 · RK3576 · Yocto · Android · Go · Matter · LLM Agent · Flutter · Thread
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -12,32 +12,55 @@ RPi5 · Yocto · Go · Matter · LLM Agent · Flutter · Lit Frontend
 
 **"Data Privacy + On-device AI + Matter Hub"**
 
-HomeAgent is a **self-hosted smart home hub** that runs entirely on a Raspberry Pi 5. No cloud required. It combines Matter device control, real-time event streaming, and an LLM-powered agent — all in a single Go binary.
+HomeAgent is a **self-hosted smart home hub** — no cloud required. It combines Matter device control, real-time event streaming, and an LLM-powered agent, all in a single Go binary. Runs on RPi5 (Yocto Linux) and RK3576 (Android), same codebase.
 
 This is not just a smart home controller. It's a **physical anchor for offline agent collaboration** — where an edge AI guards your space, cooperates with cloud agents when needed, and always keeps your data local.
 
 ```
 Flutter App (ivi-homescreen / Android APK)
   └── WebView ──▶ Go HomeAgent v0.8 (:8080)
-                   ├── REST API (devices, commission, command, chat, home)
+                   ├── REST API (8 device commands + commission + chat + SSE)
                    ├── LLM Agent (OpenRouter / on-device sLLM)
                    ├── A2UI (server-driven UI, time-based theme)
+                   ├── TUI (bubbletea terminal dashboard)
                    ├── Matter WS Client (single ReadLoop)
-                   └── Lit Frontend (dashboard, pairing, chat, A2UI renderer)
-                            │
-                   matterjs-server (:5580)
-                   ├── Thread devices (OTBR)
-                   └── WiFi devices
+                   └── matterjs-server (:5580)
+                        ├── BLE commissioning (WiFi + Thread)
+                        └── OTBR integration (Thread Border Router)
 ```
 
-### Why?
+---
 
-- **Privacy**: 카메라, 센서 데이터가 집 밖으로 나가지 않는다
-- **Cooperation**: 인간과 에이전트의 상호협력 베이스 구축
-- **Reproducibility**: SD 카드 플래싱 → 부팅 → 즉시 동작하는 재현 가능한 이미지
+## Platform Support
 
-> *"구현은 언제나 쉽습니다. 이제는 한번에 다 만들어 낼 수 있는 시대입니다.
-> 왜 하는가? 어떻게 하는가? 무엇을 위해서 하는가?를 되새기는 것입니다."*
+HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) for the full comparison.
+
+```
+                     Common Layer
+  ┌──────────────────────────────────────────────────┐
+  │  Flutter APK (WebView Shell)      — same code    │
+  │  Go homeagent (:8080)             — same binary  │
+  │  Lit UI (ui/dist/)                — same bundle  │
+  │  matterjs-server (:5580)          — same Node.js │
+  │  matter/ (pure Dart)              — same BLE     │
+  ├──────────────────────────────────────────────────┤
+  │               Platform Divergence                │
+  └──────────────────────────────────────────────────┘
+
+  RPi5 (Yocto Linux)              RK3576 (Android 15)
+  ─────────────────              ───────────────────
+  ivi-homescreen (Wayland)       Flutter APK (WebView)
+  systemd services               shell scripts
+  otbr-agent (bitbake)           otbr-agent (NDK build)
+  avahi mDNS                     OT core mDNS (built-in)
+  /dev/ttyUSB0 (ZBDongle-E)     /dev/ttyS5 (ESP32-H2)
+  eth0 backbone                  wlan0 backbone
+```
+
+| Platform | Board | OS | Thread RCP | Status |
+|----------|-------|----|-----------|--------|
+| RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap | ZBDongle-E (USB) | ✅ Production |
+| RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
 
 ---
 
@@ -46,105 +69,77 @@ Flutter App (ivi-homescreen / Android APK)
 - 🔌 **Matter Hub** — Commission and control Thread + WiFi devices via BLE
 - 📡 **Real-time Events** — SSE streaming for instant state updates
 - 🤖 **LLM Agent** — Natural language → device control (Gemini Flash, ~$0.02/day)
-- 🏗️ **Yocto Image** — Reproducible: flash SD card → boot → works
-- 🔒 **Privacy First** — No cloud dependency, on-device processing
-- 📱 **Cross-platform App** — Flutter WebView shell (Yocto + Android), same codebase
+- 🧵 **Thread Border Router** — OTBR on both Yocto and Android (NDK cross-build)
+- 🏗️ **Reproducible Build** — Yocto image (RPi5) or NDK bundle (RK3576)
+- 🔒 **Privacy First** — No cloud dependency, all processing on-device
+- 📱 **Cross-platform** — Flutter WebView shell (Yocto + Android), same codebase
+- 🖥️ **TUI Dashboard** — Terminal interface for fast feature validation (bubbletea)
 - 🌐 **Web UI** — Lit WebComponents, works on any browser
 
 ---
 
-## Agent Architecture: Cooperative AI
+## Roadmap & History
 
-HomeAgent는 단순 조건문 엔진이 아니다. **컨텍스트를 이해하고, 원칙에 따라 판단하는 에이전트**다.
+> *History without which nothing is reproducible.*
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Master Agent (Cloud/PC)                  │
-│                 고성능 추론, 인터넷 접근 권한                │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ A2A Protocol (승인 기반)
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   HomeAgent (Edge/RPi5)                     │
-│              공간을 지키는 Offline-First 에이전트           │
-│  • 카메라 접근 O, 인터넷 직접 접근 X                       │
-│  • 제한된 자원에서 Best Effort                             │
-│  • 확실하지 않으면 사람에게 묻기                           │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-              ┌───────────┴───────────┐
-              │   User (Human)        │
-              │ 최종 승인권, 협력자    │
-              └───────────────────────┘
-```
+### Phase 1: Yocto + Protocol Verification ✅
 
-### Constitutional AI — 에이전트의 정체성
+The foundation. Prove that Matter works on a real RPi5.
 
-1. 생명과 안전이 최우선
-2. 거주자의 존엄성 존중
-3. 확실하지 않으면 사람에게 묻기
+- [x] Yocto scarthgap 5.0 LTS build + RPi5 boot
+- [x] OTBR auto-init (Thread leader + SRP server)
+- [x] ZBDongle-E Thread RCP firmware flash
+- [x] Zigbee2MQTT verification (pre-Matter data collection)
+- [x] Matter full flow: BLE → PASE → Thread → CommissioningComplete
+- [x] chip-tool vs matterjs-server oracle comparison (100% match)
 
-> *자세한 내용: [docs/A2A.md](docs/A2A.md)*
+### Phase 2: Matter + Go Controller ✅ (v0.8)
 
----
+The core. A working smart home hub.
 
-## A2UI — 에이전트가 그리는 동적 인터페이스
+- [x] matterjs-server WebSocket API
+- [x] Go controller v0.8 (Hub, SSE, REST 8 commands, auto Thread/WiFi inject)
+- [x] Lit frontend (dashboard, pairing, On/Off, event log, chat panel)
+- [x] Multi-device: Thread ×2 + WiFi ×1 simultaneously
+- [x] LLM agent chat (Gemini 2.5 Flash, natural language → device control)
+- [x] A2UI dynamic rendering (time-based Home Surface + LLM surfaceUpdate)
+- [x] `run.sh ha-deploy` one-command RPi5 deployment
 
-```
-❌ 기존: [컴파일된 UI] ← 사용자 입력 대기 → [반응]
-✅ A2UI: [에이전트] → 선언적 JSON → [뷰어가 렌더링]
-```
+### Phase 3: Cross-platform + Thread Independence ← **current**
 
-**[A2UI](https://a2ui.org)** (Agent-to-User Interface): 에이전트가 선언적 JSON으로 UI를 기술하면, 클라이언트가 렌더링하는 프로토콜. 실행 코드가 아닌 데이터이므로 UI 인젝션 방지.
+Multi-platform. Same hub, different hardware.
 
-- 에이전트가 상황에 맞게 동적으로 시각화 (surfaceUpdate)
-- 동일 프로토콜로 RPi5 디스플레이, 웹, 모바일 동시 지원
-- 빛, 형태, 움직임으로 공간과 소통하는 디지털 아트
+- [x] **Flutter cross-platform app** — Linux Desktop ✅, Android APK ✅ (43.7MB)
+- [x] **Yocto flutter-engine** — 3.38.3 build success
+- [x] **REST API 8 commands** — on/off/level/color/color_temp/thermostat/lock/unlock
+- [x] **Go TUI dashboard** — cobra + bubbletea (device view, control, SSE events)
+- [x] **RK3576 full stack** — Go + matterjs + APK running independently (no RPi5)
+- [x] **Matter BLE commissioning (pure Dart)** — BTP + PASE + TLV + Spake2+ (39 tests)
+- [x] **OTBR NDK arm64 build** — ot-br-posix cross-compiled for Android (6.9MB)
+- [x] **Reproducible build script** — `./run.sh otbr-build` (patches auto-applied)
+- [x] **Platform Matrix doc** — RPi5 vs RK3576 divergence points documented
+- [ ] **BTP handshake debugging** — Real device BLE timeout (bd-3cw)
+- [ ] **Thread on RK3576** — Deploy OTBR + ESP32-H2 Thread network (bd-277.1)
+- [ ] **A2UI theme invariant** — CSS variable single path (ha-2y3)
+- [ ] **Yocto homeagent recipe** — SD flash → boot → works (ha-2ua)
 
-> *UI는 뷰어일 뿐. 에이전트가 무엇을 어떻게 보여줄지 결정한다.*
-> *자세한 내용: [docs/A2UI.md](docs/A2UI.md)*
+### Phase 4: Agent Intelligence
 
----
+The mind. AI that understands context.
 
-## Runtime Stack
+- [ ] A2A protocol + Constitutional AI (ha-2h5)
+- [ ] OpenClaw integration — TTS/Telegram/chat delegated (ha-3nc)
+- [ ] On-device sLLM fine-tuning pipeline (ha-17d)
+- [ ] EdgeAI Runtime: Hailo + ONNX/TFLite (ha-3lu)
 
-```
-RPi5 (Yocto scarthgap) — HomeAgent 허브
-├── Go       HomeAgent (컨트롤러, AI 판단, 상태머신, A2A)
-├── Node.js  matterjs-server (Matter 프로토콜 엔진)
-├── Dart     Flutter WebView Shell (ivi-homescreen on Weston)
-├── C/C++    mosquitto, otbr-agent, avahi-daemon (시스템 인프라)
-└── (없음)   Python — 허브에서는 사용하지 않음
+### Phase 5: Production + Scale
 
-소형 디바이스 (Zig 펌웨어)
-└── Zig      센서/액추에이터 펌웨어 (Thread/Matter 엔드포인트)
-```
+The product. Ship it.
 
-**언어별 역할:**
-- **Go**: I/O-bound Matter/Zigbee에 goroutine+channel 적합. Thread 250kbps가 물리적 병목이므로 GC 무의미
-- **Node.js**: HA 2026.2에서 C++ SDK → matter.js 전환. C++ 크래시 문제로 순수 JS가 오히려 안정적
-- **Flutter/Dart**: 크로스플랫폼 앱 셸. Yocto(ivi-homescreen) + Android(APK) 동일 코드베이스
-- **Zig**: 런타임 없음 + C ABI 호환 → MCU 펌웨어 최적
-
----
-
-## Demo (2026-02-23)
-
-**3 devices managed simultaneously**, all from a web browser:
-
-| Device | Protocol | Features |
-|--------|----------|----------|
-| Tuya Door Sensor ×2 | Matter over Thread | Real-time open/close events |
-| Tapo Smart Plug ×1 | Matter over WiFi | On/Off toggle control |
-
-**LLM Agent chat** — natural language device control:
-```
-User: "플러그 꺼줘" (Turn off the plug)
-Agent: → Executes {action: "off", node_id: 8} → Plug turns off
-
-User: "문 열려있어?" (Is the door open?)
-Agent: "Node 7의 문이 열려있습니다." (Node 7's door is open.)
-```
+- [ ] RK3588 Yocto port (production target)
+- [ ] Hailo-8 M.2 NPU support
+- [ ] Zig firmware for custom Thread sensors
+- [ ] Client branding APK (bd-2jt)
 
 ---
 
@@ -164,74 +159,135 @@ Agent: "Node 7의 문이 열려있습니다." (Node 7's door is open.)
                   │ REST + SSE
 ┌─────────────────┴───────────────────────────┐
 │  Go HomeAgent (single binary, ~7MB)         │
-│  ├── Hub: state management, SSE broadcast   │
-│  ├── Agent: LLM → action extraction         │
+│  ├── Hub: state, SSE, REST 8 commands       │
+│  ├── Agent: LLM → action/surfaceUpdate      │
 │  ├── Surface: A2UI time-based theme         │
 │  ├── Matter: WS client, single ReadLoop     │
-│  └── Config: Thread dataset + WiFi inject   │
+│  ├── Config: Thread dataset + WiFi inject   │
+│  └── TUI: bubbletea terminal dashboard      │
 └─────────────────┬───────────────────────────┘
                   │ WebSocket
 ┌─────────────────┴───────────────────────────┐
 │  matterjs-server (matter.js, Node.js)       │
 │  BLE commissioning · Thread · WiFi · Events │
 └─────────────────┬───────────────────────────┘
-                  │
+                  │ Spinel HDLC (UART)
 ┌─────────────────┴───────────────────────────┐
-│  System (Yocto Linux, RPi5)                 │
-│  OTBR · mosquitto · avahi · Kernel 6.6 LTS  │
-└─────────────────────────────────────────────┘
+│  Thread Border Router (otbr-agent)          │
+│  wpan0 · SRP Server · Border Routing        │
+│  RPi5: Yocto bitbake / RK3576: NDK build   │
+└─────────────────┬───────────────────────────┘
+                  │
+              ESP32-H2 / ZBDongle-E (Thread RCP)
+```
+
+---
+
+## Agent Architecture: Cooperative AI
+
+HomeAgent is not a rule engine. It's an **agent with context, principles, and judgment**.
+
+```
+┌─────────────────────────────────────────┐
+│         Master Agent (Cloud/PC)         │
+│    High-performance reasoning, internet │
+└───────────────┬─────────────────────────┘
+                │ A2A Protocol (approval-based)
+                ▼
+┌─────────────────────────────────────────┐
+│        HomeAgent (Edge/RPi5/RK3576)     │
+│    Offline-first agent guarding space   │
+│  • Camera access ✓, direct internet ✗  │
+│  • Best effort on limited resources     │
+│  • Ask human when uncertain             │
+└───────────────┬─────────────────────────┘
+                │
+         ┌──────┴──────┐
+         │ User (Human)│
+         │ Final say   │
+         └─────────────┘
+```
+
+### Constitutional AI — Agent Identity
+
+1. Life and safety come first
+2. Respect the dignity of residents
+3. When uncertain, ask a human
+
+> *Details: [docs/A2A.md](docs/A2A.md)*
+
+---
+
+## A2UI — Agent-Driven Dynamic Interface
+
+```
+❌ Traditional: [Compiled UI] ← waits for input → [reacts]
+✅ A2UI:        [Agent] → declarative JSON → [Viewer renders]
+```
+
+**[A2UI](https://a2ui.org)** (Agent-to-User Interface): The agent describes UI in declarative JSON; the client renders it. Data, not executable code — preventing UI injection.
+
+> *The UI is just a viewer. The agent decides what to show and how.*
+> *Details: [docs/A2UI.md](docs/A2UI.md)*
+
+---
+
+## Runtime Stack
+
+```
+RPi5 (Yocto) / RK3576 (Android) — HomeAgent Hub
+├── Go       HomeAgent (controller, AI, state machine, A2A)
+├── Node.js  matterjs-server (Matter protocol engine)
+├── Dart     Flutter WebView Shell + pure Dart BLE commissioning
+├── C/C++    otbr-agent (Thread Border Router)
+└── (none)   Python — not used on the hub
+
+Dev environment (NixOS host)
+├── Go 1.25  go build / GOOS=linux GOARCH=arm64
+├── Flutter  3.38.9 (APK build, Linux desktop)
+├── NDK r27  ot-br-posix cross-compile
+└── Node 22  matterjs-server development
 ```
 
 ---
 
 ## Quick Start
 
-### Option A: Deploy to RPi5 (pre-built Yocto image)
+### Option A: Deploy to RPi5
 
 ```bash
 # Flash Yocto image
 bmaptool copy core-image-weston-raspberrypi5.wic.bz2 /dev/sdX
 
-# SSH in and start HomeAgent
+# SSH in and start
 ssh root@<rpi5-ip>
-OPENROUTER_API_KEY=sk-... \
-HOMEAGENT_WIFI_SSID="YourWiFi" \
-HOMEAGENT_WIFI_PASSWORD="password" \
-HOMEAGENT_UI_DIR=/opt/homeagent/ui \
-/opt/homeagent/homeagent
+OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 ```
 
 ### Option B: Flutter Development (Linux Desktop)
 
 ```bash
-# 터미널 1 — Go 서버 (Matter 없이 HTTP만)
-./run.sh flutter-server
-
-# 터미널 2 — Flutter 앱 (hot reload)
-./run.sh flutter-run
-
-# 또는 빌드 후 실행
-./run.sh flutter-build
-./run.sh flutter-exec
+./run.sh flutter-server   # Go server (no Matter)
+./run.sh flutter-run       # Flutter hot reload
 ```
 
-Linux Desktop에서는 **ShellNative** (Flutter 네이티브 위젯)로 Go API를 직접 호출합니다.
-Android/Yocto에서는 **ShellWebView** (WebView → A2UI + Lit UI)로 렌더링합니다.
-
-### Option C: Cross-compile + Deploy to RPi5
+### Option C: Build Everything
 
 ```bash
-# Go binary
-./run.sh go-build
+./run.sh go-build          # Go arm64 binary
+./run.sh apk-build         # Flutter Android APK
+./run.sh otbr-build        # OTBR arm64 (NDK)
+./run.sh bundle            # Full bundle (Go+Node+matterjs+UI)
+```
 
-# UI
-cd ui && npm install && npx vite build
+### Option D: Deploy to RK3576
 
-# Deploy
-./run.sh go-deploy
-
-# 또는 전체 번들 (Go + Node.js + matterjs + UI)
-./run.sh bundle
+```bash
+./run.sh apk-build         # Build APK
+./run.sh otbr-build        # Build OTBR
+./run.sh otbr-deploy       # adb push OTBR binaries
+./run.sh rk-thread-start   # Start Thread Border Router
+# APK install via adb install
 ```
 
 ---
@@ -240,46 +296,33 @@ cd ui && npm install && npx vite build
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/devices` | GET | List all devices with current state |
+| `/api/devices` | GET | List all devices with state |
 | `/api/devices/:node_id` | GET | Single device detail |
 | `/api/commission` | POST | Pair new device `{"code": "0000-000-0000"}` |
 | `/api/devices/command` | POST | Control: on/off/set_level/set_color/set_color_temp/set_thermostat/lock/unlock |
 | `/api/chat` | POST | LLM agent `{"message": "turn off the plug"}` |
-| `/api/home` | GET | A2UI Home Surface (time-based theme + device status) |
-| `/api/events` | GET | SSE stream (real-time state changes) |
+| `/api/home` | GET | A2UI Home Surface |
+| `/api/events` | GET | SSE stream |
 | `/healthz` | GET | Health check |
+
+> *Full spec: [docs/API.md](docs/API.md)*
 
 ---
 
-## Roadmap
+## Demo (2026-02-23)
 
-### Phase 1: Yocto + Protocol Verification ✅
-- Yocto build (scarthgap 5.0 LTS) + RPi5 boot
-- OTBR auto-init (Thread leader + SRP server)
-- Matter full flow: BLE → PASE → Thread → CommissioningComplete
+3 devices managed simultaneously:
 
-### Phase 2: Matter + Go Controller ✅ (v0.8)
-- [x] matterjs-server WebSocket API (100% match with chip-tool oracle)
-- [x] Go controller v0.8 (Hub, SSE, REST, auto Thread/WiFi inject, auto-reconnect)
-- [x] Lit frontend (dashboard, pairing, On/Off toggle, event log, chat panel)
-- [x] Multi-device: Thread ×2 + WiFi ×1 simultaneously
-- [x] LLM agent chat (Gemini 2.5 Flash, natural language → device control)
-- [x] A2UI dynamic rendering (time-based Home Surface + LLM surfaceUpdate)
-- [x] `run.sh ha-deploy` one-command build + deploy
+| Device | Protocol | Features |
+|--------|----------|----------|
+| Tuya Door Sensor ×2 | Matter over Thread | Real-time open/close events |
+| Tapo Smart Plug ×1 | Matter over WiFi | On/Off toggle control |
 
-### Phase 3: Agent Intelligence + Cross-platform ← **current**
-- [x] **Flutter cross-platform app** — Linux Desktop ✅, Android APK ✅ (43.7MB), Yocto flutter-engine ✅
-- [x] **REST API expansion** — 8 device commands, individual device query (ha-1uk.1)
-- [ ] **A2A protocol + Constitutional AI** — agent identity & cooperation (ha-2h5)
-- [ ] **OpenClaw integration** — TTS/Telegram/chat bots delegated to Claw ecosystem (ha-3nc)
-- [ ] **Yocto image: homeagent recipe** — SD flash → boot → works (ha-2ua)
-- [ ] On-device sLLM fine-tuning pipeline (ha-17d)
-- [ ] EdgeAI Runtime: Hailo + ONNX/TFLite (ha-3lu)
-
-### Phase 4: Production + Scale
-- [ ] RK3588 Yocto port (production target)
-- [ ] Hailo-8 M.2 NPU support
-- [ ] Zig firmware for custom Thread sensors
+LLM Agent:
+```
+User: "플러그 꺼줘" → Agent: {action: "off", node_id: 8} → Plug turns off
+User: "문 열려있어?" → Agent: "Node 7의 문이 열려있습니다."
+```
 
 ---
 
@@ -287,54 +330,47 @@ cd ui && npm install && npx vite build
 
 ```
 homeagent-config/
-├── go/                    # Go controller (homeagent binary)
-│   ├── cmd/homeagent/     # Entry point
-│   ├── internal/hub/      # Hub coordinator (state, SSE, REST)
-│   ├── internal/matter/   # matterjs-server WS client
-│   └── internal/agent/    # LLM agent (OpenRouter)
-├── flutter/               # Flutter WebView shell (Android + Yocto)
-│   ├── lib/main.dart      # WebView → Go server UI
-│   └── android/           # Android APK target
+├── go/                    # Go controller
+│   ├── cmd/homeagent/     # CLI: serve, tui, devices, control
+│   └── internal/          # hub, matter, agent, config
+├── flutter/               # Flutter WebView shell
+│   ├── lib/main.dart      # Platform-aware shell
+│   ├── lib/matter/        # Pure Dart: BTP, PASE, TLV, Spake2+
+│   └── test/matter/       # 39 unit tests
 ├── ui/                    # Lit frontend (Vite)
-│   └── src/               # app, device-card, chat-panel, a2ui-renderer
-├── yocto/                 # Yocto build
-│   ├── meta-homeagent/    # Custom recipes (matterjs-server, homeagent-app)
-│   └── sources/           # Layer symlinks (meta-flutter, meta-clang, ...)
-├── docs/                  # Architecture docs
-│   ├── A2A.md             # Agent protocol, Constitutional AI
-│   ├── A2UI.md            # Agent-to-User Interface strategy
-│   └── MATTER-VERIFY.md   # chip-tool vs matterjs-server comparison
-└── matter/                # chip-tool binaries
+├── scripts/
+│   ├── build-otbr.sh      # OTBR NDK arm64 build (reproducible)
+│   ├── bundle-backend.sh  # Full arm64 bundle
+│   └── rk3576-thread.sh   # Thread start/stop on Android
+├── patches/               # Third-party source patches
+│   └── ot-br-posix/       # NDK build fixes (auto-applied)
+├── yocto/                 # Yocto build config
+│   └── meta-homeagent/    # Recipes: homeagent, matterjs, OTBR
+├── docs/
+│   ├── PLATFORM-MATRIX.md # RPi5 vs RK3576 stack comparison
+│   ├── THREAD.md          # Thread Border Router guide
+│   ├── API.md             # REST API spec
+│   ├── FLUTTER.md         # Flutter shell architecture
+│   ├── A2UI.md            # Agent-driven UI strategy
+│   └── A2A.md             # Agent protocol, Constitutional AI
+└── aliases.json           # Device name/room mapping
 ```
 
 ---
 
-## Development Strategy
+## Build Commands
 
-```
-1. System Infra     Zigbee/MQTT/OTBR로 실제 디바이스 검증 ✅
-        ↓
-2. Matter 검증      chip-tool → matterjs-server로 Matter 디바이스 연동 ✅
-        ↓
-3. Go Controller    검증된 프로토콜 위에 컨트롤러 + LLM 에이전트 ✅
-        ↓
-4. Cross-platform   Flutter WebView Shell (Yocto + Android) ← current
-        ↓
-5. Agent Layer      A2A 프로토콜, Constitutional AI, sLLM
-```
-
-> *하드웨어 검증에 시간 쓰지 않는다. 검증된 오픈소스로 데이터 확보 후 코어 구현.*
-
----
-
-## Hardware
-
-| Component | Spec |
-|-----------|------|
-| Main Board | Raspberry Pi 5 (8GB recommended) |
-| Thread RCP | ZBDongle-E (USB3 blue port, OTBR) |
-| NPU (optional) | Hailo AI HAT+ series |
-| Power | 5V/5A USB-C (USB dongle stability requires adequate power) |
+| Target | Command | Output |
+|--------|---------|--------|
+| Go arm64 | `./run.sh go-build` | `dist/homeagent` (7MB) |
+| Flutter APK | `./run.sh apk-build` | `app-release.apk` (44MB) |
+| OTBR arm64 | `./run.sh otbr-build` | `dist/otbr-arm64/` (7MB) |
+| UI | `cd ui && npm run build` | `ui/dist/` (40KB) |
+| Full bundle | `./run.sh bundle` | `dist/homeagent-bundle-arm64/` |
+| TUI | `./run.sh tui` | Terminal dashboard |
+| RPi5 deploy | `./run.sh ha-deploy` | Build + deploy + start |
+| RK3576 OTBR | `./run.sh otbr-deploy` | adb push binaries |
+| RK3576 Thread | `./run.sh rk-thread-start` | Start Border Router |
 
 ---
 
@@ -342,28 +378,38 @@ homeagent-config/
 
 | Doc | Content |
 |-----|---------|
-| [docs/API.md](docs/API.md) | REST API 명세 (8 commands, OHF 호환) |
-| [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS Yocto 빌드 |
-| [HOWTO.md](HOWTO.md) | Full setup guide (clean state → working RPi5) |
-| [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter version matrix |
+| [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs RK3576 stack comparison |
+| [docs/THREAD.md](docs/THREAD.md) | Thread Border Router (Yocto + Android NDK) |
+| [docs/API.md](docs/API.md) | REST API spec (8 commands, OHF compatible) |
+| [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter shell architecture + NixOS build |
+| [docs/A2UI.md](docs/A2UI.md) | Agent-to-User Interface strategy |
 | [docs/A2A.md](docs/A2A.md) | Agent protocol, Constitutional AI |
-| [docs/A2UI.md](docs/A2UI.md) | Dynamic UI strategy, LLM → surfaceUpdate |
-| [docs/MATTER-VERIFY.md](docs/MATTER-VERIFY.md) | Matter verification (chip-tool oracle vs matterjs-server) |
+| [HOWTO.md](HOWTO.md) | Full setup guide (clean state → working hub) |
+| [VERSION.md](VERSION.md) | Version matrix (Yocto/Flutter/Node/NDK) |
+
+---
+
+## Hardware
+
+| Platform | Board | Thread RCP | Optional |
+|----------|-------|-----------|----------|
+| RPi5 | Raspberry Pi 5 (8GB) | ZBDongle-E (USB) | Hailo AI HAT+ |
+| RK3576 | RK3576-EVB | ESP32-H2 (UART) | — |
 
 ---
 
 ## Reference Projects
 
-이 프로젝트의 방향에 영향을 준 프로젝트들. 개별 기능보다 **만든 사람의 철학이 아키텍처에 담겨 있는** 것들을 중심으로.
+Projects whose **philosophy shaped the architecture**, not just features.
 
 | Project | Relation | Key Insight |
 |---------|----------|-------------|
-| [A2UI](https://a2ui.org) | UI protocol | Google's Agent-to-User Interface. Declarative JSON, no code injection |
-| [OpenClaw](https://github.com/openclaw/openclaw) | A2UI implementation | Agent → JSON → Viewer. Multi-platform canvas with A2UI v0.8 |
-| [pi-mono](https://github.com/badlogic/pi-mono) | Agent infra | Coding agent CLI + unified LLM API. TypeScript monorepo |
-| [CopilotKit](https://github.com/CopilotKit/CopilotKit) | Frontend | AG-UI protocol for agent connection. A2UI + React rendering |
+| [A2UI](https://a2ui.org) | UI protocol | Declarative JSON, no code injection |
+| [OpenClaw](https://github.com/openclaw/openclaw) | A2UI impl | Agent → JSON → Viewer. Multi-platform |
+| [pi-mono](https://github.com/badlogic/pi-mono) | Agent infra | Coding agent CLI + unified LLM API |
+| [CopilotKit](https://github.com/CopilotKit/CopilotKit) | Frontend | AG-UI protocol for agent UIs |
 
-**HomeAgent의 차이점**: 위 프로젝트들은 각자의 레이어에서 뛰어나지만, **재현 가능한 프로덕션 빌드 세트** (Yocto 이미지 → SD 카드 → 부팅 → 즉시 동작)를 제공하지는 않는다. HomeAgent는 Matter 허브 + sLLM + 동적 UI를 **하나의 배포 가능한 이미지**로 묶는 것이 목표다.
+**HomeAgent's difference**: These projects excel at their layers, but none provides a **reproducible production build set** — flash an SD card, boot, and it works. HomeAgent unifies Matter hub + sLLM + dynamic UI into **one deployable image**.
 
 ---
 
@@ -371,9 +417,9 @@ homeagent-config/
 
 - **Being to Being** — AI as a collaborator, not a tool
 - **Privacy by default** — No cloud, no data leaving your home
-- **Reproducible** — Yocto image → SD card → boot → works
+- **Reproducible** — Same source → same build → same result
 - **Agent-first UI** — The agent decides what to show ([A2UI](https://a2ui.org))
-- **Focus + Delegate** — HomeAgent owns Matter + AI core; external channels delegated to [OpenClaw](https://github.com/openclaw/openclaw)
+- **Same role, same base** — Platform divergence is explicit, minimal, documented
 
 ---
 

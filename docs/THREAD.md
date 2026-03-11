@@ -22,7 +22,7 @@ ESP32-H2 (Thread RCP)
 | RCP 디바이스 | /dev/ttyUSB0 | /dev/ttyS5 |
 | RCP baudrate | 460800 | 460800 |
 | backbone IF | eth0 | wlan0 |
-| mDNS | avahi-daemon | mDNSResponder |
+| mDNS | avahi-daemon | OT core (내장) |
 | init system | systemd | scripts/rk3576-thread.sh |
 | otbr-agent | Yocto 패키지 | NDK arm64 빌드 |
 
@@ -46,34 +46,66 @@ systemd 서비스로 자동 시작:
 
 ## RK3576 (Android)
 
-### NDK 빌드
+### NDK 빌드 — 검증된 CMake 옵션 (2026-03-11)
 
 ```bash
 # devShell 진입
 cd ~/repos/gh/homeagent-config
 nix develop .#dev --impure
 
-# ot-br-posix 빌드
+# ot-br-posix 빌드 (udp.cpp sign-compare 패치 필요 — 아래 표 참고)
 cd ~/repos/3rd/ot-br-posix
+NDK=$ANDROID_HOME/ndk/27.0.12077973
+TOOLCHAIN=$NDK/build/cmake/android.toolchain.cmake
+
 cmake -B build-android \
-  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/28.2.13676358/build/cmake/android.toolchain.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-35 \
   -DANDROID_STL=c++_static \
+  -DCMAKE_CXX_FLAGS="-DOPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1" \
+  -DCMAKE_C_FLAGS="-DOPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1" \
+  -DOT_ANDROID_NDK=ON \
   -DBUILD_TESTING=OFF \
   -DOTBR_DBUS=OFF -DOTBR_REST=OFF -DOTBR_WEB=OFF \
-  -DOTBR_MDNS=mDNSResponder \
-  -DOTBR_BACKBONE_ROUTER=ON -DOTBR_BORDER_ROUTING=ON \
-  -DOTBR_SRP_ADVERTISING_PROXY=ON -DOTBR_BORDER_AGENT=ON \
+  -DOTBR_MDNS=openthread \
+  -DOTBR_BACKBONE_ROUTER=OFF \
+  -DOTBR_SRP_ADVERTISING_PROXY=OFF \
+  -DOTBR_BORDER_ROUTING=ON \
+  -DOTBR_BORDER_AGENT=ON \
+  -DOT_SPINEL_RESET_CONNECTION=ON \
+  -DOT_TREL=OFF -DOT_MLR=ON \
   -DOT_SRP_SERVER=ON -DOT_ECDSA=ON -DOT_SERVICE=ON \
-  -DOTBR_INFRA_IF_NAME=wlan0 -DOTBR_NO_AUTO_ATTACH=1
+  -DOT_DUA=ON -DOT_BORDER_ROUTING_NAT64=OFF \
+  -DOTBR_INFRA_IF_NAME=wlan0 \
+  -DOTBR_NO_AUTO_ATTACH=1
 
 cmake --build build-android -j$(nproc)
+
+# strip
+STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
+$STRIP build-android/src/agent/otbr-agent
+$STRIP build-android/third_party/openthread/repo/src/posix/ot-ctl
 ```
 
-산출물:
-- `build-android/src/agent/otbr-agent`
-- `build-android/third_party/openthread/repo/src/posix/ot-ctl`
+#### 빌드 중 만난 이슈와 해결
+
+| 이슈 | 원인 | 해결 |
+|------|------|------|
+| `cutils/properties.h` not found | Android NDK에 없는 system 헤더 | `-DOPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1` |
+| `Only one Discovery Proxy` | OT_DISCOVERY_PROXY(기본ON) + DNSSD 충돌 | `DNSSD_DISCOVERY_PROXY` 제거 |
+| `Only one Advertising Proxy` | MDNS=openthread에서 OT_SRP_ADV_PROXY 자동ON | `SRP_ADVERTISING_PROXY=OFF` |
+| `-lutil` not found | glibc 전용 라이브러리 | `-DOT_ANDROID_NDK=ON` |
+| `sign-compare` fatal error | NDK clang -Werror | udp.cpp `static_cast<unsigned int>` 패치 |
+| `libnetfilter_queue.h` not found | Android에 없음 | `BACKBONE_ROUTER=OFF` |
+| `dns_sd.h` not found | mDNSResponder 미포함 | `MDNS=openthread` |
+
+#### 빌드 산출물 (strip 후)
+
+| 바이너리 | 크기 |
+|---------|------|
+| otbr-agent | 6.9MB |
+| ot-ctl | 12KB |
 
 ### 배포
 

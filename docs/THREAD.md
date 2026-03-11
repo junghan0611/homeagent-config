@@ -1,5 +1,8 @@
 # Thread Border Router — HomeAgent
 
+The Android NDK build works on **any Android arm64 board** with UART Thread RCP access.
+RK3576-EVB is the verified reference board; other boards (RK3588, Amlogic, MediaTek) follow the same steps.
+
 ## 아키텍처
 
 ```

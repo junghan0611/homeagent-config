@@ -1023,6 +1023,15 @@ case "${1:-help}" in
         shift
         "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" logs "${1:-all}"
         ;;
+    otbr-build)
+        exec nix develop .#dev --impure --command bash "${SCRIPT_DIR}/scripts/build-otbr.sh"
+        ;;
+    otbr-deploy)
+        adb push dist/otbr-arm64/otbr-agent /data/local/tmp/otbr/
+        adb push dist/otbr-arm64/ot-ctl /data/local/tmp/otbr/
+        adb shell chmod +x /data/local/tmp/otbr/otbr-agent /data/local/tmp/otbr/ot-ctl
+        echo "OTBR deployed to /data/local/tmp/otbr/"
+        ;;
     rk-thread)
         shift
         adb push "${SCRIPT_DIR}/scripts/rk3576-thread.sh" /data/local/tmp/rk3576-thread.sh

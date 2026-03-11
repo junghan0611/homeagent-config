@@ -1,0 +1,13 @@
+diff --git a/src/posix/platform/udp.cpp b/src/posix/platform/udp.cpp
+index c6901c70d..1346b6893 100644
+--- a/src/posix/platform/udp.cpp
++++ b/src/posix/platform/udp.cpp
+@@ -214,7 +214,7 @@ otError receivePacket(int aFd, uint8_t *aPayload, uint16_t &aLength, otMessageIn
+ 
+                 memcpy(&pktinfo, CMSG_DATA(cmsg), sizeof(pktinfo));
+ 
+-                aMessageInfo.mIsHostInterface = (pktinfo.ipi6_ifindex != gNetifIndex);
++                aMessageInfo.mIsHostInterface = (static_cast<unsigned int>(pktinfo.ipi6_ifindex) != gNetifIndex);
+                 ReadIp6AddressFrom(&pktinfo.ipi6_addr, aMessageInfo.mSockAddr);
+             }
+         }

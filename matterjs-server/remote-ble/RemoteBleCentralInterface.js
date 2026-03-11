@@ -183,8 +183,11 @@ export class RemoteBleCentralInterface {
     // C2 데이터 수신 등록
     const c2DataKey = `c2_${peripheralAddress}`;
     this.#pendingResponses.set(c2DataKey, (data) => {
+      logger.info(`C2 data received: ${Buffer.from(data).toString("hex")} (${data.length} bytes)`);
       if (hsHandler) {
         hsHandler(data);
+      } else {
+        logger.debug(`C2 data received but no hsHandler (post-handshake)`);
       }
     });
 

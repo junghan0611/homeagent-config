@@ -187,12 +187,17 @@ class BleRelay {
         orElse: () => throw Exception('C2 특성 없음'),
       );
 
-      // C1 write 속성 자동 감지
-      _c1WriteWithoutResponse = !_c1!.properties.write;
+      // Matter BTP spec: C1은 Write Without Response 사용
+      // C1 특성이 writeWithoutResponse를 지원하면 반드시 사용
+      _c1WriteWithoutResponse = _c1!.properties.writeWithoutResponse;
+      print('[BLE-RELAY] C1 properties: write=${_c1!.properties.write} '
+          'writeWithoutResponse=${_c1!.properties.writeWithoutResponse} '
+          '→ using withoutResponse=$_c1WriteWithoutResponse');
 
       // C2 indicate 구독
       await _c2!.setNotifyValue(true);
       _c2Sub = _c2!.onValueReceived.listen((data) {
+        print('[BLE-RELAY] C2 indicate: ${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} (${data.length} bytes)');
         _send({
           'event': 'ble_data',
           'address': address,
@@ -225,7 +230,10 @@ class BleRelay {
       return;
     }
     try {
+      print('[BLE-RELAY] C1 write: ${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} '
+          '(${data.length} bytes, withoutResponse=$_c1WriteWithoutResponse)');
       await _c1!.write(data, withoutResponse: _c1WriteWithoutResponse);
+      print('[BLE-RELAY] C1 write OK');
     } catch (e) {
       print('[BLE-RELAY] C1 write error: $e');
       _send({

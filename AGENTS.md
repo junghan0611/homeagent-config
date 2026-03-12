@@ -137,18 +137,20 @@ br list --status open            # 열린 이슈만
 
 ---
 
-## 프로젝트 현황 (2026-03-06)
+## 프로젝트 현황 (2026-03-12)
 
 ### 동작 중인 스택
 
 ```
-Flutter App (ivi-homescreen / Android APK)
+Flutter App (Android APK / ivi-homescreen)
   └── WebView ──▶ Go HomeAgent v0.8 (:8080)
                    ├── REST API: /api/devices, /api/devices/:id, /api/devices/command (8 cmds)
                    │             /api/commission, /api/chat, /api/home, /api/events(SSE)
                    ├── LLM: OpenRouter (Gemini 2.5 Flash) — 자연어→디바이스 제어
                    ├── A2UI: 시간 기반 Home Surface + LLM 동적 surfaceUpdate
                    ├── Matter WS (단일 ReadLoop) → matterjs-server (:5580)
+                   ├── BLE relay: Flutter ↔ matterjs WS (:5581) — Android BLE 중계
+                   ├── OTBR: ot-br-posix NDK arm64 — Thread Border Router
                    └── Lit UI: 대시보드, 디바이스 카드, 채팅 패널, A2UI 렌더러
 ```
 
@@ -157,8 +159,9 @@ Flutter App (ivi-homescreen / Android APK)
 | 타겟 | 빌드 | 상태 |
 |------|------|------|
 | Flutter Linux Desktop | `./run.sh flutter-build` | ✅ 동작 |
-| Flutter Android APK | `./run.sh apk-build` | ✅ 43.7MB (targetSdk=35, Android 15) |
+| Flutter Android APK | `./run.sh apk-build` | ✅ 46MB (targetSdk=35, Android 15) |
 | Go Android arm64 | `./run.sh apk-go` | ✅ 7.2MB |
+| OTBR NDK arm64 | `./run.sh otbr-build` | ✅ otbr-agent 6.9MB + ot-ctl 12KB |
 | Yocto flutter-engine | `bitbake flutter-engine` | ✅ 빌드 성공 |
 | Yocto 전체 이미지 | `bitbake homeagent-app` | 🔲 ivi-homescreen 빌드 미완 |
 
@@ -176,17 +179,27 @@ Flutter App (ivi-homescreen / Android APK)
 ### 배포 / 개발 명령
 
 ```bash
-# RPi5 배포
+# RPi5 배포 (Yocto 기준)
 ./run.sh ha-deploy          # 전체 빌드+배포+시작 (원커맨드)
 ./run.sh ha-status / ha-logs
+
+# Android 보드 배포 (범용 — RK3576/RK3588/etc.)
+./run.sh android deploy     # 전체 빌드+배포+시작
+./run.sh android start      # 서비스만 (재)시작
+./run.sh android stop       # 서비스 종료
+./run.sh android status     # 상태 확인
+./run.sh android logs [t]   # 로그 (matter/go/otbr/all)
+./run.sh android thread-start   # OTBR + Thread 네트워크
+./run.sh android thread-status  # Thread 상태
 
 # Flutter 개발
 ./run.sh flutter-run         # Linux desktop hot reload
 ./run.sh flutter-server      # Go 서버 로컬 (Matter 없이)
 
-# Android APK
+# 개별 빌드
 ./run.sh apk-build           # 릴리즈 APK
 ./run.sh apk-go              # Go arm64 크로스컴파일
+./run.sh otbr-build          # OTBR NDK arm64 빌드
 
 # Yocto
 ./run.sh shell               # FHS 빌드 환경 진입
@@ -205,12 +218,64 @@ Flutter App (ivi-homescreen / Android APK)
 | `go/internal/agent/agent.go` | LLM 에이전트 (Chat + ReactToEvent) |
 | `go/internal/matter/client.go` | matterjs-server WS 클라이언트 (단일 ReadLoop) |
 | `go/internal/config/config.go` | 환경변수 설정 |
+| `go/internal/a2a/executor.go` | A2A 에이전트 실행기 (HomeAgentExecutor) |
 | `flutter/lib/main.dart` | 플랫폼 감지 → ShellNative / ShellWebView |
 | `flutter/lib/shell_webview.dart` | Android/Yocto WebView 셸 |
 | `flutter/lib/shell_native.dart` | Linux desktop Flutter 위젯 |
+| `flutter/lib/ble_relay.dart` | BLE 바이트 중계 (Flutter ↔ matterjs WS) |
+| `flutter/lib/ble_commissioning.dart` | BLE 커미셔닝 UI (Plan B) |
 | `ui/src/app.ts` | Lit 대시보드 (SSE, 테마, A2UI) |
+| `scripts/android-deploy.sh` | Android 보드 배포/실행/Thread 관리 |
+| `scripts/build-otbr.sh` | OTBR NDK arm64 재현 빌드 |
 | `aliases.json` | 디바이스 별칭/방 매핑 |
 | `flake.nix` | Yocto FHS + dev shell (Android SDK 포함) |
+
+### WBS ↔ br 매핑 (Jira MAT 프로젝트 대응)
+
+에이전트는 br 이슈로 작업하고, WBS 보고는 Jira MAT 키로 대응됩니다.
+`office/MAT-WBS-검토-20260312.org`에 상세 매핑 있음 (git 미추적).
+
+| br | Jira MAT | 상태 |
+|----|---------|------|
+| bd-277.1 | MAT-12 (OTBR 포팅) | ✅ 빌드 완료, 보드 검증 대기 |
+| bd-301 | MAT-11 (Thread 환경) | 보드 검증 대기 |
+| bd-3cw | MAT-56/57/76/77 (BLE 버그) | 🔴 핵심 버그 발견+수정, 보드 검증 대기 |
+| bd-2y3 | MAT-68 (App-OTBR 연동) | Go 테스트 작성 중 |
+| bd-11e | MAT-69 (WiFi/Thread 검증) | 보드 필요 |
+| bd-3nh | MAT-25~30 (통합 검증) | 대기 |
+
+### 현재 벽: Android BLE 커미셔닝 (bd-3cw)
+
+**RPi5에서는 matterjs로 BLE 커미셔닝 성공. Android에서만 실패.**
+
+근본 원인 발견 (2026-03-12):
+- **FlutterBluePlus `setNotifyValue(true)` → notify(0x0001) 우선 선택**
+- Matter BTP C2는 indicate(0x0002) 전용
+- CCCD 0x0001 → 디바이스가 indication 미전송 → BTP handshake timeout
+- **수정 완료**: `forceIndications: true` (커밋 a860b5c)
+- **보드 검증 대기**
+
+BLE relay 흐름 + WS 프로토콜 스키마: `office/ws-protocol-schema.md` (git 미추적)
+
+### BLE relay 아키텍처 (Android BLE 커미셔닝)
+
+```
+Flutter APK                    matterjs-server
+(flutter_blue_plus)            (Matter 프로토콜)
+     │                              │
+     │◀── WS :5581 ──────────────▶│
+     │     ble_scan_start/stop      │
+     │     ble_connect/disconnect   │
+     │     ble_write (C1 바이트)    │
+     │     ble_data (C2 바이트)     │
+     │                              │
+     │   Flutter = BLE 바이트 셔틀  │
+     │   matterjs = 프로토콜 전체   │
+     │   (BTP/PASE/WiFi/CASE)       │
+```
+
+noble(Linux HCI)은 Android에서 동작 불가 → Flutter BLE가 대신 BLE 물리 계층 담당.
+프로토콜 로직은 matterjs-server가 전부 처리. Flutter는 바이트를 중계만 함.
 
 ---
 
@@ -242,7 +307,7 @@ Flutter App (ivi-homescreen / Android APK)
 
 | 프로젝트 | 위치 | 활용 |
 |----------|------|------|
-| kyungdong-rockchip | `/home/junghan/repos/work/kyungdong-rockchip/` | Matter/Thread 참고 |
+| kyungdong-rockchip | `/home/junghan/repos/work/kyungdong-rockchip/` | Matter/Thread 참고 (chip-tool 기반 검증 완료) |
 
 ## 문서
 
@@ -252,7 +317,18 @@ Flutter App (ivi-homescreen / Android APK)
 | [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS 빌드 가이드 |
 | [docs/A2UI.md](docs/A2UI.md) | 에이전트 주도 동적 UI 전략 |
 | [docs/A2A.md](docs/A2A.md) | 에이전트 프로토콜, Constitutional AI |
+| [docs/THREAD.md](docs/THREAD.md) | OTBR NDK 빌드 가이드 + 7개 CMake 이슈 해결 |
+| [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs Android 전체 스택 비교 |
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter 버전 매트릭스 |
+
+## office/ (git 미추적 — 내부 문서)
+
+| 문서 | 내용 |
+|------|------|
+| `경동-납품-현황.md` | WBS 체크리스트, 막힌 곳, 보드 검증 순서 |
+| `MAT-WBS-검토-20260312.org` | Jira MAT ↔ br 매핑, 상태 분석 |
+| `ws-protocol-schema.md` | BLE relay WS 프로토콜 스키마 + noble vs Flutter 비교 |
+| `agent-task-*.md` | 병렬 에이전트 작업 지시서 |
 
 ---
 

@@ -39,7 +39,7 @@ func Load() *Config {
 		WifiPassword:  os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
 		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
 		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.5-flash"),
-		AliasesFile:   envOr("HOMEAGENT_ALIASES", "/opt/homeagent/aliases.json"),
+		AliasesFile:   envOr("HOMEAGENT_ALIASES_FILE", "/opt/homeagent/aliases.json"),
 		OtCtlPath:     envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
 	}
 }

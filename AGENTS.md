@@ -1,6 +1,7 @@
 # HomeAgent Config - 에이전트 지침
 
 @README.md
+@OFFICE.md (private)
 
 ---
 
@@ -61,6 +62,10 @@ br list --status open            # 열린 이슈만
 | `br comment <id> "text"` | comment**s** add 필요 | `br comments add <id> "text"` |
 | `br update <id> -s done` | done은 유효하지 않음 | `br close <id>` 또는 `-s closed` |
 | `br comment <id> -m "text"` | -m 옵션 없음 | `br comments add <id> --message "text"` |
+
+### Jira (MAT 프로젝트)
+
+**⚠️ Jira 이슈 상태 변경은 반드시 사용자 승인 후 진행.** 
 
 ## 에이전트 원칙
 
@@ -230,20 +235,6 @@ Flutter App (Android APK / ivi-homescreen)
 | `aliases.json` | 디바이스 별칭/방 매핑 |
 | `flake.nix` | Yocto FHS + dev shell (Android SDK 포함) |
 
-### WBS ↔ br 매핑 (Jira MAT 프로젝트 대응)
-
-에이전트는 br 이슈로 작업하고, WBS 보고는 Jira MAT 키로 대응됩니다.
-`office/MAT-WBS-검토-20260312.org`에 상세 매핑 있음 (git 미추적).
-
-| br | Jira MAT | 상태 |
-|----|---------|------|
-| bd-277.1 | MAT-12 (OTBR 포팅) | ✅ 빌드 완료, 보드 검증 대기 |
-| bd-301 | MAT-11 (Thread 환경) | 보드 검증 대기 |
-| bd-3cw | MAT-56/57/76/77 (BLE 버그) | 🔴 핵심 버그 발견+수정, 보드 검증 대기 |
-| bd-2y3 | MAT-68 (App-OTBR 연동) | Go 테스트 작성 중 |
-| bd-11e | MAT-69 (WiFi/Thread 검증) | 보드 필요 |
-| bd-3nh | MAT-25~30 (통합 검증) | 대기 |
-
 ### 현재 벽: Android BLE 커미셔닝 (bd-3cw)
 
 **RPi5에서는 matterjs로 BLE 커미셔닝 성공. Android에서만 실패.**
@@ -303,12 +294,6 @@ noble(Linux HCI)은 Android에서 동작 불가 → Flutter BLE가 대신 BLE �
 
 ---
 
-## 관련 프로젝트
-
-| 프로젝트 | 위치 | 활용 |
-|----------|------|------|
-| kyungdong-rockchip | `/home/junghan/repos/work/kyungdong-rockchip/` | Matter/Thread 참고 (chip-tool 기반 검증 완료) |
-
 ## 문서
 
 | 문서 | 내용 |
@@ -321,17 +306,6 @@ noble(Linux HCI)은 Android에서 동작 불가 → Flutter BLE가 대신 BLE �
 | [docs/INSTALL.md](docs/INSTALL.md) | Android 보드 설치 가이드 (원커맨드 배포) |
 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs Android 전체 스택 비교 |
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter 버전 매트릭스 |
-
-## office/ (git 미추적 — 내부 문서)
-
-| 문서 | 내용 |
-|------|------|
-| `경동-납품-현황.md` | WBS 체크리스트, 막힌 곳, 보드 검증 순서 |
-| `MAT-WBS-검토-20260312.org` | Jira MAT ↔ br 매핑, 상태 분석 |
-| `ws-protocol-schema.md` | BLE relay WS 프로토콜 스키마 + noble vs Flutter 비교 |
-| `agent-task-*.md` | 병렬 에이전트 작업 지시서 |
-
----
 
 ## Landing the Plane (세션 종료)
 

@@ -91,6 +91,7 @@ ui/node_modules
 ui/dist
 dist/
 office/
+OFFICE.md
 
 # Flutter Android 빌드 아티팩트
 flutter/build/

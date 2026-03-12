@@ -75,6 +75,7 @@ logs/
 .beads/.local_version
 .beads/config.yaml
 .beads/metadata.json
+.beads/.br_history/
 
 # direnv
 .direnv/

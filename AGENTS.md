@@ -109,7 +109,7 @@ br list --status open            # 열린 이슈만
 
 > **테마 경로**: `Go surface.go (팔레트 결정)` → `GET /api/home (JSON)` → `app.ts applyTheme() (CSS변수 주입)` → `모든 컴포넌트 (변수 참조)`
 >
-> ⚠️ **현재 위반 상태** (ha-2y3): app.ts/a2ui-renderer.ts에 하드코딩 색상 잔존. 새 컴포넌트 추가 시 반드시 CSS 변수로.
+> ✅ **위반 해소됨** (ff8d83e): 전체 UI 컴포넌트 `#hex` → `var(--ha-*)` 전환 완료. `styles.ts`에 25개 CSS 변수 중앙 정의. 새 컴포넌트 추가 시 반드시 CSS 변수로.
 
 #### Matter / WS
 
@@ -318,6 +318,7 @@ noble(Linux HCI)은 Android에서 동작 불가 → Flutter BLE가 대신 BLE �
 | [docs/A2UI.md](docs/A2UI.md) | 에이전트 주도 동적 UI 전략 |
 | [docs/A2A.md](docs/A2A.md) | 에이전트 프로토콜, Constitutional AI |
 | [docs/THREAD.md](docs/THREAD.md) | OTBR NDK 빌드 가이드 + 7개 CMake 이슈 해결 |
+| [docs/INSTALL.md](docs/INSTALL.md) | Android 보드 설치 가이드 (원커맨드 배포) |
 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs Android 전체 스택 비교 |
 | [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter 버전 매트릭스 |
 

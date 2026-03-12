@@ -82,17 +82,11 @@ help() {
     echo "  flutter-server    Go 서버 로컬 실행 (Flutter 개발용)"
     echo "  flutter-analyze   코드 분석"
     echo ""
-    echo -e "${GREEN}RK3576 (Android):${NC}"
-    echo "  rk-deploy       전체 배포 (Go+matterjs+APK → 시작)"
-    echo "  rk-start        서비스 (재)시작"
-    echo "  rk-stop         서비스 종료"
-    echo "  rk-status       상태 확인"
-    echo "  rk-logs [t]     로그 (matter/go/all)"
-    echo ""
-    echo -e "${GREEN}Android APK:${NC}"
+    echo -e "${GREEN}Android:${NC}"
+    echo "  android <cmd>   배포/시작/중지/상태/로그/Thread (scripts/android-deploy.sh)"
     echo "  apk-build       Android APK 릴리즈 빌드"
-    echo "  apk-debug       Android APK 디버그 빌드"
     echo "  apk-go          Go 바이너리 Android arm64 크로스컴파일"
+    echo "  otbr-build      OTBR NDK arm64 빌드"
     echo ""
     echo -e "${GREEN}번들:${NC}"
     echo "  bundle          백엔드 번들 (Go+Node.js+matterjs arm64)"
@@ -988,7 +982,7 @@ case "${1:-help}" in
         fi
         ;;
     apk-debug)
-        echo -e "${GREEN}[APK]${NC} Android APK 디버그 빌드..."
+        echo -e "${YELLOW}[DEPRECATED]${NC} 'apk-debug' → './run.sh android build-apk' 사용"
         nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
             cd ${SCRIPT_DIR}/flutter && flutter build apk --debug
         "
@@ -1006,43 +1000,12 @@ case "${1:-help}" in
             echo "  $OUTDIR/homeagent-android-arm64"
         fi
         ;;
-    rk-deploy)
+    android)
         shift
-        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" deploy "$@"
-        ;;
-    rk-start)
-        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" start
-        ;;
-    rk-stop)
-        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" stop
-        ;;
-    rk-status)
-        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" status
-        ;;
-    rk-logs)
-        shift
-        "${SCRIPT_DIR}/scripts/rk3576-deploy.sh" logs "${1:-all}"
+        "${SCRIPT_DIR}/scripts/android-deploy.sh" "${@:-help}"
         ;;
     otbr-build)
         exec nix develop .#dev --impure --command bash "${SCRIPT_DIR}/scripts/build-otbr.sh"
-        ;;
-    otbr-deploy)
-        adb push dist/otbr-arm64/otbr-agent /data/local/tmp/otbr/
-        adb push dist/otbr-arm64/ot-ctl /data/local/tmp/otbr/
-        adb shell chmod +x /data/local/tmp/otbr/otbr-agent /data/local/tmp/otbr/ot-ctl
-        echo "OTBR deployed to /data/local/tmp/otbr/"
-        ;;
-    rk-thread)
-        shift
-        adb push "${SCRIPT_DIR}/scripts/rk3576-thread.sh" /data/local/tmp/rk3576-thread.sh
-        adb shell "sh /data/local/tmp/rk3576-thread.sh ${1:-status}"
-        ;;
-    rk-thread-start)
-        adb push "${SCRIPT_DIR}/scripts/rk3576-thread.sh" /data/local/tmp/rk3576-thread.sh
-        adb shell "sh /data/local/tmp/rk3576-thread.sh start"
-        ;;
-    rk-thread-stop)
-        adb shell "sh /data/local/tmp/rk3576-thread.sh stop"
         ;;
     bundle)
         shift

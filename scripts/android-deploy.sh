@@ -122,17 +122,43 @@ cmd_stop() {
 # ─── STATUS ───
 cmd_status() {
     check_adb
-    echo "=== 프로세스 ==="
-    adb shell "ps -ef | grep -E 'homeagent|node.*Matter|otbr-agent' | grep -v grep" || echo "(없음)"
+
+    echo "=== 서비스 ==="
+    for svc_name in "homeagent serve" "MatterServer" "otbr-agent"; do
+        local label="$svc_name"
+        [[ "$svc_name" == "homeagent serve" ]] && label="homeagent"
+        [[ "$svc_name" == "MatterServer" ]] && label="matterjs"
+        local pid
+        pid=$(adb shell "pgrep -f '$svc_name' 2>/dev/null" | tr -d '\r' || true)
+        if [[ -n "$pid" ]]; then
+            echo "  $label: 실행 중 (PID $pid)"
+        else
+            echo "  $label: 중지"
+        fi
+    done
+
     echo ""
     echo "=== 포트 ==="
-    adb shell "netstat -tlnp 2>/dev/null | grep -E '5580|8080'" || echo "(없음)"
+    adb shell "netstat -tlnp 2>/dev/null | grep -E '5580|5581|8080'" || echo "  (없음)"
+
     echo ""
     echo "=== APK ==="
-    adb shell "dumpsys package com.homeagent.app 2>/dev/null | grep -E 'versionName|lastUpdate'" || echo "(미설치)"
+    adb shell "dumpsys package com.homeagent.app 2>/dev/null | grep -E 'versionName|lastUpdate'" || echo "  (미설치)"
+
     echo ""
     echo "=== 네트워크 ==="
-    adb shell "ip addr show wlan0 2>/dev/null | grep 'inet '" || echo "(WiFi 없음)"
+    adb shell "ip addr show wlan0 2>/dev/null | grep 'inet '" || echo "  (WiFi 없음)"
+
+    echo ""
+    echo "=== 최근 에러 ==="
+    for logf in homeagent matterjs otbr-agent; do
+        local last_err
+        last_err=$(adb shell "grep -iE 'error|fatal|panic' $REMOTE/${logf}.log 2>/dev/null | tail -1" | tr -d '\r' || true)
+        if [[ -n "$last_err" ]]; then
+            echo "  $logf: $last_err"
+        fi
+    done
+    echo "  (에러 없으면 정상)"
 }
 
 # ─── LOGS ───
@@ -242,6 +268,17 @@ build_go() {
     log "→ $(ls -lh "$DIST_DIR/homeagent-android-arm64" | awk '{print $5}')"
 }
 
+# ─── BUILD: UI (Vite) ───
+build_ui() {
+    log "UI 빌드 (vite)..."
+    (cd "$PROJECT_DIR/ui" && npm run build)
+    if [[ -d "$PROJECT_DIR/ui/dist" ]]; then
+        log "→ $(du -sh "$PROJECT_DIR/ui/dist" | awk '{print $1}') (index.html + wallpad.html)"
+    else
+        warn "UI 빌드 실패 — ui/dist 없음"
+    fi
+}
+
 # ─── BUILD: Flutter APK ───
 build_apk() {
     log "Flutter APK 빌드..."
@@ -342,12 +379,13 @@ cmd_install_apk() {
 
 # ─── DEPLOY: 전체 ───
 cmd_deploy() {
-    local SKIP_GO=false SKIP_APK=false SKIP_MATTER=false
+    local SKIP_GO=false SKIP_APK=false SKIP_MATTER=false SKIP_UI=false
     for arg in "$@"; do
         case "$arg" in
             --skip-go) SKIP_GO=true ;;
             --skip-apk) SKIP_APK=true ;;
             --skip-matter) SKIP_MATTER=true ;;
+            --skip-ui) SKIP_UI=true ;;
         esac
     done
 
@@ -355,6 +393,7 @@ cmd_deploy() {
     adb root 2>/dev/null && sleep 1
 
     [[ "$SKIP_GO" == false ]] && build_go
+    [[ "$SKIP_UI" == false ]] && build_ui
     [[ "$SKIP_APK" == false ]] && build_apk
 
     cmd_push
@@ -379,20 +418,22 @@ case "${1:-help}" in
     install-apk)  cmd_install_apk ;;
     build-go)     build_go ;;
     build-apk)    build_apk ;;
+    build-ui)     build_ui ;;
     help|-h|*)
         echo "HomeAgent Android 배포"
         echo ""
         echo "사용: ./scripts/android-deploy.sh <command> [options]"
         echo ""
         echo "배포:"
-        echo "  deploy [--skip-go] [--skip-apk] [--skip-matter]  전체 빌드+배포+시작"
+        echo "  deploy [--skip-go] [--skip-apk] [--skip-ui] [--skip-matter]"
+        echo "                     전체 빌드+배포+시작"
         echo "  push-artifacts     아티팩트만 push (시작 안 함)"
         echo "  install-apk        APK만 설치"
         echo ""
         echo "서비스:"
         echo "  start              matterjs + Go 시작"
         echo "  stop               전체 중지"
-        echo "  status             상태 확인"
+        echo "  status             상태 확인 (PID + 포트 + 에러 로그)"
         echo "  logs [target]      로그 (matter/go/otbr/all)"
         echo ""
         echo "Thread:"
@@ -402,6 +443,7 @@ case "${1:-help}" in
         echo ""
         echo "빌드만:"
         echo "  build-go           Go arm64 빌드"
+        echo "  build-ui           Lit UI 빌드 (vite)"
         echo "  build-apk          Flutter APK 빌드"
         echo ""
         echo "환경변수:"

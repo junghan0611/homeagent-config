@@ -59,11 +59,11 @@ export async function sendCommand(nodeId: number, command: string): Promise<void
   }
 }
 
-export async function commission(code: string): Promise<{ status: string }> {
+export async function commission(code: string, networkOnly = true): Promise<{ status: string }> {
   const res = await fetch(`${API_BASE}/api/commission`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, network_only: networkOnly }),
   });
   if (!res.ok && res.status !== 202) {
     const err = await res.json().catch(() => ({ error: res.statusText }));

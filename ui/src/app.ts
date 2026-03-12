@@ -8,240 +8,88 @@ import "./a2ui-renderer.js";
 
 @customElement("ha-app")
 export class App extends LitElement {
-  @state()
-  private devices: DeviceState[] = [];
-
-  @state()
-  private connected = false;
-
-  @state()
-  private showCommission = false;
-
-  @state()
-  private lastEvent = "";
-
-  @state()
-  private agentMessage = "";
-
-  @state()
-  private homeSurface: any = null;
-
-  @state()
-  private llmSurface: any = null;
+  @state() private devices: DeviceState[] = [];
+  @state() private connected = false;
+  @state() private showCommission = false;
+  @state() private lastEvent = "";
+  @state() private agentMessage = "";
+  @state() private homeSurface: any = null;
+  @state() private llmSurface: any = null;
 
   private eventSource?: EventSource;
+  private _surfaceTimer?: number;
+  private sseRetryCount = 0;
+  private eventLog: string[] = [];
 
   static styles = css`
     :host {
       display: block;
       min-height: 100vh;
-      --bg: #0a0e1a; --surface: #141824; --border: #2a2e3e; --primary: #03a9f4;
-      background: var(--bg);
-      color: #e5e7eb;
+      /* Variables inherited from styles.ts globalStyles or defined here as fallback */
+      --ha-bg: #0a0e1a;
+      --ha-surface: #141824;
+      --ha-border: #2a2e3e;
+      --ha-primary: #03a9f4;
+      --ha-primary-hover: #0288d1;
+      --ha-primary-glow: rgba(3, 169, 244, 0.3);
+      --ha-text: #e5e7eb;
+      --ha-text-muted: #9ca3af;
+      --ha-text-dim: #6b7280;
+      --ha-text-faint: #4b5563;
+      --ha-text-secondary: #d1d5db;
+      --ha-success: #4caf50;
+      --ha-error: #f44336;
+      --ha-white: #fff;
+      background: var(--ha-bg);
+      color: var(--ha-text);
       font-family: system-ui, -apple-system, "Roboto", sans-serif;
       transition: background 0.8s ease;
     }
 
-    /* Time-based full page themes */
-    :host(.mood-morning) { --bg: #1a1208; --surface: #241a0c; --border: #4a3510; --primary: #FF9800; }
-    :host(.mood-forenoon) { --bg: #1a1808; --surface: #24200c; --border: #4a4510; --primary: #FFC107; }
-    :host(.mood-noon) { --bg: #1a1008; --surface: #24180c; --border: #4a2810; --primary: #FF5722; }
-    :host(.mood-afternoon) { --bg: #081420; --surface: #0c1c2c; --border: #163050; --primary: #03A9F4; }
-    :host(.mood-evening) { --bg: #100820; --surface: #180c2c; --border: #2a1650; --primary: #7C4DFF; }
-    :host(.mood-night) { --bg: #08081a; --surface: #0e0e24; --border: #1a1a40; --primary: #5C6BC0; }
-    :host(.mood-latenight) { --bg: #050508; --surface: #0a0a12; --border: #14141e; --primary: #37474F; }
+    :host(.mood-morning)   { --ha-bg: #1a1208; --ha-surface: #241a0c; --ha-border: #4a3510; --ha-primary: #FF9800; }
+    :host(.mood-forenoon)  { --ha-bg: #1a1808; --ha-surface: #24200c; --ha-border: #4a4510; --ha-primary: #FFC107; }
+    :host(.mood-noon)      { --ha-bg: #1a1008; --ha-surface: #24180c; --ha-border: #4a2810; --ha-primary: #FF5722; }
+    :host(.mood-afternoon) { --ha-bg: #081420; --ha-surface: #0c1c2c; --ha-border: #163050; --ha-primary: #03A9F4; }
+    :host(.mood-evening)   { --ha-bg: #100820; --ha-surface: #180c2c; --ha-border: #2a1650; --ha-primary: #7C4DFF; }
+    :host(.mood-night)     { --ha-bg: #08081a; --ha-surface: #0e0e24; --ha-border: #1a1a40; --ha-primary: #5C6BC0; }
+    :host(.mood-latenight) { --ha-bg: #050508; --ha-surface: #0a0a12; --ha-border: #14141e; --ha-primary: #37474F; }
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 24px 16px;
-    }
+    .container { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
 
-    /* Header */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 32px;
-    }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--ha-primary), var(--ha-success)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .logo h1 { font-size: 22px; font-weight: 700; margin: 0; }
+    .logo .sub { font-size: 11px; color: var(--ha-text-dim); margin-top: 1px; }
 
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.online { background: var(--ha-success); box-shadow: 0 0 6px rgba(76, 175, 80, 0.5); }
+    .status-dot.offline { background: var(--ha-error); }
+    .status { font-size: 12px; color: var(--ha-text-muted); display: flex; align-items: center; }
 
-    .logo-icon {
-      width: 44px;
-      height: 44px;
-      background: linear-gradient(135deg, var(--primary, #03a9f4), #4caf50);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-    }
+    .agent-bar { background: var(--ha-surface); border: 1px solid var(--ha-border); border-radius: 14px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .agent-avatar { font-size: 24px; }
+    .agent-text { font-size: 14px; color: var(--ha-text-secondary); line-height: 1.5; }
+    .agent-text em { color: var(--ha-primary); font-style: normal; font-weight: 600; }
 
-    .logo h1 {
-      font-size: 22px;
-      font-weight: 700;
-      margin: 0;
-    }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--ha-text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 32px; }
 
-    .logo .sub {
-      font-size: 11px;
-      color: #6b7280;
-      margin-top: 1px;
-    }
+    .empty { text-align: center; padding: 60px 20px; color: var(--ha-text-dim); }
+    .empty .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty p { margin: 8px 0; }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 6px;
-    }
-    .status-dot.online {
-      background: #4caf50;
-      box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
-    }
-    .status-dot.offline {
-      background: #f44336;
-    }
+    .fab { background: linear-gradient(135deg, var(--ha-primary), var(--ha-primary-hover)); color: var(--ha-white); border: none; border-radius: 16px; padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 14px var(--ha-primary-glow); }
+    .fab:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--ha-primary-glow); }
 
-    .status {
-      font-size: 12px;
-      color: #9ca3af;
-      display: flex;
-      align-items: center;
-    }
-
-    /* Agent message */
-    .agent-bar {
-      background: var(--surface, #141824);
-      border: 1px solid var(--border, #2a2e3e);
-      border-radius: 14px;
-      padding: 16px 20px;
-      margin-bottom: 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      animation: slideIn 0.3s ease;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .agent-avatar {
-      font-size: 24px;
-    }
-
-    .agent-text {
-      font-size: 14px;
-      color: #d1d5db;
-      line-height: 1.5;
-    }
-    .agent-text em {
-      color: #03a9f4;
-      font-style: normal;
-      font-weight: 600;
-    }
-
-    /* Devices grid */
-    .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .devices-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
-      margin-bottom: 32px;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 60px 20px;
-      color: #6b7280;
-    }
-    .empty .icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-    }
-    .empty p {
-      margin: 8px 0;
-    }
-
-    /* Fab button */
-    .fab {
-      background: linear-gradient(135deg, #03a9f4, #0288d1);
-      color: #fff;
-      border: none;
-      border-radius: 16px;
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 14px rgba(3, 169, 244, 0.3);
-    }
-    .fab:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(3, 169, 244, 0.4);
-    }
-
-    /* Event log */
-    .event-log {
-      background: var(--surface, #141824);
-      border: 1px solid var(--border, #2a2e3e);
-      border-radius: 14px;
-      padding: 16px 20px;
-    }
-    .event-log h3 {
-      font-size: 13px;
-      color: #6b7280;
-      margin: 0 0 12px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .event-item {
-      font-family: "JetBrains Mono", "Fira Code", monospace;
-      font-size: 12px;
-      color: #9ca3af;
-      padding: 4px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    }
-    .event-item:last-child {
-      border-bottom: none;
-    }
-    .event-item .time {
-      color: #4b5563;
-    }
-    .event-item .val-true {
-      color: #4caf50;
-    }
-    .event-item .val-false {
-      color: #f44336;
-    }
+    .event-log { background: var(--ha-surface); border: 1px solid var(--ha-border); border-radius: 14px; padding: 16px 20px; }
+    .event-log h3 { font-size: 13px; color: var(--ha-text-dim); margin: 0 0 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .event-item { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 12px; color: var(--ha-text-muted); padding: 4px 0; border-bottom: 1px solid var(--ha-border-subtle, rgba(255,255,255,0.03)); }
+    .event-item:last-child { border-bottom: none; }
+    .event-item .time { color: var(--ha-text-faint); }
+    .event-item .val-true { color: var(--ha-success); }
+    .event-item .val-false { color: var(--ha-error); }
   `;
 
   connectedCallback() {
@@ -249,11 +97,8 @@ export class App extends LitElement {
     this.loadDevices();
     this.loadHomeSurface();
     this.connectSSE();
-    // Refresh home surface every 60s (time updates)
     this._surfaceTimer = window.setInterval(() => this.loadHomeSurface(), 60_000);
   }
-
-  private _surfaceTimer?: number;
 
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -272,7 +117,6 @@ export class App extends LitElement {
     if (!theme) return;
     const host = this.shadowRoot?.host as HTMLElement;
     if (!host) return;
-    // Set mood class on host for global theming
     host.className = host.className.replace(/mood-\S+/g, "").trim();
     if (theme.mood) host.classList.add(`mood-${theme.mood}`);
   }
@@ -288,105 +132,57 @@ export class App extends LitElement {
     }
   }
 
-  private sseRetryCount = 0;
-
   private connectSSE() {
-    // Close previous connection
     this.eventSource?.close();
     this.eventSource = undefined;
-
-    // Backoff: 3s, 6s, 12s, max 30s
     const delay = Math.min(3000 * Math.pow(2, this.sseRetryCount), 30000);
-
     this.eventSource = subscribeEvents(
-      (evt) => {
-        this.sseRetryCount = 0; // Reset on success
-        this.handleEvent(evt);
-      },
+      (evt) => { this.sseRetryCount = 0; this.handleEvent(evt); },
       () => {
         this.connected = false;
         this.eventSource?.close();
         this.eventSource = undefined;
         this.sseRetryCount++;
-        if (this.sseRetryCount > 10) {
-          console.error("SSE: too many retries, stopping");
-          return;
-        }
+        if (this.sseRetryCount > 10) return;
         setTimeout(() => this.connectSSE(), delay);
       }
     );
   }
 
-  private eventLog: string[] = [];
-
   private handleEvent(evt: HubEvent) {
     this.connected = true;
-
     if (evt.type === "device_state") {
-      // Update device state in-place
       this.devices = this.devices.map((d) => {
         if (d.node_id === evt.device_id && evt.key) {
           const newState = { ...d.state };
-          // Map Matter paths to keys
-          if (evt.key === "1/69/0") {
-            newState["contact"] = evt.value;
-          } else if (evt.key === "1/6/0") {
-            newState["on"] = evt.value;
-          } else {
-            newState[evt.key] = evt.value;
-          }
+          if (evt.key === "1/69/0") newState["contact"] = evt.value;
+          else if (evt.key === "1/6/0") newState["on"] = evt.value;
+          else newState[evt.key] = evt.value;
           return { ...d, state: newState };
         }
         return d;
       });
-
-      // Log
       const now = new Date().toLocaleTimeString("ko-KR");
       const val = evt.value;
-      const label =
-        evt.key === "1/69/0"
-          ? val ? "🚪 열림" : "🔒 닫힘"
-          : evt.key === "1/6/0"
-            ? val ? "🔌 켜짐" : "⭕ 꺼짐"
-            : `${evt.key}=${val}`;
+      const label = evt.key === "1/69/0" ? (val ? "🚪 열림" : "🔒 닫힘") : evt.key === "1/6/0" ? (val ? "🔌 켜짐" : "⭕ 꺼짐") : `${evt.key}=${val}`;
       this.eventLog = [`${now} Node ${evt.device_id}: ${label}`, ...this.eventLog.slice(0, 19)];
       this.lastEvent = label;
       this.requestUpdate();
     }
-
-    if (evt.type === "device_added") {
-      this.loadDevices();
-      this.agentMessage = `🎉 새 디바이스가 추가되었습니다! <em>Node ${evt.device_id}</em>`;
-    }
-
-    if (evt.type === "commission_error") {
-      this.agentMessage = `⚠️ 페어링 실패: ${evt.value}`;
-    }
-
+    if (evt.type === "device_added") { this.loadDevices(); this.agentMessage = `🎉 새 디바이스가 추가되었습니다! <em>Node ${evt.device_id}</em>`; }
+    if (evt.type === "commission_error") { this.agentMessage = `⚠️ 페어링 실패: ${evt.value}`; }
     if (evt.type === "agent_message") {
       this.agentMessage = `🤖 ${evt.value}`;
-      // Push to chat panel
       const chatPanel = this.shadowRoot?.querySelector("ha-chat-panel") as any;
-      if (chatPanel?.addAgentMessage && evt.value) {
-        chatPanel.addAgentMessage(`🔔 ${evt.value}`);
-      }
+      if (chatPanel?.addAgentMessage && evt.value) chatPanel.addAgentMessage(`🔔 ${evt.value}`);
     }
-
-    if (evt.type === "surface_update") {
-      this.llmSurface = evt.value;
-      // Auto-clear LLM surface after 30s
-      setTimeout(() => { this.llmSurface = null; }, 30_000);
-    }
-
-    if (evt.type === "device_state" || evt.type === "device_added") {
-      this.loadHomeSurface();
-    }
+    if (evt.type === "surface_update") { this.llmSurface = evt.value; setTimeout(() => { this.llmSurface = null; }, 30_000); }
+    if (evt.type === "device_state" || evt.type === "device_added") this.loadHomeSurface();
   }
 
   private updateAgentMessage() {
     if (this.devices.length === 0) {
-      this.agentMessage =
-        "안녕하세요! 아직 연결된 디바이스가 없습니다. <em>페어링</em>을 시작해 보세요.";
+      this.agentMessage = "안녕하세요! 아직 연결된 디바이스가 없습니다. <em>페어링</em>을 시작해 보세요.";
     } else {
       const names = this.devices.map((d) => d.name || `Node ${d.node_id}`).join(", ");
       this.agentMessage = `현재 <em>${this.devices.length}개</em> 디바이스가 연결되어 있습니다: ${names}`;
@@ -401,7 +197,6 @@ export class App extends LitElement {
   render() {
     return html`
       <div class="container">
-        <!-- Header -->
         <div class="header">
           <div class="logo">
             <div class="logo-icon">🏠</div>
@@ -415,74 +210,28 @@ export class App extends LitElement {
             ${this.connected ? "온라인" : "오프라인"}
           </div>
         </div>
-
-        <!-- A2UI Home Surface (always visible) -->
         <ha-a2ui-renderer .surface=${this.homeSurface}></ha-a2ui-renderer>
-
-        <!-- LLM Dynamic Surface (temporary) -->
         ${this.llmSurface ? html`<ha-a2ui-renderer .surface=${this.llmSurface}></ha-a2ui-renderer>` : ""}
-
-        <!-- Agent message bar -->
         <div class="agent-bar">
           <div class="agent-avatar">🤖</div>
           <div class="agent-text" .innerHTML=${this.agentMessage}></div>
         </div>
-
-        <!-- Devices -->
         <div class="section-title">
           <span>디바이스 (${this.devices.length})</span>
-          <button class="fab" @click=${() => (this.showCommission = true)}>
-            ➕ 페어링
-          </button>
+          <button class="fab" @click=${() => (this.showCommission = true)}>➕ 페어링</button>
         </div>
-
         ${this.devices.length > 0
-          ? html`
-              <div class="devices-grid">
-                ${this.devices.map(
-                  (d) => html`<ha-device-card .device=${d}></ha-device-card>`
-                )}
-              </div>
-            `
-          : html`
-              <div class="empty">
-                <div class="icon">📡</div>
-                <p>연결된 디바이스가 없습니다</p>
-                <p>Matter 디바이스를 페어링해 보세요</p>
-              </div>
-            `}
-
-        <!-- Chat -->
+          ? html`<div class="devices-grid">${this.devices.map((d) => html`<ha-device-card .device=${d}></ha-device-card>`)}</div>`
+          : html`<div class="empty"><div class="icon">📡</div><p>연결된 디바이스가 없습니다</p><p>Matter 디바이스를 페어링해 보세요</p></div>`}
         <ha-chat-panel></ha-chat-panel>
         <br/>
-
-        <!-- Event log -->
-        ${this.eventLog.length > 0
-          ? html`
-              <div class="event-log">
-                <h3>실시간 이벤트</h3>
-                ${this.eventLog.map(
-                  (e) => html`
-                    <div class="event-item">
-                      ${e.includes("열림")
-                        ? html`<span class="val-true">${e}</span>`
-                        : e.includes("닫힘")
-                          ? html`<span class="val-false">${e}</span>`
-                          : e}
-                    </div>
-                  `
-                )}
-              </div>
-            `
-          : ""}
+        ${this.eventLog.length > 0 ? html`
+          <div class="event-log">
+            <h3>실시간 이벤트</h3>
+            ${this.eventLog.map((e) => html`<div class="event-item">${e.includes("열림") ? html`<span class="val-true">${e}</span>` : e.includes("닫힘") ? html`<span class="val-false">${e}</span>` : e}</div>`)}
+          </div>` : ""}
       </div>
-
-      <!-- Commission dialog -->
-      <ha-commission-dialog
-        .open=${this.showCommission}
-        @close=${() => (this.showCommission = false)}
-        @commissioned=${() => this.handleCommissioned()}
-      ></ha-commission-dialog>
+      <ha-commission-dialog .open=${this.showCommission} @close=${() => (this.showCommission = false)} @commissioned=${() => this.handleCommissioned()}></ha-commission-dialog>
     `;
   }
 }

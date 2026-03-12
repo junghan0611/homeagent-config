@@ -89,6 +89,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if uiDir != "" {
 		log.Printf("UI 서빙: %s", uiDir)
 		fs := http.FileServer(http.Dir(uiDir))
+		// /wallpad → wallpad.html (월패드 전용 UI)
+		mux.HandleFunc("/wallpad", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, filepath.Join(uiDir, "wallpad.html"))
+		})
 		mux.Handle("/", fs)
 	}
 

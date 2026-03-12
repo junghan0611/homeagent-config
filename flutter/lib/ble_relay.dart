@@ -46,10 +46,36 @@ class BleRelay {
 
   BleRelay({required this.wsUrl, this.onStatus});
 
+  /// BLE 어댑터 상태 확인
+  Future<bool> checkBleAdapter() async {
+    final state = await FlutterBluePlus.adapterState.first;
+    if (state != BluetoothAdapterState.on) {
+      onStatus?.call('⚠️ BLE가 꺼져있습니다. 설정에서 블루투스를 켜세요.');
+      return false;
+    }
+    return true;
+  }
+
   /// WS 연결 시작
   Future<void> connect() async {
-    _ws = WebSocketChannel.connect(Uri.parse(wsUrl));
-    onStatus?.call('BLE relay 연결 중...');
+    // BLE 어댑터 상태 확인
+    final bleReady = await checkBleAdapter();
+    if (!bleReady) {
+      throw Exception('블루투스가 꺼져있습니다. 설정에서 블루투스를 켜세요.');
+    }
+
+    onStatus?.call('BLE relay 연결 중... ($wsUrl)');
+
+    try {
+      _ws = WebSocketChannel.connect(Uri.parse(wsUrl));
+      // WebSocketChannel.connect는 즉시 반환. ready를 기다려야 실제 연결 확인.
+      await _ws!.ready;
+    } catch (e) {
+      final msg = 'matterjs BLE 서버($wsUrl)에 연결할 수 없습니다. '
+          '서버가 실행 중인지 확인하세요.';
+      onStatus?.call('❌ $msg');
+      throw Exception(msg);
+    }
 
     _wsSub = _ws!.stream.listen(
       (raw) {
@@ -61,22 +87,25 @@ class BleRelay {
         }
       },
       onError: (e) {
-        onStatus?.call('BLE relay 연결 오류: $e');
+        onStatus?.call('❌ BLE relay 연결 오류: $e');
+        _cleanup();
       },
       onDone: () {
-        onStatus?.call('BLE relay 연결 종료');
+        onStatus?.call('BLE relay 연결 종료 — 서버 연결이 끊어졌습니다');
         _cleanup();
       },
     );
 
-    onStatus?.call('BLE relay 연결됨');
+    onStatus?.call('✅ BLE relay 연결됨');
   }
 
   /// WS 연결 종료
   Future<void> disconnect() async {
     await _cleanup();
+    await _wsSub?.cancel();
+    _wsSub = null;
     await _ws?.sink.close();
-    _wsSub?.cancel();
+    _ws = null;
   }
 
   /// matterjs-server에서 온 명령 처리
@@ -275,14 +304,17 @@ class BleRelay {
     _ws?.sink.add(json);
   }
 
-  /// 리소스 정리
+  /// 리소스 정리 — BLE 리소스를 확실히 해제해야 2회 연속 커미셔닝이 가능
   Future<void> _cleanup() async {
     _stopScan();
     await _c2Sub?.cancel();
     _c2Sub = null;
+    _c1WriteWithoutResponse = false;
     try {
       await _connectedDevice?.disconnect();
-    } catch (_) {}
+    } catch (e) {
+      print('[BLE-RELAY] cleanup disconnect error (무시): $e');
+    }
     _connectedDevice = null;
     _c1 = null;
     _c2 = null;

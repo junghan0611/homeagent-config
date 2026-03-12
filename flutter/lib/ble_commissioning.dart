@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:convert' show jsonEncode;
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble_relay.dart';
 
@@ -29,8 +30,9 @@ class BleCommissioningScreen extends StatefulWidget {
 }
 
 class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
-  String _status = 'BLE relay 대기 중';
+  String _status = '초기화 중...';
   bool _commissioning = false;
+  bool _relayConnected = false;
   BleRelay? _relay;
 
   @override
@@ -45,11 +47,46 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     super.dispose();
   }
 
+  /// BLE 권한 확인 (Android 12+)
+  Future<bool> _checkBlePermissions() async {
+    if (!Platform.isAndroid) return true;
+    // FlutterBluePlus가 내부적으로 권한 체크/요청 수행
+    // turnOn()이 BLE가 꺼져있을 때 시스템 다이얼로그를 띄움
+    final adapterState = await FlutterBluePlus.adapterState.first;
+    if (adapterState != BluetoothAdapterState.on) {
+      setState(() => _status = '⚠️ 블루투스가 꺼져있습니다');
+      try {
+        await FlutterBluePlus.turnOn();
+        // 켜질 때까지 최대 5초 대기
+        await FlutterBluePlus.adapterState
+            .where((s) => s == BluetoothAdapterState.on)
+            .first
+            .timeout(const Duration(seconds: 5));
+        return true;
+      } catch (_) {
+        setState(() => _status = '❌ 블루투스를 켜야 커미셔닝이 가능합니다.\n설정에서 블루투스를 활성화하세요.');
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// BLE relay 시작 — matterjs-server의 BLE WS에 연결
   Future<void> _startRelay() async {
+    setState(() {
+      _status = 'BLE 권한 확인 중...';
+      _relayConnected = false;
+    });
+
+    // 1. BLE 권한 확인
+    if (!await _checkBlePermissions()) return;
+
     // serverUrl에서 호스트 추출 → BLE WS 포트로 연결
     final serverUri = Uri.parse(widget.serverUrl);
     final bleWsUrl = 'ws://${serverUri.host}:5581';
+
+    // 2. 이전 relay 정리 (2회 연속 커미셔닝 대응)
+    await _relay?.disconnect();
 
     _relay = BleRelay(
       wsUrl: bleWsUrl,
@@ -60,38 +97,54 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
 
     try {
       await _relay!.connect();
-      setState(() => _status = 'BLE relay 연결됨 — 커미셔닝 준비');
+      setState(() {
+        _status = '✅ BLE relay 연결됨 — 커미셔닝 준비 완료';
+        _relayConnected = true;
+      });
     } catch (e) {
-      setState(() => _status = 'BLE relay 연결 실패: $e');
+      setState(() {
+        _status = '❌ BLE relay 연결 실패\n$e';
+        _relayConnected = false;
+      });
     }
   }
 
   /// 커미셔닝 시작 — WiFi + pairing code 입력 → Go 서버 요청
   Future<void> _startCommissioning() async {
+    // BLE relay가 연결되어 있지 않으면 재연결 시도
+    if (!_relayConnected) {
+      await _startRelay();
+      if (!_relayConnected) return;
+    }
+
     // 1. WiFi + Pairing code 입력
     final info = await _showCommissionDialog();
     if (info == null) return;
 
     setState(() {
       _commissioning = true;
-      _status = '커미셔닝 시작...';
+      _status = '🔄 WiFi 정보 설정 중...';
     });
 
     try {
       // 2. WiFi credentials를 Go 서버에 설정
       await _setWifiCredentials(info.ssid, info.password);
+      setState(() => _status = '🔄 커미셔닝 요청 중...');
 
       // 3. Commission 요청 (network_only=false → matterjs가 BLE 커미셔닝)
       await _requestCommission(info.pairingCode);
 
-      setState(() => _status = '⏳ 커미셔닝 진행 중...');
+      setState(() => _status = '⏳ 커미셔닝 진행 중...\n'
+          'BLE 스캔 → BTP 핸드셰이크 → PASE 인증 → WiFi 설정\n'
+          '(60~120초 소요, 디바이스가 페어링 모드인지 확인)');
 
       // SSE로 커미셔닝 결과 추적
       _listenCommissionResult(info.pairingCode, info.ssid);
     } catch (e) {
-      setState(() => _status = '❌ 커미셔닝 실패: $e');
-    } finally {
-      setState(() => _commissioning = false);
+      setState(() {
+        _commissioning = false;
+        _status = '❌ 커미셔닝 실패: $e';
+      });
     }
   }
 
@@ -112,13 +165,25 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
           final data = line.substring(6);
           if (data.contains('device_added') || data.contains('commission_result')) {
             if (mounted) {
-              setState(() => _status = '✅ 커미셔닝 성공!');
-              _showResultDialog('커미셔닝 완료', '디바이스가 추가되었습니다.\nWiFi: $ssid');
+              setState(() {
+                _status = '✅ 커미셔닝 성공! 디바이스가 추가되었습니다.';
+                _commissioning = false;
+              });
+              _showResultDialog('✅ 커미셔닝 완료', '디바이스가 네트워크에 추가되었습니다.\nWiFi: $ssid\n\n뒤로 돌아가면 대시보드에서 확인할 수 있습니다.');
             }
           } else if (data.contains('commission_error')) {
             if (mounted) {
-              setState(() => _status = '❌ 커미셔닝 실패');
-              _showResultDialog('커미셔닝 실패', '자세한 내용은 로그를 확인하세요.\nCode: $code');
+              setState(() {
+                _status = '❌ 커미셔닝 실패 — 재시도하려면 아래 버튼을 누르세요';
+                _commissioning = false;
+              });
+              _showResultDialog('❌ 커미셔닝 실패',
+                  '확인 사항:\n'
+                  '• 디바이스가 페어링 모드인지\n'
+                  '• Pairing Code가 맞는지\n'
+                  '• WiFi SSID/비밀번호가 맞는지\n'
+                  '• 디바이스가 BLE 범위 내에 있는지\n\n'
+                  'Code: $code');
             }
           }
         }
@@ -287,9 +352,13 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.bluetooth,
-                      size: 64,
-                      color: Theme.of(context).colorScheme.outline),
+                  Icon(
+                    _relayConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                    size: 64,
+                    color: _relayConnected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.error,
+                  ),
                   const SizedBox(height: 16),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
@@ -302,6 +371,15 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
+                  // BLE relay 재연결 버튼 (연결 실패 시)
+                  if (!_relayConnected && !_commissioning) ...[
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _startRelay,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('BLE relay 재연결'),
+                    ),
+                  ],
                 ],
               ),
             ),

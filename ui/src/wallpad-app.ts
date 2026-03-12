@@ -59,8 +59,11 @@ export class WallpadApp extends LitElement {
   @state() private devices: DeviceState[] = [];
   @state() private commissionOpen = false;
   @state() private darkMode = true;
+  @state() private connected = false;
+  @state() private errorMsg = "";
 
   private eventSource?: EventSource;
+  private sseRetryCount = 0;
 
   static styles = css`
     :host {
@@ -315,22 +318,48 @@ export class WallpadApp extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.eventSource?.close();
+    this.eventSource = undefined;
   }
 
   private async loadDevices() {
     try {
       this.devices = await getDevices();
+      this.connected = true;
+      this.errorMsg = "";
     } catch (e) {
       console.error("[wallpad] load devices:", e);
+      this.connected = false;
+      this.errorMsg = "서버 연결 실패";
     }
   }
 
   private connectSSE() {
+    this.eventSource?.close();
+    this.eventSource = undefined;
+
+    // Exponential backoff: 3s, 6s, 12s, max 30s
+    const delay = Math.min(3000 * Math.pow(2, this.sseRetryCount), 30000);
+
     this.eventSource = subscribeEvents(
-      (evt: HubEvent) => this.handleEvent(evt),
+      (evt: HubEvent) => {
+        this.sseRetryCount = 0;
+        this.connected = true;
+        this.errorMsg = "";
+        this.handleEvent(evt);
+      },
       () => {
-        // Reconnect on error (EventSource auto-reconnects)
-        console.warn("[wallpad] SSE disconnected, will reconnect...");
+        this.connected = false;
+        this.eventSource?.close();
+        this.eventSource = undefined;
+        this.sseRetryCount++;
+        if (this.sseRetryCount > 10) {
+          this.errorMsg = "서버 연결 끊김 — 새로고침하세요";
+          console.error("[wallpad] SSE: too many retries, stopping");
+          return;
+        }
+        this.errorMsg = `재연결 중... (${this.sseRetryCount}/10)`;
+        console.warn(`[wallpad] SSE disconnected, retry #${this.sseRetryCount} in ${delay}ms`);
+        setTimeout(() => this.connectSSE(), delay);
       },
     );
   }
@@ -361,6 +390,14 @@ export class WallpadApp extends LitElement {
 
     if (evt.type === "device_added") {
       this.loadDevices();
+    }
+
+    if (evt.type === "commission_error") {
+      this.errorMsg = `페어링 실패: ${evt.value}`;
+      // 5초 후 에러 메시지 자동 제거
+      setTimeout(() => {
+        if (this.errorMsg.startsWith("페어링")) this.errorMsg = "";
+      }, 5000);
     }
   }
 
@@ -459,9 +496,11 @@ export class WallpadApp extends LitElement {
         <div class="status-bar">
           <span>
             <span
-              class="status-dot ${this.eventSource?.readyState === EventSource.OPEN ? "" : "disconnected"}"
+              class="status-dot ${this.connected ? "" : "disconnected"}"
             ></span>
-            ${this.devices.length}개 디바이스
+            ${this.connected
+              ? `${this.devices.length}개 디바이스`
+              : this.errorMsg || "서버 연결 중..."}
           </span>
           <span>1024 × 600</span>
         </div>

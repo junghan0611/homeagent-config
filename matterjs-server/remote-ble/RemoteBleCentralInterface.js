@@ -198,10 +198,12 @@ export class RemoteBleCentralInterface {
       clientWindowSize: BTP_MAXIMUM_WINDOW_SIZE,
     });
 
+    const hsRequestBytes = Array.from(new Uint8Array(hsRequest));
+    logger.info(`C1 write (BTP handshake req): ${Buffer.from(hsRequestBytes).toString("hex")} (${hsRequestBytes.length} bytes)`);
     this.#sendToFlutter({
       cmd: "ble_write",
       address: peripheralAddress,
-      data: Array.from(new Uint8Array(hsRequest)),
+      data: hsRequestBytes,
     });
 
     const hsResponse = await hsPromise;
@@ -218,10 +220,12 @@ export class RemoteBleCentralInterface {
       new Uint8Array(hsResponse),
       // writeBleCallback — C1 write
       async (data) => {
+        const bytes = Array.from(new Uint8Array(data));
+        logger.info(`C1 write (BTP segment): ${Buffer.from(bytes).toString("hex")} (${bytes.length} bytes)`);
         this.#sendToFlutter({
           cmd: "ble_write",
           address: peripheralAddress,
-          data: Array.from(new Uint8Array(data)),
+          data: bytes,
         });
       },
       // disconnectBleCallback
@@ -242,6 +246,7 @@ export class RemoteBleCentralInterface {
 
     // C2 핸들러를 BTP 세션으로 전환
     this.#pendingResponses.set(c2DataKey, (data) => {
+      logger.info(`C2 data (BTP segment): ${Buffer.from(data).toString("hex")} (${data.length} bytes)`);
       btpSession.handleIncomingBleData(new Uint8Array(data));
     });
 
@@ -256,13 +261,19 @@ export class RemoteBleCentralInterface {
 
   #sendToFlutter(msg) {
     if (this.#flutterWs?.readyState === 1) {
-      this.#flutterWs.send(JSON.stringify(msg));
+      const json = JSON.stringify(msg);
+      logger.debug(`→ Flutter: ${msg.cmd} (${json.length} chars)`);
+      this.#flutterWs.send(json);
+    } else {
+      logger.warn(`→ Flutter: WS not ready (readyState=${this.#flutterWs?.readyState}), dropping ${msg.cmd}`);
     }
   }
 
   #handleFlutterMessage(msg) {
+    logger.debug(`← Flutter: ${msg.event} addr=${msg.address || "n/a"}`);
     switch (msg.event) {
       case "ble_connected":
+        logger.info(`← Flutter: ble_connected addr=${msg.address} mtu=${msg.mtu}`);
         this.#resolveResponse("ble_connected", msg.address, msg);
         break;
 

@@ -82,6 +82,7 @@ class BleRelay {
   /// matterjs-server에서 온 명령 처리
   void _handleCommand(Map<String, dynamic> msg) {
     final cmd = msg['cmd'] as String?;
+    print('[BLE-RELAY] ← matterjs: cmd=$cmd addr=${msg['address'] ?? 'n/a'}');
     switch (cmd) {
       case 'ble_scan_start':
         _startScan();
@@ -195,7 +196,13 @@ class BleRelay {
           '→ using withoutResponse=$_c1WriteWithoutResponse');
 
       // C2 indicate 구독
-      await _c2!.setNotifyValue(true);
+      // Matter BTP spec: C2는 indicate(0x0002) 사용. notify(0x0001) 아님.
+      // FlutterBluePlus 기본 동작: 양쪽 다 지원하면 notify 선택 → BTP 실패.
+      // forceIndications: true로 CCCD 0x0002 강제 (Android only).
+      print('[BLE-RELAY] C2 properties: notify=${_c2!.properties.notify} '
+          'indicate=${_c2!.properties.indicate} '
+          '→ forceIndications=true');
+      await _c2!.setNotifyValue(true, forceIndications: true);
       _c2Sub = _c2!.onValueReceived.listen((data) {
         print('[BLE-RELAY] C2 indicate: ${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} (${data.length} bytes)');
         _send({
@@ -263,7 +270,9 @@ class BleRelay {
 
   /// WS로 메시지 전송
   void _send(Map<String, dynamic> msg) {
-    _ws?.sink.add(jsonEncode(msg));
+    final json = jsonEncode(msg);
+    print('[BLE-RELAY] → matterjs: event=${msg['event']} (${json.length} chars)');
+    _ws?.sink.add(json);
   }
 
   /// 리소스 정리

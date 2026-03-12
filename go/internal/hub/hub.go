@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/junghan0611/homeagent/internal/agent"
@@ -56,6 +57,9 @@ type Hub struct {
 	// LLM Agent
 	agent     *agent.Agent
 	lastEvent time.Time // debounce rapid events
+
+	// Commissioning guard — 동시 커미셔닝 방지
+	commissioning int32 // atomic: 0=idle, 1=in_progress
 
 	// Device aliases
 	aliases map[int]DeviceAlias
@@ -172,8 +176,15 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 	return <-readErr
 }
 
-// Commission triggers a new device commissioning
+// Commission triggers a new device commissioning.
+// Only one commissioning can run at a time — returns error if already in progress.
 func (h *Hub) Commission(ctx context.Context, code string, networkOnly bool) (*DeviceState, error) {
+	// 동시 커미셔닝 방지 — CAS로 0→1 전환 시도
+	if !atomic.CompareAndSwapInt32(&h.commissioning, 0, 1) {
+		return nil, fmt.Errorf("커미셔닝이 이미 진행 중입니다. 완료 후 다시 시도하세요")
+	}
+	defer atomic.StoreInt32(&h.commissioning, 0)
+
 	node, err := h.matter.CommissionWithCode(ctx, code, networkOnly)
 	if err != nil {
 		return nil, err
@@ -555,6 +566,16 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 	// Commission is long-running (60-120s). Use background context
 	// so browser disconnect doesn't cancel it. Return 202 immediately.
 	log.Printf("[hub] commission requested: %s (network_only=%v)", req.Code, req.NetworkOnly)
+
+	// WiFi/Thread 설정 상태 경고 (디버깅 용이)
+	if h.cfg.WifiSSID == "" {
+		log.Printf("[hub] ⚠️ WiFi credentials 미설정 — WiFi 디바이스 커미셔닝 시 실패할 수 있음")
+	}
+	if !req.NetworkOnly {
+		if info := h.matter.Info(); info != nil && !info.BluetoothEnabled {
+			log.Printf("[hub] ⚠️ BLE 비활성 — BLE 커미셔닝 실패 가능 (network_only=false)")
+		}
+	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)

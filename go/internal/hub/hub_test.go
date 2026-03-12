@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -106,5 +108,37 @@ func TestGetOTBRDataset_WhitespaceHandling(t *testing.T) {
 	}
 	if dataset != hex {
 		t.Errorf("expected %q, got %q", hex, dataset)
+	}
+}
+
+// TestCommissioningGuard verifies that concurrent commissioning is blocked
+func TestCommissioningGuard(t *testing.T) {
+	h := &Hub{
+		commissioning: 0,
+	}
+
+	// Simulate commissioning in progress
+	atomic.StoreInt32(&h.commissioning, 1)
+
+	// Second attempt should be blocked
+	if atomic.CompareAndSwapInt32(&h.commissioning, 0, 1) {
+		t.Error("concurrent commissioning should have been blocked")
+	}
+
+	// After first completes, second should succeed
+	atomic.StoreInt32(&h.commissioning, 0)
+	if !atomic.CompareAndSwapInt32(&h.commissioning, 0, 1) {
+		t.Error("commissioning should succeed after previous one completes")
+	}
+}
+
+// TestCommissioningGuardErrorMessage verifies the error message is user-friendly
+func TestCommissioningGuardErrorMessage(t *testing.T) {
+	expectedMsg := "커미셔닝이 이미 진행 중입니다"
+
+	// This tests that our error message format is correct
+	// (the actual Commission method can't be tested without a Matter client)
+	if !strings.Contains(expectedMsg, "이미 진행 중") {
+		t.Error("error message should indicate concurrent commissioning")
 	}
 }

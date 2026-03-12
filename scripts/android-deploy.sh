@@ -286,6 +286,45 @@ cmd_push() {
         rm -f /tmp/ha-ui-dist.tar.gz
     fi
 
+    # nodejs-bundle (Node.js + matterjs-server + remote-ble)
+    # bundle-backend.sh로 생성: dist/homeagent-bundle-arm64/
+    # 크기 ~300MB — 이미 존재하면 스킵
+    local BUNDLE_SRC=""
+    if [[ -d "$DIST_DIR/homeagent-bundle-arm64/matterjs-server" ]]; then
+        BUNDLE_SRC="$DIST_DIR/homeagent-bundle-arm64"
+    elif [[ -d "$DIST_DIR/nodejs-bundle/matterjs-server" ]]; then
+        BUNDLE_SRC="$DIST_DIR/nodejs-bundle"
+    fi
+
+    if [[ -n "$BUNDLE_SRC" ]]; then
+        # node 바이너리 존재로 이미 push 됐는지 판단
+        local REMOTE_NODE
+        REMOTE_NODE=$(adb shell "ls $REMOTE/nodejs-bundle/node/bin/node 2>/dev/null" || true)
+        if [[ -z "$REMOTE_NODE" ]] || [[ "$REMOTE_NODE" == *"No such file"* ]]; then
+            log "nodejs-bundle push (최초 설치)..."
+            adb shell "mkdir -p $REMOTE/nodejs-bundle"
+            # tar로 묶어서 전송 (개별 push보다 훨씬 빠름)
+            (cd "$BUNDLE_SRC" && tar czf /tmp/ha-nodejs-bundle.tar.gz \
+                node/ matterjs-server/)
+            adb push /tmp/ha-nodejs-bundle.tar.gz "$REMOTE/nodejs-bundle/bundle.tar.gz"
+            adb shell "cd $REMOTE/nodejs-bundle && tar xzf bundle.tar.gz && rm bundle.tar.gz"
+            # ld-linux 링커 심볼릭 (Android glibc 없으므로 번들에 포함된 것 사용)
+            adb shell "ls $REMOTE/nodejs-bundle/lib/ld-linux-aarch64.so.1 2>/dev/null" || \
+                warn "ld-linux 링커 없음 — Node.js 실행 불가할 수 있음"
+            rm -f /tmp/ha-nodejs-bundle.tar.gz
+            log "nodejs-bundle push 완료"
+        else
+            log "nodejs-bundle 이미 존재 — 스킵 (remote-ble만 업데이트)"
+            # remote-ble 코드는 자주 변경되므로 항상 업데이트
+            adb shell "mkdir -p $REMOTE/nodejs-bundle/matterjs-server/remote-ble"
+            adb push "$PROJECT_DIR/matterjs-server/remote-ble/" \
+                "$REMOTE/nodejs-bundle/matterjs-server/remote-ble/"
+        fi
+    else
+        warn "nodejs-bundle 없음 — bundle-backend.sh 먼저 실행"
+        warn "  → ./scripts/bundle-backend.sh 또는 ./run.sh bundle"
+    fi
+
     # aliases.json
     [[ -f "$PROJECT_DIR/aliases.json" ]] && adb push "$PROJECT_DIR/aliases.json" "$REMOTE/aliases.json"
 

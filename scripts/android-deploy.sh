@@ -78,9 +78,10 @@ cmd_start() {
 
     adb shell "cat > $REMOTE/_start.sh" << STARTEOF
 #!/system/bin/sh
-# matterjs-server
+# matterjs-server (--import로 BLE WS bridge 로드 → :5581)
 cd $REMOTE/nodejs-bundle
 lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
+    --import ./matterjs-server/remote-ble/ws-bridge.js \\
     matterjs-server/node_modules/matter-server/dist/esm/MatterServer.js \\
     --storage-path $REMOTE/matter-data \\
     --port 5580 \\

@@ -197,7 +197,7 @@ cat > "$BUNDLE_DIR/.env" << 'EOF'
 
 # Go HomeAgent
 HOMEAGENT_HTTP_ADDR=:8080
-HOMEAGENT_WS_URL=ws://localhost:5580/ws
+HOMEAGENT_MATTER_WS=ws://localhost:5580
 HOMEAGENT_UI_DIR=./ui
 HOMEAGENT_ALIASES_FILE=./aliases.json
 

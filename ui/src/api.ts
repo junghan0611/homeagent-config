@@ -72,6 +72,24 @@ export async function commission(code: string, networkOnly = true): Promise<{ st
   return res.json();
 }
 
+export async function commissionOnNetwork(
+  pinCode: number,
+  ipAddr?: string,
+): Promise<{ status: string }> {
+  const body: Record<string, unknown> = { pin_code: pinCode };
+  if (ipAddr) body.ip_addr = ipAddr;
+  const res = await fetch(`${API_BASE}/api/commission-on-network`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok && res.status !== 202) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "Commission on network failed");
+  }
+  return res.json();
+}
+
 export function subscribeEvents(
   onEvent: (event: HubEvent) => void,
   onError?: (err: Event) => void,

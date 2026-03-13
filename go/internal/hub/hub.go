@@ -477,6 +477,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices", h.handleDevices)
 	mux.HandleFunc("/api/devices/", h.handleDeviceByID) // /api/devices/:node_id
 	mux.HandleFunc("/api/commission", h.handleCommission)
+	mux.HandleFunc("/api/commission-on-network", h.handleCommissionOnNetwork)
 	mux.HandleFunc("/api/wifi-credentials", h.handleWifiCredentials)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/chat", h.handleChat)
@@ -653,6 +654,57 @@ func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning", "code": req.Code})
+}
+
+// handleCommissionOnNetwork handles POST /api/commission-on-network
+// Bypasses BLE — uses IP-based commissioning (CASE). Useful when BLE commissioning's
+// operative reconnection fails (mDNS issues on Android).
+func (h *Hub) handleCommissionOnNetwork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		PinCode int    `json:"pin_code"`
+		IPAddr  string `json:"ip_addr"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.PinCode == 0 {
+		http.Error(w, `{"error":"pin_code required"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[hub] commission-on-network requested: pin=%d ip=%s", req.PinCode, req.IPAddr)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		if !atomic.CompareAndSwapInt32(&h.commissioning, 0, 1) {
+			log.Printf("[hub] commission-on-network rejected: already in progress")
+			h.eventCh <- Event{Type: "commission_error", Key: "error", Value: "커미셔닝이 이미 진행 중입니다"}
+			return
+		}
+		defer atomic.StoreInt32(&h.commissioning, 0)
+
+		node, err := h.matter.CommissionOnNetwork(ctx, req.PinCode, req.IPAddr)
+		if err != nil {
+			log.Printf("[hub] commission-on-network failed: %v", err)
+			h.eventCh <- Event{Type: "commission_error", Key: "error", Value: err.Error()}
+			return
+		}
+
+		ds := h.addNode(*node)
+		log.Printf("[hub] commission-on-network success: node %d", ds.NodeID)
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning_on_network"})
 }
 
 func (h *Hub) deviceInfos() []agent.DeviceInfo {

@@ -36,7 +36,8 @@ RPi5 로컬: `http://localhost:8080`
 | GET | `/api/devices/:node_id` | 개별 디바이스 상세 | ✅ 구현됨 |
 | DELETE | `/api/devices/:node_id` | 디바이스 삭제 (unpair) | ✅ 구현됨 |
 | POST | `/api/devices/command` | 디바이스 제어 | ✅ 구현됨 (8 commands) |
-| POST | `/api/commission` | 새 디바이스 페어링 | ✅ 구현됨 |
+| POST | `/api/commission` | 새 디바이스 페어링 (BLE/on-network) | ✅ 구현됨 |
+| POST | `/api/commission-on-network` | IP 직접 지정 페어링 (CASE) | ✅ 구현됨 |
 | GET | `/api/events` | SSE 실시간 이벤트 | ✅ 구현됨 |
 | POST | `/api/chat` | LLM 에이전트 (자연어→제어) | ✅ 구현됨 |
 | GET | `/api/home` | A2UI Home Surface | ✅ 구현됨 |
@@ -231,6 +232,34 @@ data: {"node_id": 9, "type": "on_off_light"}
 event: commission_error
 data: {"error": "PASE failed: timeout"}
 ```
+
+---
+
+### POST /api/commission-on-network
+
+IP 직접 지정 Matter 커미셔닝 (BLE 우회, CASE만).
+BLE 커미셔닝 operative reconnection 실패 시 우회용.
+
+**요청:**
+```json
+{
+  "pin_code": 56204424,
+  "ip_addr": "fd3f:a8c0:1556:1:5ea6:9e21:f21e:cb08"
+}
+```
+
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| `pin_code` | ✅ | 디바이스 setup PIN code (숫자) |
+| `ip_addr` | | IPv6/IPv4 주소. 미지정 시 mDNS 자동 탐색 |
+
+**응답:** 202 Accepted (비동기, 30-120초 소요)
+
+결과는 SSE `/api/events`로 전달 (commission_success / commission_error).
+
+**사용 시나리오:**
+1. Thread 디바이스가 이미 Thread 네트워크에 합류했지만 mDNS 발견 실패 시
+2. `ot-ctl srp server host` → IPv6 주소 추출 → 직접 지정
 
 ---
 

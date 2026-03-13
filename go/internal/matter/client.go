@@ -238,6 +238,44 @@ func (c *Client) CommissionWithCode(ctx context.Context, code string, networkOnl
 	return &node, nil
 }
 
+// CommissionOnNetwork commissions a device using its setup PIN code and optional IP address.
+// This bypasses BLE entirely — uses IP-based commissioning (CASE).
+// Useful when BLE commissioning's operative reconnection fails (e.g., mDNS issues on Android).
+func (c *Client) CommissionOnNetwork(ctx context.Context, pinCode int, ipAddr string) (*Node, error) {
+	args := map[string]interface{}{
+		"setup_pin_code": pinCode,
+	}
+	if ipAddr != "" {
+		args["ip_addr"] = ipAddr
+	}
+
+	id, ch, err := c.send("commission_on_network", args)
+	if err != nil {
+		return nil, err
+	}
+
+	// On-network commission can take 60+ seconds
+	raw, err := c.waitResponse(id, ch, 120*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("commission_on_network parse resp: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("commission_on_network error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var node Node
+	if err := json.Unmarshal(resp.Result, &node); err != nil {
+		return nil, fmt.Errorf("commission_on_network parse: %w", err)
+	}
+	log.Printf("[matter] commissioned on-network node %d", node.NodeID)
+	return &node, nil
+}
+
 // StartListening subscribes to real-time events
 func (c *Client) StartListening(ctx context.Context) error {
 	id, ch, err := c.send("start_listening", nil)

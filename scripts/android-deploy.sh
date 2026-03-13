@@ -87,6 +87,7 @@ lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
     --storage-path $REMOTE/matter-data \\
     --port 5580 \\
     --bluetooth-adapter 0 \\
+    --primary-interface wlan0 \\
     > $REMOTE/matterjs.log 2>&1 &
 sleep 4
 

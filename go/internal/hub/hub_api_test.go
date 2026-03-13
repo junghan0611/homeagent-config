@@ -764,6 +764,125 @@ func TestHandleMatterEvent_NodeRemoved(t *testing.T) {
 	}
 }
 
+func TestAPICommissionOnNetwork_MissingPinCode(t *testing.T) {
+	h := testHub(t)
+	mux := http.NewServeMux()
+	h.RegisterHTTP(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// Missing pin_code
+	resp, err := http.Post(ts.URL+"/api/commission-on-network", "application/json",
+		strings.NewReader(`{"ip_addr":"fd3f::1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPICommissionOnNetwork_MethodNotAllowed(t *testing.T) {
+	h := testHub(t)
+	mux := http.NewServeMux()
+	h.RegisterHTTP(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/commission-on-network")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPICommissionOnNetwork_Accepted(t *testing.T) {
+	// Test with mock matter client (WebSocket mock)
+	matterSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			var req map[string]interface{}
+			if err := json.Unmarshal(msg, &req); err != nil {
+				continue
+			}
+
+			cmd, _ := req["command"].(string)
+			id, _ := req["message_id"].(string)
+
+			switch cmd {
+			case "server_info":
+				resp := fmt.Sprintf(`{"message_id":"%s","result":{"sdk_version":"1.0","fabric_id":1,"bluetooth_enabled":true,"thread_credentials_set":false}}`, id)
+				conn.WriteMessage(websocket.TextMessage, []byte(resp))
+			case "start_listening":
+				resp := fmt.Sprintf(`{"message_id":"%s","result":{}}`, id)
+				conn.WriteMessage(websocket.TextMessage, []byte(resp))
+			case "commission_on_network":
+				args := req["args"].(map[string]interface{})
+				pinCode := args["setup_pin_code"].(float64)
+				if pinCode == 56204424 {
+					resp := fmt.Sprintf(`{"message_id":"%s","result":{"node_id":10,"date_commissioned":"2026-01-01","available":true,"attributes":{"1/29/0":[{"0":21}]}}}`, id)
+					conn.WriteMessage(websocket.TextMessage, []byte(resp))
+				}
+			case "get_nodes":
+				resp := fmt.Sprintf(`{"message_id":"%s","result":[]}`, id)
+				conn.WriteMessage(websocket.TextMessage, []byte(resp))
+			}
+		}
+	}))
+	defer matterSrv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(matterSrv.URL, "http")
+
+	cfg := &config.Config{
+		MatterWSURL: wsURL,
+	}
+	h := New(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go h.Run(ctx)
+	time.Sleep(500 * time.Millisecond) // Wait for matter connection
+
+	mux := http.NewServeMux()
+	h.RegisterHTTP(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/api/commission-on-network", "application/json",
+		strings.NewReader(`{"pin_code":56204424,"ip_addr":"fd3f:a8c0:1556:1:5ea6:9e21:f21e:cb08"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("expected 202, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["status"] != "commissioning_on_network" {
+		t.Errorf("expected status 'commissioning_on_network', got %q", result["status"])
+	}
+
+	// Wait for background commissioning to complete
+	time.Sleep(time.Second)
+	cancel()
+}
+
 func TestAddNode_DeviceTypes(t *testing.T) {
 	tests := []struct {
 		typeID   float64

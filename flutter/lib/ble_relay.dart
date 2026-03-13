@@ -43,6 +43,7 @@ class BleRelay {
   BluetoothCharacteristic? _c1;
   BluetoothCharacteristic? _c2;
   bool _c1WriteWithoutResponse = false;
+  bool _c2Subscribed = false;
 
   BleRelay({required this.wsUrl, this.onStatus});
 
@@ -218,29 +219,19 @@ class BleRelay {
       );
 
       // noble(RPi5 성공): writeAsync(data, false) = Write WITH Response
-      // BTP handshake는 writeWithResponse로 보내야 디바이스가 응답함.
-      // writeWithoutResponse를 쓰면 C2 indicate가 안 옴.
       _c1WriteWithoutResponse = false;
       print('[BLE-RELAY] C1 properties: write=${_c1!.properties.write} '
           'writeWithoutResponse=${_c1!.properties.writeWithoutResponse} '
           '→ using withoutResponse=$_c1WriteWithoutResponse');
 
-      // C2 indicate 구독
-      // Matter BTP spec: C2는 indicate(0x0002) 사용. notify(0x0001) 아님.
-      // FlutterBluePlus 기본 동작: 양쪽 다 지원하면 notify 선택 → BTP 실패.
-      // forceIndications: true로 CCCD 0x0002 강제 (Android only).
+      // C2 indicate 구독을 여기서 하지 않음!
+      // noble 순서: C1 write(handshake) → C2 subscribe (CCCD 0x0002)
+      // 일부 디바이스는 CCCD가 C1 write 전에 오면 응답 안 함.
+      // _subscribeC2()는 첫 ble_write 시점에 호출.
+      _c2Subscribed = false;
       print('[BLE-RELAY] C2 properties: notify=${_c2!.properties.notify} '
           'indicate=${_c2!.properties.indicate} '
-          '→ forceIndications=true');
-      await _c2!.setNotifyValue(true, forceIndications: true);
-      _c2Sub = _c2!.onValueReceived.listen((data) {
-        print('[BLE-RELAY] C2 indicate: ${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} (${data.length} bytes)');
-        _send({
-          'event': 'ble_data',
-          'address': address,
-          'data': data,
-        });
-      });
+          '→ subscribe 지연 (첫 C1 write 시점)');
 
       _connectedDevice = device;
       onStatus?.call('BLE 연결됨: $address (MTU=$mtu)');
@@ -267,10 +258,28 @@ class BleRelay {
       return;
     }
     try {
+      // noble 순서: C1 write → C2 subscribe
+      // 첫 C1 write(BTP handshake) 후에 C2 CCCD를 쓴다.
       print('[BLE-RELAY] C1 write: ${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} '
           '(${data.length} bytes, withoutResponse=$_c1WriteWithoutResponse)');
       await _c1!.write(data, withoutResponse: _c1WriteWithoutResponse);
       print('[BLE-RELAY] C1 write OK');
+
+      // C1 write 성공 후 C2 subscribe (noble과 동일 순서)
+      if (!_c2Subscribed && _c2 != null) {
+        print('[BLE-RELAY] C2 subscribe (forceIndications=true) — after C1 write');
+        await _c2!.setNotifyValue(true, forceIndications: true);
+        _c2Sub = _c2!.onValueReceived.listen((d) {
+          print('[BLE-RELAY] C2 indicate: ${d.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")} (${d.length} bytes)');
+          _send({
+            'event': 'ble_data',
+            'address': address,
+            'data': d,
+          });
+        });
+        _c2Subscribed = true;
+        print('[BLE-RELAY] C2 subscribe OK');
+      }
     } catch (e) {
       print('[BLE-RELAY] C1 write error: $e');
       _send({
@@ -311,6 +320,7 @@ class BleRelay {
     await _c2Sub?.cancel();
     _c2Sub = null;
     _c1WriteWithoutResponse = false;
+    _c2Subscribed = false;
     try {
       await _connectedDevice?.disconnect();
     } catch (e) {

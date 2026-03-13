@@ -62,12 +62,24 @@ log "=== 패치 적용 ==="
 for patch in "$PATCH_DIR"/*.patch; do
     [ -f "$patch" ] || continue
     PATCH_NAME=$(basename "$patch")
-    # openthread submodule 패치
-    cd "$OTBR_SRC/third_party/openthread/repo"
+    APPLIED=false
+    # ot-br-posix 루트에서 먼저 시도
+    cd "$OTBR_SRC"
     if git apply --check "$patch" 2>/dev/null; then
         git apply "$patch"
-        log "  적용: $PATCH_NAME"
-    else
+        log "  적용 (ot-br-posix): $PATCH_NAME"
+        APPLIED=true
+    fi
+    # openthread submodule에서 시도
+    if [ "$APPLIED" = false ]; then
+        cd "$OTBR_SRC/third_party/openthread/repo"
+        if git apply --check "$patch" 2>/dev/null; then
+            git apply "$patch"
+            log "  적용 (openthread): $PATCH_NAME"
+            APPLIED=true
+        fi
+    fi
+    if [ "$APPLIED" = false ]; then
         log "  이미 적용됨: $PATCH_NAME"
     fi
 done
@@ -98,6 +110,7 @@ cmake -B "$BUILD_DIR" \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-35 \
   -DANDROID_STL=c++_static \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DCMAKE_CXX_FLAGS="-DOPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1 -DOPENTHREAD_POSIX_CONFIG_DAEMON_SOCKET_BASENAME=\\\"/data/local/tmp/ot-%s\\\"" \
   -DCMAKE_C_FLAGS="-DOPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1 -DOPENTHREAD_POSIX_CONFIG_DAEMON_SOCKET_BASENAME=\\\"/data/local/tmp/ot-%s\\\"" \
   -DOT_ANDROID_NDK=ON \

@@ -240,6 +240,30 @@ cmd_thread_start() {
     sleep 15
     adb shell "$REMOTE/otbr/ot-ctl srp server enable"
 
+    # 7. IPv6 라우트 추가 — BACKBONE_ROUTER 없이 Thread mesh-local 라우팅
+    # Android에서 OTBR border routing이 netlink RTM_NEWROUTE를 실패할 수 있음 (SELinux/권한)
+    # 수동으로 mesh-local prefix → wpan0 라우트 추가
+    log "IPv6 라우트 설정..."
+    local MESH_PREFIX
+    MESH_PREFIX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active" 2>/dev/null | grep "Mesh Local Prefix" | awk '{print $NF}' | tr -d '\r')
+    if [[ -n "$MESH_PREFIX" ]]; then
+        # mesh-local prefix 형식: fd3f:a8c0:1556:1::/64
+        adb shell "ip -6 route replace ${MESH_PREFIX} dev $WPAN_IF 2>/dev/null" || \
+            warn "mesh-local 라우트 추가 실패 (무시)"
+        log "라우트 추가: ${MESH_PREFIX} → $WPAN_IF"
+    else
+        warn "mesh-local prefix 추출 실패 — IPv6 라우트 수동 설정 필요"
+    fi
+
+    # OMR prefix (있으면 추가)
+    local OMR_PREFIX
+    OMR_PREFIX=$(adb shell "$REMOTE/otbr/ot-ctl br omrprefix" 2>/dev/null | head -1 | awk '{print $1}' | tr -d '\r')
+    if [[ -n "$OMR_PREFIX" ]] && [[ "$OMR_PREFIX" != "Done" ]]; then
+        adb shell "ip -6 route replace ${OMR_PREFIX} dev $WPAN_IF 2>/dev/null" || \
+            warn "OMR 라우트 추가 실패 (무시)"
+        log "라우트 추가: ${OMR_PREFIX} → $WPAN_IF"
+    fi
+
     cmd_thread_status
 }
 
@@ -262,6 +286,12 @@ cmd_thread_status() {
     adb shell "$REMOTE/otbr/ot-ctl srp server state 2>/dev/null" || echo "N/A"
     echo "=== Dataset ==="
     adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null" || echo "N/A"
+    echo "=== Child Table ==="
+    adb shell "$REMOTE/otbr/ot-ctl child table 2>/dev/null" || echo "N/A"
+    echo "=== IPv6 Routes ==="
+    adb shell "ip -6 route 2>/dev/null" || echo "N/A"
+    echo "=== SRP Hosts ==="
+    adb shell "$REMOTE/otbr/ot-ctl srp server host 2>/dev/null" || echo "N/A"
 }
 
 # ─── BUILD: Go arm64 ───

@@ -97,10 +97,11 @@ fi
 #   OPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1  → cutils/properties.h 대신 sys/system_properties.h 사용
 #   OT_ANDROID_NDK=ON                       → -lutil 링크 제외 (Android에 없음)
 #   OTBR_MDNS=openthread                    → dns_sd.h (mDNSResponder) 불필요, OT core mDNS 사용
-#   OTBR_BACKBONE_ROUTER=ON                 → Thread↔Infra mDNS 브릿징 (DUA_ROUTING=OFF로 netfilter 의존 제거)
-#   OTBR_SRP_ADVERTISING_PROXY=OFF          → MDNS=openthread 시 OT_SRP_ADV_PROXY(자동ON)와 충돌 → OFF 필수
-#   OTBR_DNSSD_DISCOVERY_PROXY=OFF          → MDNS 있으면 OT_DISCOVERY_PROXY(자동ON)와 충돌 → OFF 필수
-#   ※ OT core proxy (OT_SRP_ADV_PROXY + OT_DISCOVERY_PROXY)가 자동으로 대체
+#   OTBR_BACKBONE_ROUTER=OFF                → ON 시 MRT6_INIT setsockopt → Android 커널 CONFIG_IPV6_MROUTE 없어 crash
+#                                              RPi5(Yocto)는 ON이라 자동 IPv6 라우팅. Android는 수동 라우트(cmd_thread_start)
+#   OTBR_SRP_ADVERTISING_PROXY=OFF          → MDNS=openthread 시 OT core proxy(OT_SRP_ADV_PROXY 자동ON)와 CMake 충돌
+#   OTBR_DNSSD_DISCOVERY_PROXY=OFF          → MDNS=openthread 시 OT core proxy(OT_DISCOVERY_PROXY 자동ON)와 CMake 충돌
+#   ※ MDNS=openthread이면 OT core가 SRP Advertising + DNS-SD Discovery proxy를 내장 수행
 #   OTBR_DBUS=OFF                           → Android에 dbus 없음
 #   OT_TREL=OFF                             → DNS-SD 기반 TREL, 외부 mDNS 없이 불필요
 #

@@ -34,6 +34,7 @@ RPi5 로컬: `http://localhost:8080`
 | GET | `/healthz` | 헬스체크 | ✅ 구현됨 |
 | GET | `/api/devices` | 디바이스 목록 + 상태 | ✅ 구현됨 |
 | GET | `/api/devices/:node_id` | 개별 디바이스 상세 | ✅ 구현됨 |
+| DELETE | `/api/devices/:node_id` | 디바이스 삭제 (unpair) | ✅ 구현됨 |
 | POST | `/api/devices/command` | 디바이스 제어 | ✅ 구현됨 (8 commands) |
 | POST | `/api/commission` | 새 디바이스 페어링 | ✅ 구현됨 |
 | GET | `/api/events` | SSE 실시간 이벤트 | ✅ 구현됨 |
@@ -137,6 +138,33 @@ GET /api/devices/8
   }
 }
 ```
+
+---
+
+### DELETE /api/devices/:node_id
+
+✅ **구현됨** — 디바이스를 fabric에서 제거 (unpair).
+
+```
+DELETE /api/devices/4
+```
+
+**응답 (성공):**
+```json
+{"status": "ok"}
+```
+
+**응답 (없는 노드):** `404`
+```json
+{"error": "device not found"}
+```
+
+**응답 (matterjs 에러):** `500`
+```json
+{"error": "remove_node error 3: node not found in fabric"}
+```
+
+**SSE 이벤트:** 삭제 시 `device_removed` 이벤트 발생.
 
 ---
 

@@ -622,6 +622,148 @@ func TestAddNode_WithAlias(t *testing.T) {
 	}
 }
 
+// --- DELETE /api/devices/:node_id ---
+
+func TestAPIDeleteDevice_Success(t *testing.T) {
+	h, srv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		if msg["command"] == "remove_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msg["message_id"],
+				"error_code": 0,
+			})
+		}
+	})
+	defer srv.Close()
+	defer h.matter.Close()
+
+	mux := testMux(h)
+
+	// Verify device exists
+	if _, ok := h.devices[8]; !ok {
+		t.Fatal("device 8 should exist before delete")
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/devices/8", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["status"] != "ok" {
+		t.Errorf("expected status ok, got %q", resp["status"])
+	}
+
+	// Verify device removed from local state
+	if _, ok := h.devices[8]; ok {
+		t.Error("device 8 should be removed after delete")
+	}
+
+	// Verify device_removed event emitted
+	select {
+	case evt := <-h.eventCh:
+		if evt.Type != "device_removed" {
+			t.Errorf("expected device_removed event, got %q", evt.Type)
+		}
+		if evt.DeviceID != 8 {
+			t.Errorf("expected device_id 8, got %d", evt.DeviceID)
+		}
+	case <-time.After(time.Second):
+		t.Error("expected device_removed event, got none")
+	}
+}
+
+func TestAPIDeleteDevice_NotFound(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+
+	req := httptest.NewRequest("DELETE", "/api/devices/999", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPIDeleteDevice_MatterError(t *testing.T) {
+	h, srv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		if msg["command"] == "remove_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msg["message_id"],
+				"error_code": 3,
+				"details":    "node not found in fabric",
+			})
+		}
+	})
+	defer srv.Close()
+	defer h.matter.Close()
+
+	mux := testMux(h)
+
+	req := httptest.NewRequest("DELETE", "/api/devices/8", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Device should NOT be removed on error
+	if _, ok := h.devices[8]; !ok {
+		t.Error("device 8 should still exist after failed delete")
+	}
+}
+
+func TestAPIDeleteDevice_MethodNotAllowed(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+
+	req := httptest.NewRequest("PUT", "/api/devices/8", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 405 {
+		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
+
+// --- node_removed event handling ---
+
+func TestHandleMatterEvent_NodeRemoved(t *testing.T) {
+	h := testHub(t)
+
+	// Verify device exists
+	if _, ok := h.devices[1]; !ok {
+		t.Fatal("device 1 should exist")
+	}
+
+	// Simulate node_removed event from matterjs
+	evt := matter.Event{
+		Type: matter.EventNodeRemoved,
+		Data: json.RawMessage(`1`),
+	}
+	h.handleMatterEvent(evt)
+
+	// Verify device removed
+	if _, ok := h.devices[1]; ok {
+		t.Error("device 1 should be removed after node_removed event")
+	}
+
+	// Verify event emitted
+	select {
+	case e := <-h.eventCh:
+		if e.Type != "device_removed" || e.DeviceID != 1 {
+			t.Errorf("unexpected event: %+v", e)
+		}
+	case <-time.After(time.Second):
+		t.Error("expected device_removed event")
+	}
+}
+
 func TestAddNode_DeviceTypes(t *testing.T) {
 	tests := []struct {
 		typeID   float64

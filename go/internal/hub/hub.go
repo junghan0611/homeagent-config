@@ -394,6 +394,21 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 
 	case matter.EventNodeAdded, matter.EventNodeUpdated:
 		log.Printf("[hub] %s: %s", evt.Type, string(evt.Data))
+
+	case matter.EventNodeRemoved:
+		var nodeID int
+		if err := json.Unmarshal(evt.Data, &nodeID); err != nil {
+			log.Printf("[hub] parse node_removed: %v", err)
+			return
+		}
+		h.mu.Lock()
+		delete(h.devices, nodeID)
+		h.mu.Unlock()
+		log.Printf("[hub] node %d removed (event)", nodeID)
+		h.eventCh <- Event{
+			Type:     "device_removed",
+			DeviceID: nodeID,
+		}
 	}
 }
 
@@ -479,7 +494,7 @@ func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(h.Devices())
 }
 
-// handleDeviceByID handles GET /api/devices/:node_id
+// handleDeviceByID handles GET/DELETE /api/devices/:node_id
 func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	// /api/devices/command는 별도 핸들러가 처리
 	if strings.HasSuffix(r.URL.Path, "/command") {
@@ -500,8 +515,34 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	switch r.Method {
+	case http.MethodGet:
+		h.mu.RLock()
+		dev, ok := h.devices[nodeID]
+		h.mu.RUnlock()
+
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "device not found"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(dev)
+
+	case http.MethodDelete:
+		h.handleDeleteDevice(w, r, nodeID)
+
+	default:
+		http.Error(w, "GET or DELETE only", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleDeleteDevice removes a device from the fabric
+func (h *Hub) handleDeleteDevice(w http.ResponseWriter, r *http.Request, nodeID int) {
 	h.mu.RLock()
-	dev, ok := h.devices[nodeID]
+	_, ok := h.devices[nodeID]
 	h.mu.RUnlock()
 
 	if !ok {
@@ -511,8 +552,28 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[hub] removing node %d", nodeID)
+	if err := h.matter.RemoveNode(r.Context(), nodeID); err != nil {
+		log.Printf("[hub] remove node %d failed: %v", nodeID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Remove from local state
+	h.mu.Lock()
+	delete(h.devices, nodeID)
+	h.mu.Unlock()
+
+	log.Printf("[hub] node %d removed", nodeID)
+	h.eventCh <- Event{
+		Type:     "device_removed",
+		DeviceID: nodeID,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dev)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *Hub) handleWifiCredentials(w http.ResponseWriter, r *http.Request) {

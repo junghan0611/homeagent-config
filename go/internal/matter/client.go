@@ -340,6 +340,28 @@ func (c *Client) SetThreadDataset(ctx context.Context, dataset string) error {
 	return nil
 }
 
+// RemoveNode removes a commissioned node from the fabric
+func (c *Client) RemoveNode(ctx context.Context, nodeID int) error {
+	id, ch, err := c.send("remove_node", map[string]int{"node_id": nodeID})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("remove_node parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("remove_node error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
 // ReadLoop is the single read goroutine. It dispatches:
 //   - command responses → pending waiters
 //   - events → handler

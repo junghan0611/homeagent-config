@@ -217,9 +217,10 @@ class BleRelay {
         orElse: () => throw Exception('C2 특성 없음'),
       );
 
-      // Matter BTP spec: C1은 Write Without Response 사용
-      // C1 특성이 writeWithoutResponse를 지원하면 반드시 사용
-      _c1WriteWithoutResponse = _c1!.properties.writeWithoutResponse;
+      // noble(RPi5 성공): writeAsync(data, false) = Write WITH Response
+      // BTP handshake는 writeWithResponse로 보내야 디바이스가 응답함.
+      // writeWithoutResponse를 쓰면 C2 indicate가 안 옴.
+      _c1WriteWithoutResponse = false;
       print('[BLE-RELAY] C1 properties: write=${_c1!.properties.write} '
           'writeWithoutResponse=${_c1!.properties.writeWithoutResponse} '
           '→ using withoutResponse=$_c1WriteWithoutResponse');

@@ -86,8 +86,9 @@ fi
 #   OT_ANDROID_NDK=ON                       → -lutil 링크 제외 (Android에 없음)
 #   OTBR_MDNS=openthread                    → dns_sd.h (mDNSResponder) 불필요, OT core mDNS 사용
 #   OTBR_BACKBONE_ROUTER=ON                 → Thread↔Infra mDNS 브릿징 (DUA_ROUTING=OFF로 netfilter 의존 제거)
-#   OTBR_SRP_ADVERTISING_PROXY=ON           → SRP→infra-if mDNS 광고 (Thread 커미셔닝 operative reconnect 필수)
-#   OTBR_DNSSD_DISCOVERY_PROXY=ON           → DNS-SD 쿼리 프록시 (matterjs mDNS 발견용)
+#   OTBR_SRP_ADVERTISING_PROXY=OFF          → MDNS=openthread 시 OT_SRP_ADV_PROXY(자동ON)와 충돌 → OFF 필수
+#   OTBR_DNSSD_DISCOVERY_PROXY=OFF          → MDNS 있으면 OT_DISCOVERY_PROXY(자동ON)와 충돌 → OFF 필수
+#   ※ OT core proxy (OT_SRP_ADV_PROXY + OT_DISCOVERY_PROXY)가 자동으로 대체
 #   OTBR_DBUS=OFF                           → Android에 dbus 없음
 #   OT_TREL=OFF                             → DNS-SD 기반 TREL, 외부 mDNS 없이 불필요
 #
@@ -106,9 +107,9 @@ cmake -B "$BUILD_DIR" \
   -DOTBR_WEB=OFF \
   -DOTBR_MDNS=openthread \
   -DOTBR_BACKBONE_ROUTER=ON \
-  -DOTBR_SRP_ADVERTISING_PROXY=ON \
-  -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
   -DOTBR_DUA_ROUTING=OFF \
+  -DOTBR_SRP_ADVERTISING_PROXY=OFF \
+  -DOTBR_DNSSD_DISCOVERY_PROXY=OFF \
   -DOTBR_BORDER_ROUTING=ON \
   -DOTBR_BORDER_AGENT=ON \
   -DOT_SPINEL_RESET_CONNECTION=ON \

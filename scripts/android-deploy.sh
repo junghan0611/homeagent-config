@@ -227,8 +227,8 @@ cmd_thread_start() {
 
     # 6. Thread 네트워크 초기화
     local EXISTING
-    EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" || true)
-    if [[ -z "$EXISTING" ]] || [[ "$EXISTING" == "Done" ]]; then
+    EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
+    if [[ -z "$EXISTING" ]] || [[ "$EXISTING" == "Done" ]] || [[ "$EXISTING" == *"Error"* ]] || [[ "$EXISTING" == *"NotFound"* ]]; then
         log "새 Thread 네트워크 생성..."
         adb shell "$REMOTE/otbr/ot-ctl dataset init new"
         adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
@@ -237,7 +237,20 @@ cmd_thread_start() {
     fi
     adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
     adb shell "$REMOTE/otbr/ot-ctl thread start"
-    sleep 15
+
+    # leader까지 대기 (최대 30초)
+    log "Thread leader 대기..."
+    for i in $(seq 1 10); do
+        sleep 3
+        local STATE
+        STATE=$(adb shell "$REMOTE/otbr/ot-ctl state" 2>/dev/null | head -1 | tr -d '\r')
+        if [[ "$STATE" == "leader" ]] || [[ "$STATE" == "router" ]]; then
+            log "Thread 상태: $STATE (${i}x3초)"
+            break
+        fi
+        [[ $i -eq 10 ]] && warn "Thread 상태: $STATE (타임아웃 30초)"
+    done
+
     adb shell "$REMOTE/otbr/ot-ctl srp server enable"
 
     # 7. IPv6 라우트 추가 — BACKBONE_ROUTER 없이 Thread mesh-local 라우팅
@@ -255,13 +268,39 @@ cmd_thread_start() {
         warn "mesh-local prefix 추출 실패 — IPv6 라우트 수동 설정 필요"
     fi
 
-    # OMR prefix (있으면 추가)
-    local OMR_PREFIX
-    OMR_PREFIX=$(adb shell "$REMOTE/otbr/ot-ctl br omrprefix" 2>/dev/null | head -1 | awk '{print $1}' | tr -d '\r')
-    if [[ -n "$OMR_PREFIX" ]] && [[ "$OMR_PREFIX" != "Done" ]]; then
-        adb shell "ip -6 route replace ${OMR_PREFIX} dev $WPAN_IF 2>/dev/null" || \
-            warn "OMR 라우트 추가 실패 (무시)"
-        log "라우트 추가: ${OMR_PREFIX} → $WPAN_IF"
+    # OMR prefix (있으면 추가 — border routing이 아직 초기화 안 됐으면 무시)
+    local OMR_LINE
+    OMR_LINE=$(adb shell "$REMOTE/otbr/ot-ctl br omrprefix 2>/dev/null" | head -1 | tr -d '\r')
+    if [[ "$OMR_LINE" == *"/"* ]] && [[ "$OMR_LINE" != *"Error"* ]]; then
+        local OMR_PREFIX
+        OMR_PREFIX=$(echo "$OMR_LINE" | awk '{print $NF}' | grep "/" || echo "$OMR_LINE" | awk '{print $1}')
+        if [[ -n "$OMR_PREFIX" ]] && [[ "$OMR_PREFIX" != "Done" ]]; then
+            adb shell "ip -6 route replace ${OMR_PREFIX} dev $WPAN_IF 2>/dev/null" || \
+                warn "OMR 라우트 추가 실패 (무시)"
+            log "라우트 추가: ${OMR_PREFIX} → $WPAN_IF"
+        fi
+    else
+        warn "OMR prefix 미사용 (border routing 초기화 대기 중)"
+    fi
+
+    # 8. Android 정책 라우팅 — wpan0 테이블 lookup 규칙 추가
+    # Android는 ip -6 rule 마지막에 "unreachable"이 있어서
+    # wpan0 라우트 테이블을 참조하는 rule이 없으면 Thread IPv6 패킷이 전부 차단됨
+    # wpan0 라우트 테이블 번호 자동 감지 → lookup rule 추가
+    log "IPv6 정책 라우팅 설정..."
+    local WPAN_TABLE
+    WPAN_TABLE=$(adb shell "ip -6 route show table all dev $WPAN_IF 2>/dev/null" | \
+        grep "table [0-9]" | head -1 | sed 's/.*table \([0-9]*\).*/\1/')
+    if [[ -n "$WPAN_TABLE" ]]; then
+        # 중복 방지: 기존 rule 확인 후 추가
+        if ! adb shell "ip -6 rule show" 2>/dev/null | grep -q "lookup $WPAN_TABLE"; then
+            adb shell "ip -6 rule add from all lookup $WPAN_TABLE prio 15000"
+            log "정책 라우팅: lookup table $WPAN_TABLE (prio 15000)"
+        else
+            log "정책 라우팅: table $WPAN_TABLE 이미 설정됨"
+        fi
+    else
+        warn "wpan0 라우트 테이블 감지 실패 — 수동 설정 필요"
     fi
 
     cmd_thread_status

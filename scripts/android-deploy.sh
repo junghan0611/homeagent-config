@@ -324,28 +324,41 @@ cmd_push() {
     fi
 
     # nodejs-bundle (Node.js + matterjs-server + remote-ble)
-    # bundle-backend.sh로 생성: dist/homeagent-bundle-arm64/
+    # Android용: dist/nodejs-android-bundle/ (glibc 번들, ./node 루트 바이너리, lib/ 링커)
+    # Linux용:   dist/homeagent-bundle-arm64/ (node/bin/node 구조)
     # 크기 ~300MB — 이미 존재하면 스킵
-    local BUNDLE_SRC=""
-    if [[ -d "$DIST_DIR/homeagent-bundle-arm64/matterjs-server" ]]; then
+    local BUNDLE_SRC="" BUNDLE_LAYOUT="linux"
+    if [[ -f "$DIST_DIR/nodejs-android-bundle/node" ]]; then
+        # Android glibc 번들 (우선)
+        BUNDLE_SRC="$DIST_DIR/nodejs-android-bundle"
+        BUNDLE_LAYOUT="android"
+    elif [[ -d "$DIST_DIR/homeagent-bundle-arm64/matterjs-server" ]]; then
         BUNDLE_SRC="$DIST_DIR/homeagent-bundle-arm64"
     elif [[ -d "$DIST_DIR/nodejs-bundle/matterjs-server" ]]; then
         BUNDLE_SRC="$DIST_DIR/nodejs-bundle"
     fi
 
     if [[ -n "$BUNDLE_SRC" ]]; then
-        # node 바이너리 존재로 이미 push 됐는지 판단
-        local REMOTE_NODE
-        REMOTE_NODE=$(adb shell "ls $REMOTE/nodejs-bundle/node/bin/node 2>/dev/null" || true)
-        if [[ -z "$REMOTE_NODE" ]] || [[ "$REMOTE_NODE" == *"No such file"* ]]; then
-            log "nodejs-bundle push (최초 설치)..."
+        # node 바이너리가 파일로 존재하는지 확인 (디렉토리면 잘못된 레이아웃)
+        local REMOTE_CHECK
+        REMOTE_CHECK=$(adb shell "test -f $REMOTE/nodejs-bundle/node && echo FILE" 2>/dev/null || true)
+        if [[ "$REMOTE_CHECK" != "FILE" ]]; then
+            log "nodejs-bundle push (최초 설치, layout=$BUNDLE_LAYOUT)..."
+            # 잘못된 node 디렉토리 제거
+            adb shell "rm -rf $REMOTE/nodejs-bundle/node" 2>/dev/null || true
             adb shell "mkdir -p $REMOTE/nodejs-bundle"
-            # tar로 묶어서 전송 (개별 push보다 훨씬 빠름)
-            (cd "$BUNDLE_SRC" && tar czf /tmp/ha-nodejs-bundle.tar.gz \
-                node/ matterjs-server/)
+
+            if [[ "$BUNDLE_LAYOUT" == "android" ]]; then
+                # Android 레이아웃: node(바이너리) + lib/ + matterjs-server/
+                (cd "$BUNDLE_SRC" && tar czf /tmp/ha-nodejs-bundle.tar.gz \
+                    node lib/ matterjs-server/)
+            else
+                # Linux 레이아웃: node/(디렉토리) + matterjs-server/
+                (cd "$BUNDLE_SRC" && tar czf /tmp/ha-nodejs-bundle.tar.gz \
+                    node/ matterjs-server/)
+            fi
             adb push /tmp/ha-nodejs-bundle.tar.gz "$REMOTE/nodejs-bundle/bundle.tar.gz"
             adb shell "cd $REMOTE/nodejs-bundle && tar xzf bundle.tar.gz && rm bundle.tar.gz"
-            # ld-linux 링커 심볼릭 (Android glibc 없으므로 번들에 포함된 것 사용)
             adb shell "ls $REMOTE/nodejs-bundle/lib/ld-linux-aarch64.so.1 2>/dev/null" || \
                 warn "ld-linux 링커 없음 — Node.js 실행 불가할 수 있음"
             rm -f /tmp/ha-nodejs-bundle.tar.gz

@@ -667,29 +667,39 @@ cmd_ha_status() {
     check_ssh_key
     echo -e "${CYAN}[STATUS]${NC} $IP"
     ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'EOF'
-echo "=== HomeAgent ==="
-if ps | grep -q '[h]omeagent'; then
-    echo "  ✅ homeagent 실행 중 (PID: $(ps | grep '[h]omeagent' | awk '{print $1}'))"
-    wget -qO- http://localhost:8080/healthz 2>/dev/null && echo "" || echo "  ⚠️ healthz 응답 없음"
-else
-    echo "  ❌ homeagent 중지"
-fi
+echo "=== 서비스 ==="
+for svc in homeagent matterjs-server otbr-agent; do
+    case $svc in
+        homeagent)
+            if ps | grep -q '[h]omeagent'; then
+                echo "  homeagent: ✅ (PID $(ps | grep '[h]omeagent' | awk '{print $1}'))"
+            else
+                echo "  homeagent: ❌"
+            fi
+            ;;
+        matterjs-server|otbr-agent)
+            state=$(systemctl is-active $svc 2>/dev/null || echo "inactive")
+            [ "$state" = "active" ] && echo "  $svc: ✅" || echo "  $svc: ❌"
+            ;;
+    esac
+done
+
 echo ""
-echo "=== matterjs-server ==="
-if ps | grep -q '[m]atter-server'; then
-    echo "  ✅ 실행 중"
-else
-    echo "  ❌ 중지"
-fi
+echo "=== Thread ==="
+echo -n "  state: "; ot-ctl state 2>/dev/null | head -n1 | tr -d '\r'
+echo -n "  SRP: "; ot-ctl srp server state 2>/dev/null | head -n1 | tr -d '\r'
+echo "  children:"
+ot-ctl child table 2>/dev/null || echo "    (없음)"
+
 echo ""
-echo "=== Thread (OTBR) ==="
-ot-ctl state 2>/dev/null || echo "  ❌ otbr 응답 없음"
+echo "=== 디바이스 ==="
+wget -qO- http://localhost:8080/api/devices 2>/dev/null || echo "  (API 응답 없음)"
+
 echo ""
-echo "=== 디스크 ==="
-df -h / | tail -1
-echo ""
-echo "=== 메모리 ==="
-free -h 2>/dev/null | sed -n '1,2p' || echo "  (free 없음)"
+echo "=== 시스템 ==="
+echo -n "  disk: "; df -h / | tail -1 | awk '{print $3"/"$2" ("$5")"}'
+echo -n "  mem: "; free -m 2>/dev/null | awk '/Mem/{print $3"/"$2"M"}' || echo "(N/A)"
+echo -n "  uptime: "; uptime | sed 's/.*up //' | sed 's/,.*//'
 EOF
 }
 

@@ -193,22 +193,26 @@ cmd_thread_start() {
     adb shell "stop vendor.threadnetwork_hal 2>/dev/null; stop ot-daemon 2>/dev/null" || true
     sleep 1
 
-    # 2. SELinux permissive + 디바이스 권한
+    # 2. SELinux permissive + 디바이스 권한 + 필요 디렉토리
     adb shell "setenforce 0; chmod 666 $RCP_DEVICE" || true
+    # Android: /run, /tmp 없을 수 있음 → otbr-agent 소켓/lockfile 경로 필요
+    adb shell "mount -o rw,remount / 2>/dev/null || true; \
+        mkdir -p /run /tmp 2>/dev/null || true" || true
 
-    # 3. wpan0 TUN 인터페이스
+    # 3. IPv6 forwarding (wpan0 TUN은 otbr-agent가 자동 생성)
     adb shell "
         ip tuntap del dev $WPAN_IF mode tun 2>/dev/null
-        ip tuntap add dev $WPAN_IF mode tun
-        ip link set $WPAN_IF up
         sysctl -w net.ipv6.conf.all.forwarding=1
     "
 
     # 4. otbr-agent 시작
     adb shell "pkill -f otbr-agent 2>/dev/null" || true
     sleep 1
+    adb shell "mkdir -p $REMOTE/otbr-data"
     adb shell "nohup $REMOTE/otbr/otbr-agent \
         -I $WPAN_IF -B $BACKBONE_IF -d7 -v \
+        --vendor-name HomeAgent --model-name OTBR \
+        --data-path $REMOTE/otbr-data \
         'spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$RCP_BAUDRATE' \
         > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
     sleep 3
@@ -231,7 +235,7 @@ cmd_thread_start() {
     fi
     adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
     adb shell "$REMOTE/otbr/ot-ctl thread start"
-    sleep 5
+    sleep 15
     adb shell "$REMOTE/otbr/ot-ctl srp server enable"
 
     cmd_thread_status

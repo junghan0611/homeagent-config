@@ -74,6 +74,89 @@ VC4DTBO ?= "vc4-kms-v3d"
 - OTBR_WEB=ON 빌드 시 npm 타임아웃 (Web UI 비활성화 권장)
 - RCP 펌웨어 버전 호환성 확인 필요
 
+---
+
+## OTBR 빌드 옵션 비교 — Yocto (RPi5) vs NDK (Android)
+
+동일 ot-br-posix 소스에서 플랫폼별로 빌드. Android에 없는 시스템 라이브러리(avahi, dbus, netfilter)를 OT core 내장 기능으로 대체.
+
+### 버전
+
+| | Yocto (RPi5) | NDK (Android) |
+|---|---|---|
+| **SRCREV** | a35cc68 | c19319c7 (더 최신) |
+| **openthread** | (해당 시점) | 0887643bf |
+| **빌드 도구** | OE cross-toolchain | NDK r27 clang 18 |
+| **바이너리 크기** | (시스템 패키지) | 9.9MB (stripped) |
+
+### CMake 옵션 비교
+
+| 옵션 | Yocto (RPi5) | NDK (Android) | 차이 이유 |
+|------|:---:|:---:|---|
+| **OTBR_MDNS** | avahi | openthread | Android에 avahi 없음 → OT core mDNS |
+| **OTBR_DBUS** | ON | OFF | Android에 dbus 없음 |
+| **OTBR_REST** | ON | ON | HTTP API (:8081) — JSON 조회 |
+| **OTBR_BACKBONE_ROUTER** | ON | ON | Thread↔Infra mDNS 브릿징 |
+| **OTBR_BORDER_ROUTING** | ON | ON | — |
+| **OTBR_BORDER_AGENT** | ON | ON | — |
+| **OTBR_SRP_ADVERTISING_PROXY** | ON | **OFF** | OT_SRP_ADV_PROXY(자동ON)와 충돌 |
+| **OTBR_DNSSD_DISCOVERY_PROXY** | ON | **OFF** | OT_DISCOVERY_PROXY(자동ON)와 충돌 |
+| **OTBR_DUA_ROUTING** | ON | **OFF** | libnetfilter_queue 없음 |
+| **OT_TREL** | ON | **OFF** | 외부 mDNS daemon 없이 불필요 |
+| **OT_BORDER_ROUTING_NAT64** | ON | **OFF** | Android iptables 제한 |
+| **OT_SRP_SERVER** | ON | ON | — |
+| **OT_ECDSA** | ON | ON | — |
+| **OT_SERVICE** | ON | ON | — |
+| **OT_DUA** | ON | ON | — |
+| **OT_MLR** | ON | ON | — |
+| **OT_SPINEL_RESET_CONNECTION** | ON | ON | — |
+| **OT_DHCP6_CLIENT/SERVER** | ON | ON | Thread 내 DHCPv6 주소 할당 |
+| **OT_REFERENCE_DEVICE** | ON | ON | 인증 테스트 + CLI 디버깅 명령 |
+| **OT_ANDROID_NDK** | — | ON | -lutil 제외 |
+| **OTBR_INFRA_IF_NAME** | eth0 | wlan0 | 네트워크 인터페이스 |
+
+### Android 전용 (NDK만 해당)
+
+| 옵션 | 값 | 이유 |
+|---|---|---|
+| `OT_ANDROID_NDK` | ON | `-lutil` 링크 제외 (bionic에 없음) |
+| `OPENTHREAD_CONFIG_ANDROID_NDK_ENABLE` | 1 (CXX_FLAGS) | `sys/system_properties.h` 경로 |
+| `OPENTHREAD_POSIX_CONFIG_DAEMON_SOCKET_BASENAME` | `/data/local/tmp/ot-%s` | Android root FS readonly |
+| `CMAKE_POLICY_VERSION_MINIMUM` | 3.5 | cJSON cmake_minimum_required 호환 |
+| `ANDROID_STL` | c++_static | 정적 링크 (시스템 libc++ 버전 무관) |
+
+### NDK 패치 (Yocto 불필요)
+
+| 패치 | 대상 | 내용 |
+|---|---|---|
+| `0001-fix-udp-sign-compare-ndk-clang.patch` | openthread udp.cpp | signed/unsigned 비교 경고→에러 수정 |
+| `0002-fix-rest-vla-pthread-ndk.patch` | ot-br-posix rest/ | VLA→vector + pthread 조건부 링크 |
+
+### 핵심 원리: OT core가 대체
+
+`OTBR_MDNS=openthread`이면 OT core가 자동으로:
+- `OT_SRP_ADV_PROXY=ON` → SRP Advertising Proxy (avahi 대체)
+- `OT_DISCOVERY_PROXY=ON` → DNS-SD Discovery Proxy (avahi 대체)
+- `OT_MDNS=ON` → Multicast DNS on infra-if (avahi-daemon 대체)
+
+따라서 OTBR 레벨의 `SRP_ADVERTISING_PROXY`, `DNSSD_DISCOVERY_PROXY`는 OFF 필수 (동시 활성화 → CMake FATAL_ERROR).
+
+### REST API 엔드포인트 (포트 8081)
+
+| 경로 | 메서드 | 용도 |
+|---|---|---|
+| `/node/state` | GET | Thread 상태 (leader/router/child/detached) |
+| `/node/dataset/active` | GET | Active dataset (JSON) |
+| `/node/network-name` | GET | Thread 네트워크 이름 |
+| `/node/ext-panid` | GET | Extended PAN ID |
+| `/node/rloc16` | GET | RLOC16 주소 |
+| `/api/devices` | GET | Thread 네트워크 디바이스 목록 |
+| `/api/diagnostics` | GET/POST | 네트워크 진단 |
+
+`ot-ctl` exec + stdout 파싱 대신 HTTP JSON 조회 → Go에서 안정적.
+
+---
+
 ## RCP 정보
   - USB포트: RPi5 블루(USB3) 포트에 연결 (전원 부족 시 CP210x 타임아웃 발생)
   - 펌웨어: SL-OPENTHREAD/2.5.3.0_GitHub-1fceb225b; EFR32; Jun 27 2025

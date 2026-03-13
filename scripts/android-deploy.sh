@@ -49,15 +49,16 @@ check_adb() {
 
 # 프로세스 정리 — Android pkill이 불안정하므로 PID 직접 kill
 kill_services() {
+    # OTBR은 별도 라이프사이클 — stop/start에서 건드리지 않음
     adb shell "
-        for pid in \$(ps -ef | grep -E 'homeagent serve|ld-linux.*node|MatterServer|otbr-agent' | grep -v grep | awk '{print \$2}'); do
+        for pid in \$(ps -ef | grep -E 'homeagent serve|ld-linux.*node|MatterServer' | grep -v grep | awk '{print \$2}'); do
             kill \$pid 2>/dev/null
         done
     " 2>/dev/null || true
     sleep 2
     # 잔여 프로세스 강제 종료
     adb shell "
-        for pid in \$(ps -ef | grep -E 'homeagent serve|ld-linux.*node|MatterServer|otbr-agent' | grep -v grep | awk '{print \$2}'); do
+        for pid in \$(ps -ef | grep -E 'homeagent serve|ld-linux.*node|MatterServer' | grep -v grep | awk '{print \$2}'); do
             kill -9 \$pid 2>/dev/null
         done
     " 2>/dev/null || true

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'ble_relay.dart';
 
 /// WebView Shell — Android / Yocto (ivi-homescreen)
 /// A2UI + Lit UI를 WebView로 렌더링
@@ -14,10 +15,12 @@ class ShellWebView extends StatefulWidget {
 class _ShellWebViewState extends State<ShellWebView> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  BleRelay? _bleRelay;
 
   @override
   void initState() {
     super.initState();
+    _initBleRelay();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -40,6 +43,23 @@ class _ShellWebViewState extends State<ShellWebView> {
         debugPrint('[WebView:JS] ${message.level}: ${message.message}');
       })
       ..loadRequest(Uri.parse(widget.serverUrl));
+  }
+
+  /// BLE relay를 APK 시작 시 자동 연결 — Web UI 커미셔닝에서도 BLE 사용 가능
+  void _initBleRelay() {
+    final serverUri = Uri.parse(widget.serverUrl);
+    final bleWsUrl = 'ws://${serverUri.host}:5581';
+    _bleRelay = BleRelay(
+      wsUrl: bleWsUrl,
+      onStatus: (s) => debugPrint('[BLE-RELAY] $s'),
+    );
+    _bleRelay!.connect();
+  }
+
+  @override
+  void dispose() {
+    _bleRelay?.disconnect();
+    super.dispose();
   }
 
   @override

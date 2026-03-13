@@ -70,6 +70,27 @@ bleWss.on("connection", (ws) => {
     pendingFlutterWs = ws;
   }
 
+  // Flutter → matterjs 메시지 핸들러
+  // RemoteBleCentralInterface.setFlutterConnection()도 ws.on("message")를 등록하지만,
+  // centralInterface는 lazy 초기화(openChannel 시점) → 스캔 단계에서는 아직 없음.
+  // 따라서 ble_scan_result는 여기서 직접 scanner로 전달해야 함.
+  ws.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      if (msg.event === "ble_scan_result" && msg.address && msg.serviceData) {
+        const env = Environment.default;
+        if (env.has(Ble)) {
+          const ble = env.get(Ble);
+          ble.scanner.handleDeviceDiscovered(msg.address, new Uint8Array(msg.serviceData));
+        }
+      }
+      // ble_connected, ble_data, ble_disconnected 등은
+      // RemoteBleCentralInterface.#handleFlutterMessage()가 처리
+    } catch (_) {
+      // ignore parse errors
+    }
+  });
+
   ws.on("close", () => {
     logger.info("Flutter BLE relay disconnected");
     if (pendingFlutterWs === ws) {

@@ -82,8 +82,12 @@ func New(cfg *config.Config) *Hub {
 		ag = agent.New(agent.Config{
 			APIKey: cfg.OpenRouterKey,
 			Model:  cfg.LLMModel,
+			SLLM: agent.SLLMConfig{
+				Endpoint: cfg.SLLMEndpoint,
+				Enabled:  cfg.SLLMEnabled,
+			},
 		})
-		log.Printf("[hub] LLM agent enabled: %s", cfg.LLMModel)
+		log.Printf("[hub] LLM agent enabled: %s (sLLM: %v)", cfg.LLMModel, cfg.SLLMEnabled)
 	}
 
 	return &Hub{

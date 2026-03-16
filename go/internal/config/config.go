@@ -31,6 +31,10 @@ type Config struct {
 
 	// OTBR REST API URL (otbr-agent REST on :8081)
 	OtbrRESTURL string
+
+	// sLLM (llama-server) for on-device inference
+	SLLMEndpoint string // e.g. "http://localhost:8081" (llama-server)
+	SLLMEnabled  bool   // enable sLLM fallback chain
 }
 
 func Load() *Config {
@@ -45,6 +49,8 @@ func Load() *Config {
 		AliasesFile:   envOr("HOMEAGENT_ALIASES_FILE", "/opt/homeagent/aliases.json"),
 		OtCtlPath:     envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
 		OtbrRESTURL:   envOr("HOMEAGENT_OTBR_REST", "http://localhost:8081"),
+		SLLMEndpoint:  envOr("HOMEAGENT_SLLM_ENDPOINT", "http://localhost:8082"),
+		SLLMEnabled:   os.Getenv("HOMEAGENT_SLLM_ENABLED") == "1",
 	}
 }
 

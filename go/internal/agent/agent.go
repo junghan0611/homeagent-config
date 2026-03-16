@@ -16,21 +16,28 @@ import (
 type Config struct {
 	APIKey string // OpenRouter API key
 	Model  string // e.g. "google/gemini-2.0-flash-001"
+	SLLM   SLLMConfig
 }
 
 type Agent struct {
 	cfg    Config
 	client *http.Client
+	sllm   *sllmClient // nil if sLLM disabled
 }
 
 func New(cfg Config) *Agent {
 	if cfg.Model == "" {
 		cfg.Model = "google/gemini-2.5-flash"
 	}
-	return &Agent{
+	a := &Agent{
 		cfg:    cfg,
 		client: &http.Client{Timeout: 30 * time.Second},
 	}
+	if cfg.SLLM.Enabled && cfg.SLLM.Endpoint != "" {
+		a.sllm = newSLLMClient(cfg.SLLM.Endpoint)
+		log.Printf("[agent] sLLM enabled: %s", cfg.SLLM.Endpoint)
+	}
+	return a
 }
 
 // DeviceInfo for system prompt
@@ -138,6 +145,149 @@ var actionBlockRe = regexp.MustCompile("(?s)```action\\s*\\n(.+?)\\n```")
 var surfaceBlockRe = regexp.MustCompile("(?s)```surface\\s*\\n(.+?)\\n```")
 
 func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
+	// === sLLM fallback chain ===
+	// Try on-device sLLM first for intent parsing (no cloud dependency)
+	if a.sllm != nil {
+		result, err := a.chatViaSLLM(ctx, userMsg, devices)
+		if err == nil && result != nil {
+			return result, nil
+		}
+		if err != nil {
+			log.Printf("[agent] sLLM failed, falling back to cloud: %v", err)
+		}
+	}
+
+	// === Cloud LLM (OpenRouter) ===
+	return a.chatViaCloud(ctx, userMsg, devices)
+}
+
+// chatViaSLLM tries to parse the user message using on-device sLLM.
+// Returns nil, nil if sLLM cannot handle this request (e.g. general conversation).
+func (a *Agent) chatViaSLLM(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
+	intent, err := a.sllm.ParseIntent(ctx, userMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Map sLLM intent to HomeAgent action
+	result := &ChatResult{}
+
+	switch intent.Action {
+	case "on", "off", "lock", "unlock":
+		nodeID := a.resolveNodeID(intent.Target, intent.DeviceType, devices)
+		if nodeID > 0 {
+			result.Actions = append(result.Actions, Action{
+				ActionType: intent.Action,
+				NodeID:     nodeID,
+			})
+			result.Reply = fmt.Sprintf("%s %s 완료", intent.Target, actionKorean(intent.Action))
+			log.Printf("[agent] sLLM action: %s node %d", intent.Action, nodeID)
+			return result, nil
+		}
+		// Node not found → let cloud LLM handle with context
+		return nil, fmt.Errorf("device not found: %s/%s", intent.Target, intent.DeviceType)
+
+	case "set_level", "set_color", "set_color_temp", "set_thermostat":
+		nodeID := a.resolveNodeID(intent.Target, intent.DeviceType, devices)
+		if nodeID > 0 {
+			result.Actions = append(result.Actions, Action{
+				ActionType: intent.Action,
+				NodeID:     nodeID,
+			})
+			result.Reply = fmt.Sprintf("%s %s 설정 완료", intent.Target, actionKorean(intent.Action))
+			return result, nil
+		}
+		return nil, fmt.Errorf("device not found: %s/%s", intent.Target, intent.DeviceType)
+
+	case "query", "list", "summary":
+		// Status queries → delegate to cloud LLM for rich response
+		return nil, nil
+
+	case "scene":
+		// Scene mode → delegate to cloud LLM
+		return nil, nil
+
+	default:
+		// Unknown intent → cloud fallback
+		return nil, nil
+	}
+}
+
+// resolveNodeID finds the device node ID matching target name and type.
+func (a *Agent) resolveNodeID(target, deviceType string, devices []DeviceInfo) int {
+	// "all" or "default" with single controllable device → use that device
+	if target == "default" || target == "all" {
+		var candidates []DeviceInfo
+		for _, d := range devices {
+			if isControllable(d.Type) {
+				if deviceType == "" || deviceType == "all" || matchDeviceType(d.Type, deviceType) {
+					candidates = append(candidates, d)
+				}
+			}
+		}
+		if len(candidates) == 1 {
+			return candidates[0].NodeID
+		}
+		return 0
+	}
+
+	// Match by name containing target
+	for _, d := range devices {
+		if strings.Contains(d.Name, target) && isControllable(d.Type) {
+			return d.NodeID
+		}
+	}
+	return 0
+}
+
+func isControllable(devType string) bool {
+	switch devType {
+	case "on_off_plug", "on_off_light", "dimmable_light", "color_temp_light",
+		"extended_color_light", "thermostat", "door_lock":
+		return true
+	}
+	return false
+}
+
+func matchDeviceType(devType, intentType string) bool {
+	switch intentType {
+	case "light":
+		return strings.Contains(devType, "light")
+	case "plug":
+		return strings.Contains(devType, "plug")
+	case "thermostat":
+		return devType == "thermostat"
+	case "lock":
+		return devType == "door_lock"
+	}
+	return false
+}
+
+func actionKorean(action string) string {
+	switch action {
+	case "on":
+		return "켜기"
+	case "off":
+		return "끄기"
+	case "lock":
+		return "잠금"
+	case "unlock":
+		return "해제"
+	case "set_level":
+		return "밝기"
+	case "set_color":
+		return "색상"
+	case "set_color_temp":
+		return "색온도"
+	case "set_thermostat":
+		return "온도"
+	default:
+		return action
+	}
+}
+
+// chatViaCloud calls OpenRouter (cloud LLM) for full-context chat.
+func (a *Agent) chatViaCloud(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
 	sysPrompt := a.buildSystemPrompt(devices)
 
 	reqBody := openRouterReq{
@@ -173,7 +323,7 @@ func (a *Agent) Chat(ctx context.Context, userMsg string, devices []DeviceInfo) 
 	}
 
 	content := orResp.Choices[0].Message.Content
-	log.Printf("[agent] LLM response: %s", content)
+	log.Printf("[agent] cloud LLM response: %s", content)
 
 	// Extract actions from ```action blocks
 	result := &ChatResult{}

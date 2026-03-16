@@ -47,11 +47,15 @@ export async function chat(message: string): Promise<ChatResult> {
   return res.json();
 }
 
-export async function sendCommand(nodeId: number, command: string): Promise<void> {
+export async function sendCommand(
+  nodeId: number,
+  command: string,
+  params?: Record<string, unknown>,
+): Promise<void> {
   const res = await fetch(`${API_BASE}/api/devices/command`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ node_id: nodeId, command }),
+    body: JSON.stringify({ node_id: nodeId, command, ...params }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));

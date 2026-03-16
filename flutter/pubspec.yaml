@@ -38,6 +38,9 @@ dependencies:
   flutter_blue_plus: ^1.35.0
   web_socket_channel: ^3.0.2
 
+  # A2UI — Google GenUI SDK (Surface 렌더러)
+  genui: ^0.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

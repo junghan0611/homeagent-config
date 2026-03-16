@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:genui/genui.dart' show GenUiSurface;
 
+import '../a2ui_adapter.dart';
 import '../api_client.dart';
 import '../theme.dart';
 import '../widgets/device_card.dart';
 import '../widgets/quick_status.dart';
 
-/// 대시보드 — 디바이스 그리드 + SSE 실시간 갱신
-/// shell_native.dart에서 리팩터링: API→ApiClient, 폴링→SSE, ListView→GridView
+/// 대시보드 — A2UI Surface + 디바이스 그리드 + SSE 실시간 갱신
 class DashboardScreen extends StatefulWidget {
   final String serverUrl;
   const DashboardScreen({super.key, required this.serverUrl});
@@ -19,8 +20,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final ApiClient _api;
+  late final HomeAgentA2uiAdapter _a2ui;
   List<Device> _devices = [];
-  Map<String, dynamic>? _home;
   bool _loading = true;
   String? _error;
   StreamSubscription<SseEvent>? _sseSub;
@@ -29,8 +30,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _api = ApiClient(baseUrl: widget.serverUrl);
+    _a2ui = HomeAgentA2uiAdapter(api: _api);
     _fetchAll();
     _connectSse();
+    _a2ui.fetchAndRender();
   }
 
   @override
@@ -41,16 +44,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _fetchAll() async {
     try {
-      final results = await Future.wait([
-        _api.getDevices(),
-        _api.getHome(),
-      ]);
+      final devices = await _api.getDevices();
       setState(() {
-        _devices = results[0] as List<Device>;
-        _home = results[1] as Map<String, dynamic>?;
+        _devices = devices;
         _loading = false;
         _error = null;
       });
+      // A2UI Surface 새로고침
+      _a2ui.fetchAndRender();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -87,6 +88,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             setState(() {
               _devices.removeWhere((d) => d.nodeId == event.deviceId);
             });
+            break;
+          case 'surface_update':
+            if (event.value is Map) {
+              _a2ui.handleSurfaceUpdate(
+                  Map<String, dynamic>.from(event.value));
+            }
             break;
         }
       },
@@ -147,11 +154,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final greeting = _home?['greeting'] ?? 'IoT Hub';
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(greeting),
+        title: const Text('IoT Hub'),
         actions: [
           // 연결 상태 칩
           Padding(
@@ -190,6 +195,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
+
+            // A2UI Home Surface (시간 카드 + 디바이스 요약)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: GenUiSurface(
+                  host: _a2ui.host,
+                  surfaceId: 'home',
+                  defaultBuilder: (_) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
 
             // 상태 요약
             SliverToBoxAdapter(

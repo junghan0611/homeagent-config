@@ -19,7 +19,12 @@ function deviceIcon(type: string): string {
     case "dimmable_light":
     case "on_off_light":
     case "color_temp_light":
+    case "extended_color_light":
       return "💡";
+    case "temperature_sensor":
+      return "🌡️";
+    case "humidity_sensor":
+      return "💧";
     case "thermostat":
       return "🌡️";
     default:
@@ -34,14 +39,43 @@ function stateText(dev: DeviceState): string {
       return dev.state["contact"] === true ? "열림" : "닫힘";
     case "on_off_plug":
     case "on_off_light":
+      return dev.state["on"] === true ? "켜짐" : "꺼짐";
     case "dimmable_light":
     case "color_temp_light":
-      return dev.state["on"] === true ? "켜짐" : "꺼짐";
+    case "extended_color_light": {
+      const on = dev.state["on"] === true;
+      const level = dev.state["level"] as number | undefined;
+      if (!on) return "꺼짐";
+      if (level !== undefined) return `켜짐 · ${Math.round((level / 254) * 100)}%`;
+      return "켜짐";
+    }
+    case "temperature_sensor": {
+      const temp = dev.state["temperature"] as number | undefined;
+      const hum = dev.state["humidity"] as number | undefined;
+      const parts: string[] = [];
+      if (temp !== undefined) parts.push(`${(temp / 100).toFixed(1)}°C`);
+      if (hum !== undefined) parts.push(`${(hum / 100).toFixed(0)}%`);
+      return parts.length > 0 ? parts.join(" · ") : "측정 중...";
+    }
+    case "humidity_sensor": {
+      const h = dev.state["humidity"] as number | undefined;
+      return h !== undefined ? `습도 ${(h / 100).toFixed(0)}%` : "측정 중...";
+    }
     case "thermostat":
       return `${dev.state["temperature"] ?? "--"}°C`;
     default:
       return dev.available ? "온라인" : "오프라인";
   }
+}
+
+/** Does this device have a brightness slider? */
+function hasBrightnessSlider(type: string): boolean {
+  return ["dimmable_light", "color_temp_light", "extended_color_light"].includes(type);
+}
+
+/** Is this a sensor (read-only)? */
+function isSensorType(type: string): boolean {
+  return ["contact_sensor", "temperature_sensor", "humidity_sensor"].includes(type);
 }
 
 /** Is this device toggleable (on/off)? */
@@ -51,6 +85,7 @@ function isToggleable(type: string): boolean {
     "on_off_light",
     "dimmable_light",
     "color_temp_light",
+    "extended_color_light",
   ].includes(type);
 }
 
@@ -275,6 +310,55 @@ export class WallpadApp extends LitElement {
       opacity: 0.4;
     }
 
+    /* Brightness slider */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .slider-row input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--wp-border);
+      border-radius: 3px;
+      outline: none;
+    }
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--wp-primary);
+      cursor: pointer;
+    }
+    .slider-label {
+      font-size: 12px;
+      color: var(--wp-text-dim);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* Sensor value display */
+    .sensor-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--wp-text);
+    }
+    .sensor-unit {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--wp-text-dim);
+    }
+    .sensor-row {
+      display: flex;
+      gap: 16px;
+      align-items: baseline;
+    }
+
     /* Empty slot */
     .empty-slot {
       border: 2px dashed var(--wp-border);
@@ -375,14 +459,8 @@ export class WallpadApp extends LitElement {
         if (d.node_id !== evt.device_id) return d;
         const updated = { ...d, state: { ...d.state } };
         if (evt.key) {
-          // Map Matter paths to keys
-          const key =
-            evt.key === "1/69/0"
-              ? "contact"
-              : evt.key === "1/6/0"
-                ? "on"
-                : evt.key;
-          updated.state[key] = evt.value;
+          // Go 서버가 attrMap으로 변환된 key를 보냄 ("on", "level", "temperature" 등)
+          updated.state[evt.key] = evt.value;
         }
         return updated;
       });
@@ -412,6 +490,15 @@ export class WallpadApp extends LitElement {
     }
   }
 
+  private async setLevel(dev: DeviceState, level: number) {
+    if (!dev.available) return;
+    try {
+      await sendCommand(dev.node_id, "set_level", { level });
+    } catch (e) {
+      console.error("[wallpad] set_level failed:", e);
+    }
+  }
+
   private toggleTheme() {
     this.darkMode = !this.darkMode;
     if (this.darkMode) {
@@ -424,8 +511,17 @@ export class WallpadApp extends LitElement {
   private renderDeviceCard(dev: DeviceState) {
     const isOn = dev.state["on"] === true;
     const toggle = isToggleable(dev.type);
-    const isSensor = dev.type === "contact_sensor";
+    const isContact = dev.type === "contact_sensor";
     const contactOpen = dev.state["contact"] === true;
+    const isTempSensor = dev.type === "temperature_sensor";
+    const isHumSensor = dev.type === "humidity_sensor";
+    const slider = hasBrightnessSlider(dev.type);
+    const level = (dev.state["level"] as number) ?? 0;
+
+    // 온습도 센서 전용 카드
+    if (isTempSensor || isHumSensor) {
+      return this.renderSensorCard(dev);
+    }
 
     return html`
       <div
@@ -433,17 +529,19 @@ export class WallpadApp extends LitElement {
           ${toggle ? "toggleable" : ""}
           ${toggle && isOn ? "is-on" : ""}
           ${!dev.available ? "device-unavailable" : ""}"
-        @click=${() => toggle && this.toggleDevice(dev)}
+        @click=${(e: Event) => {
+          // 슬라이더 클릭은 토글 방지
+          if ((e.target as HTMLElement).tagName === "INPUT") return;
+          if (toggle) this.toggleDevice(dev);
+        }}
       >
         <div class="card-top">
           <span class="device-icon">${deviceIcon(dev.type)}</span>
           ${toggle
             ? html`<div class="toggle-indicator ${isOn ? "on" : ""}"></div>`
             : nothing}
-          ${isSensor
-            ? html`<div
-                class="sensor-dot ${contactOpen ? "open" : ""}"
-              ></div>`
+          ${isContact
+            ? html`<div class="sensor-dot ${contactOpen ? "open" : ""}"></div>`
             : nothing}
         </div>
         <div class="card-bottom">
@@ -452,6 +550,53 @@ export class WallpadApp extends LitElement {
             ? html`<div class="device-room">${dev.room}</div>`
             : nothing}
           <div class="device-state">${stateText(dev)}</div>
+          ${slider && isOn
+            ? html`
+                <div class="slider-row" @click=${(e: Event) => e.stopPropagation()}>
+                  <input
+                    type="range"
+                    min="1"
+                    max="254"
+                    .value=${String(level)}
+                    @change=${(e: Event) => {
+                      const val = parseInt((e.target as HTMLInputElement).value);
+                      this.setLevel(dev, val);
+                    }}
+                  />
+                  <span class="slider-label">${Math.round((level / 254) * 100)}%</span>
+                </div>
+              `
+            : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSensorCard(dev: DeviceState) {
+    const temp = dev.state["temperature"] as number | undefined;
+    const hum = dev.state["humidity"] as number | undefined;
+
+    return html`
+      <div class="device-card ${!dev.available ? "device-unavailable" : ""}">
+        <div class="card-top">
+          <span class="device-icon">${deviceIcon(dev.type)}</span>
+        </div>
+        <div class="card-bottom">
+          <div class="device-name">${dev.name}</div>
+          ${dev.room
+            ? html`<div class="device-room">${dev.room}</div>`
+            : nothing}
+          <div class="sensor-row">
+            ${temp !== undefined
+              ? html`<span class="sensor-value">${(temp / 100).toFixed(1)}<span class="sensor-unit">°C</span></span>`
+              : nothing}
+            ${hum !== undefined
+              ? html`<span class="sensor-value">${(hum / 100).toFixed(0)}<span class="sensor-unit">%</span></span>`
+              : nothing}
+          </div>
+          ${temp === undefined && hum === undefined
+            ? html`<div class="device-state">측정 중...</div>`
+            : nothing}
         </div>
       </div>
     `;

@@ -85,7 +85,7 @@ cmd_start() {
     local _key=""
     if [[ -f "$HOME/.env.local" ]]; then
         for _envname in HOMEAGENT_LLM_API_KEY DEEPSEEK_API_KEY OPENROUTER_API_KEY; do
-            _key=$(grep -m1 "^\\(export \\)\\?${_envname}=" "$HOME/.env.local" | sed 's/^export //' | cut -d= -f2-)
+            _key=$(grep -m1 "^\\(export \\)\\?${_envname}=" "$HOME/.env.local" 2>/dev/null | sed 's/^export //' | cut -d= -f2- || true)
             [[ -n "$_key" ]] && break
         done
     fi

@@ -14,6 +14,9 @@
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
+    // 현재 접속한 호스트를 기반으로 서버 URL 동적 감지
+    const currentOrigin = window.location.origin; // e.g. "http://192.168.0.162:8080"
+
     SwaggerUIBundle({
       url: "/openapi.json",
       dom_id: "#swagger-ui",
@@ -24,6 +27,14 @@
       filter: true,
       showExtensions: true,
       tryItOutEnabled: true,
+      // 접속한 호스트를 서버 URL로 사용 — localhost 고정 문제 해결
+      requestInterceptor: (req) => {
+        // openapi.json의 서버 URL을 현재 호스트로 치환
+        if (req.url && !req.url.startsWith(currentOrigin) && !req.url.includes("/openapi.json")) {
+          req.url = req.url.replace(/http:\/\/[^/]+/, currentOrigin);
+        }
+        return req;
+      },
     });
   </script>
 </body>

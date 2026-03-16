@@ -14,6 +14,10 @@
   },
   "servers": [
     {
+      "url": "/",
+      "description": "현재 접속 서버 (자동 감지)"
+    },
+    {
       "url": "http://localhost:8080",
       "description": "로컬 개발 서버"
     },
@@ -22,25 +26,48 @@
       "description": "보드 (RK3576/RPi5)",
       "variables": {
         "host": {
-          "default": "192.168.1.100",
+          "default": "192.168.0.162",
           "description": "보드 IP 주소"
         }
       }
     }
   ],
   "tags": [
-    {"name": "Health", "description": "서버 상태 확인"},
-    {"name": "Devices", "description": "디바이스 조회/제어/삭제"},
-    {"name": "Commission", "description": "새 디바이스 페어링"},
-    {"name": "Events", "description": "실시간 이벤트 스트림 (SSE)"},
-    {"name": "Agent", "description": "LLM 에이전트 + A2UI"},
-    {"name": "Thread", "description": "Thread Border Router 상태"},
-    {"name": "A2A", "description": "Agent-to-Agent 프로토콜"}
+    {
+      "name": "Health",
+      "description": "서버 상태 확인"
+    },
+    {
+      "name": "Devices",
+      "description": "디바이스 조회/제어/삭제"
+    },
+    {
+      "name": "Commission",
+      "description": "새 디바이스 페어링"
+    },
+    {
+      "name": "Events",
+      "description": "실시간 이벤트 스트림 (SSE)"
+    },
+    {
+      "name": "Agent",
+      "description": "LLM 에이전트 + A2UI"
+    },
+    {
+      "name": "Thread",
+      "description": "Thread Border Router 상태"
+    },
+    {
+      "name": "A2A",
+      "description": "Agent-to-Agent 프로토콜"
+    }
   ],
   "paths": {
     "/healthz": {
       "get": {
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "summary": "헬스체크",
         "operationId": "healthCheck",
         "responses": {
@@ -51,19 +78,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {"type": "string", "example": "ok"},
-                    "version": {"type": "string", "example": "0.9.0"}
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "0.9.0"
+                    }
                   }
                 }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료 (RPi5+RK3576)"
       }
     },
     "/api/devices": {
       "get": {
-        "tags": ["Devices"],
+        "tags": [
+          "Devices"
+        ],
         "summary": "디바이스 목록 + 현재 상태",
         "operationId": "getDevices",
         "responses": {
@@ -73,7 +110,9 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": {"$ref": "#/components/schemas/DeviceState"}
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceState"
+                  }
                 },
                 "example": [
                   {
@@ -82,7 +121,9 @@
                     "room": "현관",
                     "type": "contact_sensor",
                     "available": true,
-                    "state": {"contact": false}
+                    "state": {
+                      "contact": false
+                    }
                   },
                   {
                     "node_id": 8,
@@ -90,18 +131,24 @@
                     "room": "거실",
                     "type": "on_off_plug",
                     "available": true,
-                    "state": {"on": true}
+                    "state": {
+                      "on": true
+                    }
                   }
                 ]
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료. contact_sensor, on_off_plug, dimmable_light 확인"
       }
     },
     "/api/devices/{node_id}": {
       "get": {
-        "tags": ["Devices"],
+        "tags": [
+          "Devices"
+        ],
         "summary": "개별 디바이스 상세 조회",
         "operationId": "getDeviceByID",
         "parameters": [
@@ -109,7 +156,9 @@
             "name": "node_id",
             "in": "path",
             "required": true,
-            "schema": {"type": "integer"},
+            "schema": {
+              "type": "integer"
+            },
             "description": "Matter 노드 ID",
             "example": 8
           }
@@ -119,7 +168,9 @@
             "description": "디바이스 상세",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/DeviceState"}
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceState"
+                }
               }
             }
           },
@@ -127,7 +178,9 @@
             "description": "잘못된 node_id",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -135,15 +188,23 @@
             "description": "디바이스 없음",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"},
-                "example": {"error": "device not found"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "device not found"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료"
       },
       "delete": {
-        "tags": ["Devices"],
+        "tags": [
+          "Devices"
+        ],
         "summary": "디바이스 삭제 (unpair)",
         "operationId": "deleteDevice",
         "parameters": [
@@ -151,7 +212,9 @@
             "name": "node_id",
             "in": "path",
             "required": true,
-            "schema": {"type": "integer"},
+            "schema": {
+              "type": "integer"
+            },
             "example": 4
           }
         ],
@@ -163,7 +226,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {"type": "string", "example": "ok"}
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
                   }
                 }
               }
@@ -173,7 +239,9 @@
             "description": "디바이스 없음",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -181,17 +249,25 @@
             "description": "Matter 에러",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"},
-                "example": {"error": "remove_node error 3: node not found in fabric"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "remove_node error 3: node not found in fabric"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료 — remove_node → SSE device_removed"
       }
     },
     "/api/devices/command": {
       "post": {
-        "tags": ["Devices"],
+        "tags": [
+          "Devices"
+        ],
         "summary": "디바이스 제어 명령",
         "operationId": "sendCommand",
         "description": "8개 명령 지원: on, off, set_level, set_color, set_color_temp, set_thermostat, lock, unlock",
@@ -199,39 +275,72 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "#/components/schemas/CommandRequest"},
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              },
               "examples": {
                 "on": {
                   "summary": "플러그/조명 켜기",
-                  "value": {"node_id": 8, "command": "on"}
+                  "value": {
+                    "node_id": 8,
+                    "command": "on"
+                  }
                 },
                 "off": {
                   "summary": "플러그/조명 끄기",
-                  "value": {"node_id": 8, "command": "off"}
+                  "value": {
+                    "node_id": 8,
+                    "command": "off"
+                  }
                 },
                 "set_level": {
                   "summary": "밝기 조절",
-                  "value": {"node_id": 5, "command": "set_level", "level": 128, "transition_time": 10}
+                  "value": {
+                    "node_id": 5,
+                    "command": "set_level",
+                    "level": 128,
+                    "transition_time": 10
+                  }
                 },
                 "set_color": {
                   "summary": "색상 변경",
-                  "value": {"node_id": 5, "command": "set_color", "hue": 120, "saturation": 200}
+                  "value": {
+                    "node_id": 5,
+                    "command": "set_color",
+                    "hue": 120,
+                    "saturation": 200
+                  }
                 },
                 "set_color_temp": {
                   "summary": "색온도 변경",
-                  "value": {"node_id": 5, "command": "set_color_temp", "color_temp": 300}
+                  "value": {
+                    "node_id": 5,
+                    "command": "set_color_temp",
+                    "color_temp": 300
+                  }
                 },
                 "set_thermostat": {
                   "summary": "온도 설정",
-                  "value": {"node_id": 3, "command": "set_thermostat", "mode": "heat", "temperature": 2200}
+                  "value": {
+                    "node_id": 3,
+                    "command": "set_thermostat",
+                    "mode": "heat",
+                    "temperature": 2200
+                  }
                 },
                 "lock": {
                   "summary": "도어락 잠금",
-                  "value": {"node_id": 2, "command": "lock"}
+                  "value": {
+                    "node_id": 2,
+                    "command": "lock"
+                  }
                 },
                 "unlock": {
                   "summary": "도어락 해제",
-                  "value": {"node_id": 2, "command": "unlock"}
+                  "value": {
+                    "node_id": 2,
+                    "command": "unlock"
+                  }
                 }
               }
             }
@@ -245,7 +354,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {"type": "string", "example": "ok"}
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
                   }
                 }
               }
@@ -255,8 +367,22 @@
             "description": "잘못된 명령 또는 누락된 필드",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"},
-                "example": {"error": "unknown command", "commands": ["on","off","set_level","set_color","set_color_temp","set_thermostat","lock","unlock"]}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "unknown command",
+                  "commands": [
+                    "on",
+                    "off",
+                    "set_level",
+                    "set_color",
+                    "set_color_temp",
+                    "set_thermostat",
+                    "lock",
+                    "unlock"
+                  ]
+                }
               }
             }
           },
@@ -264,16 +390,22 @@
             "description": "디바이스 통신 에러",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "partial",
+        "x-implementation-note": "on/off 보드 검증. set_level/set_color/set_thermostat/lock/unlock은 해당 디바이스 없어 미검증"
       }
     },
     "/api/commission": {
       "post": {
-        "tags": ["Commission"],
+        "tags": [
+          "Commission"
+        ],
         "summary": "디바이스 페어링 (BLE/on-network)",
         "operationId": "commission",
         "description": "Matter 디바이스를 페어링합니다. 비동기 (60-180초). 결과는 SSE /api/events로 전달됩니다.",
@@ -283,7 +415,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["code"],
+                "required": [
+                  "code"
+                ],
                 "properties": {
                   "code": {
                     "type": "string",
@@ -308,8 +442,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {"type": "string", "example": "commissioning"},
-                    "code": {"type": "string", "example": "34970112332"}
+                    "status": {
+                      "type": "string",
+                      "example": "commissioning"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "34970112332"
+                    }
                   }
                 }
               }
@@ -319,7 +459,9 @@
             "description": "code 누락",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -327,16 +469,22 @@
             "description": "커미셔닝이 이미 진행 중",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "BLE+WiFi 커미셔닝 보드 검증. 비동기(202). 결과는 SSE"
       }
     },
     "/api/commission-on-network": {
       "post": {
-        "tags": ["Commission"],
+        "tags": [
+          "Commission"
+        ],
         "summary": "IP 직접 지정 페어링 (CASE)",
         "operationId": "commissionOnNetwork",
         "description": "BLE 우회. IP 주소로 직접 Matter CASE 커미셔닝. BLE 커미셔닝 실패 시 우회용.",
@@ -346,7 +494,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["pin_code"],
+                "required": [
+                  "pin_code"
+                ],
                 "properties": {
                   "pin_code": {
                     "type": "integer",
@@ -371,8 +521,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {"type": "string", "example": "commissioning"},
-                    "pin_code": {"type": "integer"}
+                    "status": {
+                      "type": "string",
+                      "example": "commissioning"
+                    },
+                    "pin_code": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -382,16 +537,22 @@
             "description": "pin_code 누락",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "Thread IPv6 직접 커미셔닝 보드 검증"
       }
     },
     "/api/wifi-credentials": {
       "post": {
-        "tags": ["Commission"],
+        "tags": [
+          "Commission"
+        ],
         "summary": "WiFi 자격증명 설정",
         "operationId": "setWifiCredentials",
         "description": "Matter WiFi 디바이스 커미셔닝 전에 WiFi 정보를 설정합니다.",
@@ -401,43 +562,64 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["ssid"],
+                "required": [
+                  "ssid"
+                ],
                 "properties": {
-                  "ssid": {"type": "string", "example": "MyWiFi"},
-                  "password": {"type": "string", "example": "secret123"}
+                  "ssid": {
+                    "type": "string",
+                    "example": "MyWiFi"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "secret123"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "204": {"description": "설정 완료"},
+          "204": {
+            "description": "설정 완료"
+          },
           "400": {
             "description": "SSID 누락",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료"
       }
     },
     "/api/chat": {
       "post": {
-        "tags": ["Agent"],
+        "tags": [
+          "Agent"
+        ],
         "summary": "LLM 에이전트 자연어 명령",
         "operationId": "chat",
-        "description": "자연어로 디바이스를 제어합니다. OPENROUTER_API_KEY 필요.",
+        "description": "자연어로 디바이스를 제어합니다. sLLM(온디바이스) → OpenRouter(클라우드) fallback chain. OPENROUTER_API_KEY 미설정 + sLLM 미설정 시 503.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["message"],
+                "required": [
+                  "message"
+                ],
                 "properties": {
-                  "message": {"type": "string", "example": "거실 플러그 꺼줘"}
+                  "message": {
+                    "type": "string",
+                    "example": "거실 플러그 꺼줘"
+                  }
                 }
               }
             }
@@ -448,29 +630,44 @@
             "description": "에이전트 응답",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/ChatResult"},
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResult"
+                },
                 "example": {
                   "reply": "거실 플러그를 끄겠습니다.",
-                  "actions": [{"action_type": "off", "node_id": 8}]
+                  "actions": [
+                    {
+                      "action_type": "off",
+                      "node_id": 8
+                    }
+                  ]
                 }
               }
             }
           },
-          "400": {"description": "message 누락"},
+          "400": {
+            "description": "message 누락"
+          },
           "503": {
             "description": "LLM 미설정 (OPENROUTER_API_KEY 없음)",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"}
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "보드 검증 완료. sLLM → OpenRouter fallback chain. OPENROUTER_API_KEY 설정 시 cloud LLM 사용"
       }
     },
     "/api/home": {
       "get": {
-        "tags": ["Agent"],
+        "tags": [
+          "Agent"
+        ],
         "summary": "A2UI Home Surface",
         "operationId": "getHomeSurface",
         "description": "시간 기반 동적 UI 데이터. 에이전트가 테마, 인사말, 디바이스 요약 카드를 생성합니다.",
@@ -486,12 +683,16 @@
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "시간 기반 A2UI Surface 동작 확인"
       }
     },
     "/api/events": {
       "get": {
-        "tags": ["Events"],
+        "tags": [
+          "Events"
+        ],
         "summary": "SSE 실시간 이벤트 스트림",
         "operationId": "subscribeEvents",
         "description": "Server-Sent Events. 연결 시 snapshot(현재 디바이스 목록) 후 실시간 이벤트가 전달됩니다.\n\n이벤트 타입: device_state, device_added, device_removed, commission_error, agent_message, surface_update",
@@ -507,12 +708,16 @@
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "SSE 스트림. Swagger Try-it-out에서는 스트림 표시 불가 — curl/EventSource로 테스트"
       }
     },
     "/api/thread/status": {
       "get": {
-        "tags": ["Thread"],
+        "tags": [
+          "Thread"
+        ],
         "summary": "Thread Border Router 상태",
         "operationId": "getThreadStatus",
         "description": "OTBR REST API로 Thread 네트워크 상태를 조회합니다. OTBR이 실행 중이어야 합니다.",
@@ -521,7 +726,9 @@
             "description": "Thread 상태",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/ThreadStatus"},
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadStatus"
+                },
                 "example": {
                   "state": "leader",
                   "rloc16": "0x0400",
@@ -539,7 +746,9 @@
             "description": "OTBR 미실행",
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/Error"},
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
                 "example": {
                   "error": "otbr state: otbr GET /node/state: dial tcp ...: connection refused",
                   "hint": "OTBR이 실행 중인지 확인하세요 (./run.sh android thread-start)"
@@ -547,12 +756,16 @@
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "conditional",
+        "x-implementation-note": "OTBR 실행 중일 때만 동작. 미실행 시 503 + hint 메시지"
       }
     },
     "/.well-known/agent.json": {
       "get": {
-        "tags": ["A2A"],
+        "tags": [
+          "A2A"
+        ],
         "summary": "A2A AgentCard",
         "operationId": "getAgentCard",
         "description": "Agent-to-Agent 프로토콜의 AgentCard. 에이전트 능력, 엔드포인트 정보를 노출합니다.",
@@ -568,7 +781,9 @@
               }
             }
           }
-        }
+        },
+        "x-implementation-status": "verified",
+        "x-implementation-note": "A2A AgentCard JSON 반환"
       }
     }
   },
@@ -577,79 +792,219 @@
       "DeviceState": {
         "type": "object",
         "properties": {
-          "node_id": {"type": "integer", "description": "Matter 노드 ID", "example": 8},
-          "name": {"type": "string", "description": "디바이스 별칭", "example": "거실 플러그"},
-          "room": {"type": "string", "description": "방 이름", "example": "거실"},
+          "node_id": {
+            "type": "integer",
+            "description": "Matter 노드 ID",
+            "example": 8
+          },
+          "name": {
+            "type": "string",
+            "description": "디바이스 별칭",
+            "example": "거실 플러그"
+          },
+          "room": {
+            "type": "string",
+            "description": "방 이름",
+            "example": "거실"
+          },
           "type": {
             "type": "string",
             "description": "디바이스 타입",
-            "enum": ["contact_sensor", "on_off_light", "dimmable_light", "on_off_plug", "color_temp_light", "extended_color_light", "temperature_sensor", "humidity_sensor"],
+            "enum": [
+              "contact_sensor",
+              "on_off_light",
+              "dimmable_light",
+              "on_off_plug",
+              "color_temp_light",
+              "extended_color_light",
+              "temperature_sensor",
+              "humidity_sensor"
+            ],
             "example": "on_off_plug"
           },
-          "available": {"type": "boolean", "description": "연결 상태", "example": true},
+          "available": {
+            "type": "boolean",
+            "description": "연결 상태",
+            "example": true
+          },
           "state": {
             "type": "object",
             "description": "타입별 상태 값",
             "additionalProperties": true,
-            "example": {"on": true, "level": 200}
+            "example": {
+              "on": true,
+              "level": 200
+            }
           }
         },
-        "required": ["node_id", "name", "type", "available", "state"]
+        "required": [
+          "node_id",
+          "name",
+          "type",
+          "available",
+          "state"
+        ]
       },
       "CommandRequest": {
         "type": "object",
-        "required": ["node_id", "command"],
+        "required": [
+          "node_id",
+          "command"
+        ],
         "properties": {
-          "node_id": {"type": "integer", "description": "대상 디바이스 노드 ID"},
+          "node_id": {
+            "type": "integer",
+            "description": "대상 디바이스 노드 ID"
+          },
           "command": {
             "type": "string",
-            "enum": ["on", "off", "set_level", "set_color", "set_color_temp", "set_thermostat", "lock", "unlock"]
+            "enum": [
+              "on",
+              "off",
+              "set_level",
+              "set_color",
+              "set_color_temp",
+              "set_thermostat",
+              "lock",
+              "unlock"
+            ]
           },
-          "level": {"type": "integer", "minimum": 0, "maximum": 254, "description": "밝기 (set_level)"},
-          "hue": {"type": "integer", "minimum": 0, "maximum": 254, "description": "색상 (set_color)"},
-          "saturation": {"type": "integer", "minimum": 0, "maximum": 254, "description": "채도 (set_color)"},
-          "color_temp": {"type": "integer", "minimum": 153, "maximum": 500, "description": "색온도 mireds (set_color_temp)"},
-          "temperature": {"type": "integer", "description": "온도 0.01°C 단위 (set_thermostat)"},
-          "mode": {"type": "string", "enum": ["heat", "cool"], "description": "모드 (set_thermostat)"},
-          "transition_time": {"type": "integer", "default": 0, "description": "전환 시간 (100ms 단위)"}
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 254,
+            "description": "밝기 (set_level)"
+          },
+          "hue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 254,
+            "description": "색상 (set_color)"
+          },
+          "saturation": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 254,
+            "description": "채도 (set_color)"
+          },
+          "color_temp": {
+            "type": "integer",
+            "minimum": 153,
+            "maximum": 500,
+            "description": "색온도 mireds (set_color_temp)"
+          },
+          "temperature": {
+            "type": "integer",
+            "description": "온도 0.01°C 단위 (set_thermostat)"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "heat",
+              "cool"
+            ],
+            "description": "모드 (set_thermostat)"
+          },
+          "transition_time": {
+            "type": "integer",
+            "default": 0,
+            "description": "전환 시간 (100ms 단위)"
+          }
         }
       },
       "ChatResult": {
         "type": "object",
         "properties": {
-          "reply": {"type": "string", "description": "에이전트 텍스트 응답"},
+          "reply": {
+            "type": "string",
+            "description": "에이전트 텍스트 응답",
+            "example": "거실 플러그를 끄겠습니다."
+          },
           "actions": {
             "type": "array",
+            "description": "실행된 디바이스 제어 액션",
             "items": {
               "type": "object",
               "properties": {
-                "action_type": {"type": "string"},
-                "node_id": {"type": "integer"}
+                "action_type": {
+                  "type": "string",
+                  "enum": [
+                    "on",
+                    "off"
+                  ],
+                  "description": "액션 타입"
+                },
+                "node_id": {
+                  "type": "integer",
+                  "description": "대상 노드 ID"
+                }
               }
             }
           },
           "surface": {
             "type": "object",
-            "description": "A2UI 동적 Surface (선택)"
+            "nullable": true,
+            "description": "A2UI 동적 Surface (대시보드/요약 요청 시)",
+            "properties": {
+              "surfaceId": {
+                "type": "string"
+              },
+              "components": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
           }
-        }
+        },
+        "required": [
+          "reply"
+        ]
       },
       "ThreadStatus": {
         "type": "object",
         "properties": {
-          "state": {"type": "string", "description": "Thread 상태", "enum": ["leader", "router", "child", "detached", "disabled"]},
-          "rloc16": {"type": "string", "example": "0x0400"},
-          "ext_addr": {"type": "string", "example": "dead00beef00cafe"},
-          "dataset": {"type": "object", "description": "Thread operational dataset"},
-          "leader_data": {"type": "object", "description": "리더 정보"}
+          "state": {
+            "type": "string",
+            "description": "Thread 상태",
+            "enum": [
+              "leader",
+              "router",
+              "child",
+              "detached",
+              "disabled"
+            ]
+          },
+          "rloc16": {
+            "type": "string",
+            "example": "0x0400"
+          },
+          "ext_addr": {
+            "type": "string",
+            "example": "dead00beef00cafe"
+          },
+          "dataset": {
+            "type": "object",
+            "description": "Thread operational dataset"
+          },
+          "leader_data": {
+            "type": "object",
+            "description": "리더 정보"
+          }
         }
       },
       "Error": {
         "type": "object",
         "properties": {
-          "error": {"type": "string", "description": "에러 메시지"}
+          "error": {
+            "type": "string",
+            "description": "에러 메시지"
+          }
         },
-        "required": ["error"]
+        "required": [
+          "error"
+        ]
       }
     }
   }

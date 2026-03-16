@@ -14,9 +14,10 @@ import (
 )
 
 type Config struct {
-	APIKey string // OpenRouter API key
-	Model  string // e.g. "google/gemini-2.0-flash-001"
-	SLLM   SLLMConfig
+	Endpoint string // OpenAI-compatible API base URL (e.g. "https://api.deepseek.com/v1")
+	APIKey   string // API key for the endpoint
+	Model    string // e.g. "google/gemini-2.5-flash", "deepseek-chat"
+	SLLM     SLLMConfig
 }
 
 type Agent struct {
@@ -28,6 +29,9 @@ type Agent struct {
 func New(cfg Config) *Agent {
 	if cfg.Model == "" {
 		cfg.Model = "google/gemini-2.5-flash"
+	}
+	if cfg.Endpoint == "" {
+		cfg.Endpoint = "https://api.deepseek.com/v1"
 	}
 	a := &Agent{
 		cfg:    cfg,
@@ -286,7 +290,7 @@ func actionKorean(action string) string {
 	}
 }
 
-// chatViaCloud calls OpenRouter (cloud LLM) for full-context chat.
+// chatViaCloud calls cloud LLM (OpenAI-compatible: OpenRouter, DeepSeek, etc.)
 func (a *Agent) chatViaCloud(ctx context.Context, userMsg string, devices []DeviceInfo) (*ChatResult, error) {
 	sysPrompt := a.buildSystemPrompt(devices)
 
@@ -300,26 +304,27 @@ func (a *Agent) chatViaCloud(ctx context.Context, userMsg string, devices []Devi
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequestWithContext(ctx, "POST", "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
+	endpoint := strings.TrimRight(a.cfg.Endpoint, "/") + "/chat/completions"
+	req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openrouter: %w", err)
+		return nil, fmt.Errorf("llm cloud: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var orResp openRouterResp
 	if err := json.Unmarshal(respBody, &orResp); err != nil {
-		return nil, fmt.Errorf("openrouter parse: %w", err)
+		return nil, fmt.Errorf("llm cloud parse: %w", err)
 	}
 	if orResp.Error != nil {
-		return nil, fmt.Errorf("openrouter: %s", orResp.Error.Message)
+		return nil, fmt.Errorf("llm cloud: %s", orResp.Error.Message)
 	}
 	if len(orResp.Choices) == 0 {
-		return nil, fmt.Errorf("openrouter: no choices")
+		return nil, fmt.Errorf("llm cloud: no choices")
 	}
 
 	content := orResp.Choices[0].Message.Content
@@ -392,26 +397,27 @@ func (a *Agent) ReactToEvent(ctx context.Context, evt EventContext, devices []De
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequestWithContext(ctx, "POST", "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
+	endpoint := strings.TrimRight(a.cfg.Endpoint, "/") + "/chat/completions"
+	req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openrouter: %w", err)
+		return nil, fmt.Errorf("llm cloud: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var orResp openRouterResp
 	if err := json.Unmarshal(respBody, &orResp); err != nil {
-		return nil, fmt.Errorf("openrouter parse: %w", err)
+		return nil, fmt.Errorf("llm cloud parse: %w", err)
 	}
 	if orResp.Error != nil {
-		return nil, fmt.Errorf("openrouter: %s", orResp.Error.Message)
+		return nil, fmt.Errorf("llm cloud: %s", orResp.Error.Message)
 	}
 	if len(orResp.Choices) == 0 {
-		return nil, fmt.Errorf("openrouter: no choices")
+		return nil, fmt.Errorf("llm cloud: no choices")
 	}
 
 	content := orResp.Choices[0].Message.Content

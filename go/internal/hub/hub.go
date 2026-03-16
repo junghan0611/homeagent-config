@@ -78,10 +78,11 @@ type Event struct {
 // New creates a new Hub
 func New(cfg *config.Config) *Hub {
 	var ag *agent.Agent
-	if cfg.OpenRouterKey != "" {
+	if cfg.LLMAPIKey != "" {
 		ag = agent.New(agent.Config{
-			APIKey: cfg.OpenRouterKey,
-			Model:  cfg.LLMModel,
+			Endpoint: cfg.LLMEndpoint,
+			APIKey:   cfg.LLMAPIKey,
+			Model:    cfg.LLMModel,
 			SLLM: agent.SLLMConfig{
 				Endpoint: cfg.SLLMEndpoint,
 				Enabled:  cfg.SLLMEnabled,

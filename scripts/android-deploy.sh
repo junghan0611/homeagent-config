@@ -73,20 +73,27 @@ cmd_start() {
 
     # --- 환경변수 수집 (RPi5 ha-start 패턴과 동일) ---
     local WIFI_SSID_ARG="" WIFI_PASS_ARG="" OT_CTL_ARG=""
-    local LLM_KEY_ARG="" LLM_MODEL_ARG="" SLLM_ENABLED_ARG="" SLLM_ENDPOINT_ARG=""
+    local LLM_KEY_ARG="" LLM_ENDPOINT_ARG="" LLM_MODEL_ARG=""
+    local SLLM_ENABLED_ARG="" SLLM_ENDPOINT_ARG=""
 
     [[ -n "${WIFI_SSID:-}" ]] && WIFI_SSID_ARG="HOMEAGENT_WIFI_SSID=$WIFI_SSID"
     [[ -n "${WIFI_PASSWORD:-}" ]] && WIFI_PASS_ARG="HOMEAGENT_WIFI_PASSWORD=$WIFI_PASSWORD"
     [[ -f "$DIST_DIR/otbr-arm64/ot-ctl" ]] && OT_CTL_ARG="HOMEAGENT_OT_CTL=$REMOTE/otbr/ot-ctl"
 
-    # LLM: ~/.env.local에서 OPENROUTER_API_KEY 읽기
+    # LLM API key: ~/.env.local에서 읽기
+    # 우선순위: HOMEAGENT_LLM_API_KEY → DEEPSEEK_API_KEY → OPENROUTER_API_KEY
+    local _key=""
     if [[ -f "$HOME/.env.local" ]]; then
-        local _key
-        _key=$(grep -m1 'OPENROUTER_API_KEY=' "$HOME/.env.local" | sed 's/^export //' | cut -d= -f2-)
-        [[ -n "$_key" ]] && LLM_KEY_ARG="OPENROUTER_API_KEY=$_key"
+        for _envname in HOMEAGENT_LLM_API_KEY DEEPSEEK_API_KEY OPENROUTER_API_KEY; do
+            _key=$(grep -m1 "^\\(export \\)\\?${_envname}=" "$HOME/.env.local" | sed 's/^export //' | cut -d= -f2-)
+            [[ -n "$_key" ]] && break
+        done
     fi
-    # LLM 모델: 환경변수 또는 기본값
-    LLM_MODEL_ARG="HOMEAGENT_LLM_MODEL=${HOMEAGENT_LLM_MODEL:-google/gemini-2.5-flash}"
+    [[ -n "$_key" ]] && LLM_KEY_ARG="HOMEAGENT_LLM_API_KEY=$_key"
+
+    # LLM 엔드포인트 + 모델 (환경변수 또는 기본값: DeepSeek)
+    LLM_ENDPOINT_ARG="HOMEAGENT_LLM_ENDPOINT=${HOMEAGENT_LLM_ENDPOINT:-https://api.deepseek.com/v1}"
+    LLM_MODEL_ARG="HOMEAGENT_LLM_MODEL=${HOMEAGENT_LLM_MODEL:-deepseek-chat}"
 
     # sLLM (선택): 환경변수로 전달 시 활성화
     [[ -n "${HOMEAGENT_SLLM_ENABLED:-}" ]] && SLLM_ENABLED_ARG="HOMEAGENT_SLLM_ENABLED=$HOMEAGENT_SLLM_ENABLED"
@@ -94,9 +101,9 @@ cmd_start() {
 
     # LLM 설정 로그
     if [[ -n "$LLM_KEY_ARG" ]]; then
-        log "LLM: OpenRouter 키 로드됨 (${#_key}자)"
+        log "LLM: 키 로드됨 (${#_key}자), endpoint=${HOMEAGENT_LLM_ENDPOINT:-https://api.deepseek.com/v1}"
     else
-        warn "LLM: OPENROUTER_API_KEY 미설정 — chat 기능 비활성"
+        warn "LLM: API 키 미설정 — chat 기능 비활성 (DEEPSEEK_API_KEY 또는 OPENROUTER_API_KEY)"
     fi
     [[ -n "$SLLM_ENABLED_ARG" ]] && log "sLLM: $HOMEAGENT_SLLM_ENDPOINT"
 
@@ -128,6 +135,7 @@ HOMEAGENT_HTTP_ADDR=:8080 \\
 HOMEAGENT_MATTER_WS=ws://localhost:5580 \\
 HOMEAGENT_UI_DIR=$REMOTE/ui/dist \\
 HOMEAGENT_ALIASES_FILE=$REMOTE/aliases.json \\
+${LLM_ENDPOINT_ARG} \\
 ${LLM_MODEL_ARG} \\
 ${LLM_KEY_ARG} \\
 ${SLLM_ENABLED_ARG} \\

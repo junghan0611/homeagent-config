@@ -96,6 +96,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // Matter attribute path → state key (Go attrMap 미러)
+  static const _attrMap = {
+    '1/6/0': 'on',
+    '1/8/0': 'level',
+    '1/768/7': 'color_temp',
+    '1/1026/0': 'temperature',
+    '1/1029/0': 'humidity',
+    '1/69/0': 'contact',
+  };
+
   void _handleDeviceState(SseEvent event) {
     setState(() {
       final idx = _devices.indexWhere((d) => d.nodeId == event.deviceId);
@@ -103,7 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final old = _devices[idx];
         final newState = Map<String, dynamic>.from(old.state);
         if (event.key.isNotEmpty) {
-          newState[event.key] = event.value;
+          // SSE key가 원시 path이면 매핑, 아니면 그대로
+          final mappedKey = _attrMap[event.key] ?? event.key;
+          newState[mappedKey] = event.value;
         }
         _devices[idx] = Device(
           nodeId: old.nodeId,
@@ -118,7 +130,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _onCommand(int nodeId, String command, {dynamic value}) {
-    _api.sendCommand(nodeId, command, value: value).catchError((e) {
+    _api.sendCommand(nodeId, command, value: value).then((_) {
+      // SSE의 key가 원시 path("1/6/0")로 오는 문제 우회:
+      // 명령 후 짧은 딜레이 뒤 전체 디바이스 새로고침
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _fetchAll();
+      });
+    }).catchError((e) {
       debugPrint('[Dashboard] command error: $e');
     });
   }

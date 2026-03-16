@@ -1227,3 +1227,119 @@ func mustMarshal(t *testing.T, v interface{}) json.RawMessage {
 	}
 	return data
 }
+
+// --- SSE key conversion tests (raw path → attrMap name) ---
+
+func TestSSEKey_OnOff_Converted(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[8] = &DeviceState{NodeID: 8, Type: "on_off_plug", State: map[string]interface{}{"on": false}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{8, "1/6/0", true}),
+	}
+	h.handleMatterEvent(evt)
+
+	// Read from eventCh — key should be "on", not "1/6/0"
+	select {
+	case e := <-h.eventCh:
+		if e.Key != "on" {
+			t.Errorf("SSE key should be 'on', got %q", e.Key)
+		}
+		if e.Value != true {
+			t.Errorf("SSE value should be true, got %v", e.Value)
+		}
+	default:
+		t.Fatal("no event in eventCh")
+	}
+}
+
+func TestSSEKey_Contact_Converted(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[1] = &DeviceState{NodeID: 1, Type: "contact_sensor", State: map[string]interface{}{"contact": false}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{1, "1/69/0", true}),
+	}
+	h.handleMatterEvent(evt)
+
+	select {
+	case e := <-h.eventCh:
+		if e.Key != "contact" {
+			t.Errorf("SSE key should be 'contact', got %q", e.Key)
+		}
+	default:
+		t.Fatal("no event in eventCh")
+	}
+}
+
+func TestSSEKey_Level_Converted(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[5] = &DeviceState{NodeID: 5, Type: "dimmable_light", State: map[string]interface{}{}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{5, "1/8/0", float64(200)}),
+	}
+	h.handleMatterEvent(evt)
+
+	select {
+	case e := <-h.eventCh:
+		if e.Key != "level" {
+			t.Errorf("SSE key should be 'level', got %q", e.Key)
+		}
+	default:
+		t.Fatal("no event in eventCh")
+	}
+}
+
+func TestSSEKey_Temperature_Converted(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[10] = &DeviceState{NodeID: 10, Type: "temperature_sensor", State: map[string]interface{}{}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{10, "1/1026/0", float64(2350)}),
+	}
+	h.handleMatterEvent(evt)
+
+	select {
+	case e := <-h.eventCh:
+		if e.Key != "temperature" {
+			t.Errorf("SSE key should be 'temperature', got %q", e.Key)
+		}
+	default:
+		t.Fatal("no event in eventCh")
+	}
+}
+
+func TestSSEKey_UnknownPath_RawPreserved(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[40] = &DeviceState{NodeID: 40, Type: "on_off_light", State: map[string]interface{}{}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{40, "2/999/0", "raw"}),
+	}
+	h.handleMatterEvent(evt)
+
+	select {
+	case e := <-h.eventCh:
+		if e.Key != "2/999/0" {
+			t.Errorf("unknown path should be preserved raw, got %q", e.Key)
+		}
+	default:
+		t.Fatal("no event in eventCh")
+	}
+}

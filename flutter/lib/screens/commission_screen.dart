@@ -81,27 +81,18 @@ class _CommissionScreenState extends State<CommissionScreen> {
   }
 
   /// Pairing Code로 BLE 커미셔닝 (Thread 디바이스)
-  Future<void> _startCodeCommissioning() async {
-    final code = await _showCodeDialog();
-    if (code == null || code.isEmpty) return;
-
-    setState(() {
-      _commissioning = true;
-      _resultMessage = null;
-    });
-
-    _listenForResult();
-
-    try {
-      // network_only=false → BLE relay 사용
-      await _api.commission(code, networkOnly: false);
-    } catch (e) {
-      setState(() {
-        _commissioning = false;
-        _resultMessage = '요청 실패: $e';
-        _resultSuccess = false;
-      });
+  /// BLE relay가 필요하므로 BleCommissioningScreen으로 이동 (relay 자동 시작)
+  void _startCodeCommissioning() {
+    if (!Platform.isAndroid) {
+      _showMessage('BLE 커미셔닝은 Android에서만 가능합니다.');
+      return;
     }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BleCommissioningScreen(serverUrl: widget.serverUrl),
+      ),
+    );
   }
 
   void _listenForResult() {

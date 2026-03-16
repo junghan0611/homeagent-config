@@ -359,7 +359,8 @@ build_apk() {
     log "Flutter APK 빌드..."
     nix develop "$PROJECT_DIR#dev" --impure --command bash -c "
         cd $PROJECT_DIR/flutter && flutter build apk --release \
-            --dart-define=SERVER_HOST=localhost
+            --dart-define=SERVER_HOST=localhost \
+            --dart-define=NATIVE_UI=true
     "
     local APK="$PROJECT_DIR/flutter/build/app/outputs/flutter-apk/app-release.apk"
     [[ -f "$APK" ]] && log "→ $(ls -lh "$APK" | awk '{print $5}')" || warn "APK 빌드 실패"
@@ -487,6 +488,9 @@ cmd_deploy() {
     cmd_push
 
     [[ "$SKIP_APK" == false ]] && cmd_install_apk
+
+    # Thread 자동 시작 (이미 실행 중이면 스킵)
+    cmd_thread_start
 
     cmd_start
     log "🎉 배포 완료"

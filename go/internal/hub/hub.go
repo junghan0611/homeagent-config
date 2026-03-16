@@ -388,10 +388,15 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 		}
 		h.mu.Unlock()
 
+		// SSE key: attrMap으로 변환, 미등록 path는 raw 유지
+		sseKey := upd.Path
+		if mapped, ok := attrMap[upd.Path]; ok {
+			sseKey = mapped
+		}
 		h.eventCh <- Event{
 			Type:     "device_state",
 			DeviceID: upd.NodeID,
-			Key:      upd.Path,
+			Key:      sseKey,
 			Value:    upd.Value,
 		}
 

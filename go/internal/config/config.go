@@ -28,19 +28,23 @@ type Config struct {
 
 	// OTBR ot-ctl path (for Thread dataset retrieval)
 	OtCtlPath string
+
+	// OTBR REST API URL (otbr-agent REST on :8081)
+	OtbrRESTURL string
 }
 
 func Load() *Config {
 	return &Config{
-		HTTPAddr:     envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
-		MQTTBroker:   envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
-		MatterWSURL:  envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
+		HTTPAddr:      envOr("HOMEAGENT_HTTP_ADDR", ":8080"),
+		MQTTBroker:    envOr("HOMEAGENT_MQTT_BROKER", "tcp://localhost:1883"),
+		MatterWSURL:   envOr("HOMEAGENT_MATTER_WS", "ws://localhost:5580"),
 		WifiSSID:      os.Getenv("HOMEAGENT_WIFI_SSID"),
 		WifiPassword:  os.Getenv("HOMEAGENT_WIFI_PASSWORD"),
 		OpenRouterKey: os.Getenv("OPENROUTER_API_KEY"),
 		LLMModel:      envOr("HOMEAGENT_LLM_MODEL", "google/gemini-2.5-flash"),
 		AliasesFile:   envOr("HOMEAGENT_ALIASES_FILE", "/opt/homeagent/aliases.json"),
 		OtCtlPath:     envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
+		OtbrRESTURL:   envOr("HOMEAGENT_OTBR_REST", "http://localhost:8081"),
 	}
 }
 

@@ -890,7 +890,12 @@ func TestAddNode_DeviceTypes(t *testing.T) {
 	}{
 		{21, "contact_sensor"},
 		{256, "on_off_light"},
+		{257, "dimmable_light"},
 		{266, "on_off_plug"},
+		{268, "color_temp_light"},
+		{269, "extended_color_light"},
+		{770, "temperature_sensor"},
+		{775, "humidity_sensor"},
 		{999, fmt.Sprintf("device_%d", 999)},
 	}
 
@@ -911,5 +916,90 @@ func TestAddNode_DeviceTypes(t *testing.T) {
 		if ds.Type != tc.expected {
 			t.Errorf("typeID %.0f: expected %q, got %q", tc.typeID, tc.expected, ds.Type)
 		}
+	}
+}
+
+func TestAddNode_DimmableLight_State(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 5, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(257)}},
+			"1/6/0": true, "1/8/0": float64(200),
+		},
+	})
+	if ds.Type != "dimmable_light" { t.Errorf("got type %q", ds.Type) }
+	if ds.State["on"] != true { t.Errorf("got on=%v", ds.State["on"]) }
+	if ds.State["level"] != float64(200) { t.Errorf("got level=%v", ds.State["level"]) }
+}
+
+func TestAddNode_ColorTempLight_State(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 6, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(268)}},
+			"1/6/0": true, "1/8/0": float64(180), "1/768/7": float64(300),
+		},
+	})
+	if ds.Type != "color_temp_light" { t.Errorf("got type %q", ds.Type) }
+	if ds.State["level"] != float64(180) { t.Errorf("got level=%v", ds.State["level"]) }
+	if ds.State["color_temp"] != float64(300) { t.Errorf("got color_temp=%v", ds.State["color_temp"]) }
+}
+
+func TestAddNode_ExtendedColorLight_State(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 7, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(269)}},
+			"1/6/0": true, "1/8/0": float64(254),
+			"1/768/0": float64(120), "1/768/1": float64(200), "1/768/7": float64(250),
+		},
+	})
+	if ds.Type != "extended_color_light" { t.Errorf("got type %q", ds.Type) }
+	if ds.State["hue"] != float64(120) { t.Errorf("got hue=%v", ds.State["hue"]) }
+	if ds.State["saturation"] != float64(200) { t.Errorf("got saturation=%v", ds.State["saturation"]) }
+}
+
+func TestAddNode_TemperatureSensor_State(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 10, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(770)}},
+			"1/1026/0": float64(2350),
+		},
+	})
+	if ds.Type != "temperature_sensor" { t.Errorf("got type %q", ds.Type) }
+	if ds.State["temperature"] != float64(2350) { t.Errorf("got temperature=%v", ds.State["temperature"]) }
+}
+
+func TestAddNode_HumiditySensor_State(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 11, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(775)}},
+			"1/1029/0": float64(4500),
+		},
+	})
+	if ds.Type != "humidity_sensor" { t.Errorf("got type %q", ds.Type) }
+	if ds.State["humidity"] != float64(4500) { t.Errorf("got humidity=%v", ds.State["humidity"]) }
+}
+
+func TestAttrMap_SSEMapping(t *testing.T) {
+	expected := map[string]string{
+		"1/6/0": "on", "1/69/0": "contact", "1/8/0": "level",
+		"1/768/0": "hue", "1/768/1": "saturation", "1/768/7": "color_temp",
+		"1/1026/0": "temperature", "1/1029/0": "humidity",
+	}
+	for path, key := range expected {
+		if attrMap[path] != key {
+			t.Errorf("attrMap[%q] = %q, want %q", path, attrMap[path], key)
+		}
+	}
+	if len(attrMap) != len(expected) {
+		t.Errorf("attrMap has %d entries, want %d", len(attrMap), len(expected))
 	}
 }

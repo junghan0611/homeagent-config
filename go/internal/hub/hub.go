@@ -15,6 +15,7 @@ import (
 	"github.com/junghan0611/homeagent/internal/agent"
 	"github.com/junghan0611/homeagent/internal/config"
 	"github.com/junghan0611/homeagent/internal/matter"
+	"github.com/junghan0611/homeagent/internal/otbr"
 )
 
 // getOTBRDataset fetches the active Thread dataset from ot-ctl
@@ -46,6 +47,7 @@ type DeviceState struct {
 type Hub struct {
 	cfg     *config.Config
 	matter  *matter.Client
+	otbr    *otbr.Client
 	devices map[int]*DeviceState // nodeID -> state
 	mu      sync.RWMutex
 
@@ -87,6 +89,7 @@ func New(cfg *config.Config) *Hub {
 	return &Hub{
 		cfg:        cfg,
 		matter:     matter.NewClient(cfg.MatterWSURL),
+		otbr:       otbr.NewClient(cfg.OtbrRESTURL),
 		devices:    make(map[int]*DeviceState),
 		eventCh:    make(chan Event, 100),
 		sseClients: make(map[chan Event]struct{}),
@@ -288,6 +291,19 @@ func (h *Hub) Events() <-chan Event {
 	return h.eventCh
 }
 
+// attrMap maps Matter attribute paths to human-readable state keys.
+// Used in both addNode (initial state) and handleMatterEvent (SSE updates).
+var attrMap = map[string]string{
+	"1/6/0":    "on",          // OnOff cluster
+	"1/69/0":   "contact",     // BooleanState cluster
+	"1/8/0":    "level",       // LevelControl — CurrentLevel (0-254)
+	"1/768/0":  "hue",         // ColorControl — CurrentHue (0-254)
+	"1/768/1":  "saturation",  // ColorControl — CurrentSaturation (0-254)
+	"1/768/7":  "color_temp",  // ColorControl — ColorTemperatureMireds (153-500)
+	"1/1026/0": "temperature", // TemperatureMeasurement — MeasuredValue (0.01°C)
+	"1/1029/0": "humidity",    // RelativeHumidityMeasurement — MeasuredValue (0.01%)
+}
+
 func (h *Hub) addNode(n matter.Node) *DeviceState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -319,8 +335,18 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 						ds.Type = "contact_sensor"
 					case 256:
 						ds.Type = "on_off_light"
+					case 257:
+						ds.Type = "dimmable_light"
 					case 266:
 						ds.Type = "on_off_plug"
+					case 268:
+						ds.Type = "color_temp_light"
+					case 269:
+						ds.Type = "extended_color_light"
+					case 770:
+						ds.Type = "temperature_sensor"
+					case 775:
+						ds.Type = "humidity_sensor"
 					default:
 						ds.Type = fmt.Sprintf("device_%d", int(typeID))
 					}
@@ -329,12 +355,11 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 		}
 	}
 
-	// Extract initial state
-	if contact, ok := n.Attributes["1/69/0"]; ok {
-		ds.State["contact"] = contact
-	}
-	if onoff, ok := n.Attributes["1/6/0"]; ok {
-		ds.State["on"] = onoff
+	// Extract initial state — attribute path → state key via attrMap
+	for path, key := range attrMap {
+		if val, ok := n.Attributes[path]; ok {
+			ds.State[key] = val
+		}
 	}
 
 	h.devices[n.NodeID] = ds
@@ -354,13 +379,10 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 		h.mu.Lock()
 		ds, ok := h.devices[upd.NodeID]
 		if ok {
-			// Map Matter paths to human-readable keys
-			switch upd.Path {
-			case "1/69/0": // BooleanState (contact sensor)
-				ds.State["contact"] = upd.Value
-			case "1/6/0": // OnOff
-				ds.State["on"] = upd.Value
-			default:
+			// Map Matter attribute path to human-readable key via attrMap
+			if key, mapped := attrMap[upd.Path]; mapped {
+				ds.State[key] = upd.Value
+			} else {
 				ds.State[upd.Path] = upd.Value
 			}
 		}
@@ -483,6 +505,28 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/chat", h.handleChat)
 	mux.HandleFunc("/api/home", h.handleHomeSurface)
 	mux.HandleFunc("/api/events", h.handleSSE)
+	mux.HandleFunc("/api/thread/status", h.handleThreadStatus)
+}
+
+func (h *Hub) handleThreadStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	status, err := h.otbr.GetStatus()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+			"hint":  "OTBR이 실행 중인지 확인하세요 (./run.sh android thread-start)",
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
 }
 
 func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {

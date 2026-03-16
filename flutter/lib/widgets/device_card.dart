@@ -56,7 +56,19 @@ class DeviceCard extends StatelessWidget {
                   device.state['temperature'] != null
                       ? '${device.state['temperature']}°'
                       : '--',
-                  style: TextStyle(
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.blue,
+                  ),
+                ),
+              ] else if (device.isHumiditySensor) ...[
+                const Spacer(),
+                Text(
+                  device.state['humidity'] != null
+                      ? '${device.state['humidity']}%'
+                      : '--',
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppTheme.blue,
@@ -99,8 +111,11 @@ class DeviceCard extends StatelessWidget {
         return Icons.sensor_door;
       case 'temperature_sensor':
         return Icons.thermostat;
+      case 'humidity_sensor':
+        return Icons.water_drop;
       case 'dimmable_light':
       case 'color_temp_light':
+      case 'extended_color_light':
         return Icons.lightbulb;
       case 'on_off_plug':
         return Icons.power;
@@ -114,7 +129,9 @@ class DeviceCard extends StatelessWidget {
     if (device.isContactSensor) {
       return device.contactOpen ? AppTheme.openColor : AppTheme.closedColor;
     }
-    if (device.isTemperatureSensor) return AppTheme.blue;
+    if (device.isTemperatureSensor || device.isHumiditySensor) {
+      return AppTheme.blue;
+    }
     return device.isOn ? AppTheme.onColor : AppTheme.offColor;
   }
 
@@ -127,6 +144,9 @@ class DeviceCard extends StatelessWidget {
       final temp = device.state['temperature'];
       final humidity = device.state['humidity'];
       if (temp != null) parts.add('${temp}°C');
+      if (humidity != null) parts.add('${humidity}%');
+    } else if (device.isHumiditySensor) {
+      final humidity = device.state['humidity'];
       if (humidity != null) parts.add('${humidity}%');
     } else {
       parts.add(device.isOn ? '켜짐' : '꺼짐');

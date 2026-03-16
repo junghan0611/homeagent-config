@@ -15,8 +15,25 @@ void main() {
   runApp(const HomeAgentApp());
 }
 
-class HomeAgentApp extends StatelessWidget {
+class HomeAgentApp extends StatefulWidget {
   const HomeAgentApp({super.key});
+
+  @override
+  State<HomeAgentApp> createState() => _HomeAgentAppState();
+
+  /// 하위 위젯에서 테마 변경용
+  static _HomeAgentAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_HomeAgentAppState>();
+}
+
+class _HomeAgentAppState extends State<HomeAgentApp> {
+  ThemeMode _themeMode = ThemeMode.light; // 기본: 라이트 (월패드 밝은 환경)
+
+  ThemeMode get themeMode => _themeMode;
+
+  void setThemeMode(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +41,7 @@ class HomeAgentApp extends StatelessWidget {
       title: 'IoT Hub',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.dark,
+      themeMode: _themeMode,
       home: const HomeAgentShell(),
     );
   }

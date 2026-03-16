@@ -42,9 +42,15 @@ class Device {
 
   bool get isContactSensor => type == 'contact_sensor';
   bool get isTemperatureSensor => type == 'temperature_sensor';
-  bool get isDimmable => type == 'dimmable_light' || type == 'color_temp_light';
-  bool get isColorTemp => type == 'color_temp_light';
-  bool get isSensor => isContactSensor || isTemperatureSensor;
+  bool get isHumiditySensor => type == 'humidity_sensor';
+  bool get isDimmable =>
+      type == 'dimmable_light' ||
+      type == 'color_temp_light' ||
+      type == 'extended_color_light';
+  bool get isColorTemp =>
+      type == 'color_temp_light' || type == 'extended_color_light';
+  bool get isSensor =>
+      isContactSensor || isTemperatureSensor || isHumiditySensor;
 }
 
 /// SSE 이벤트 — Go Event 구조체와 매핑

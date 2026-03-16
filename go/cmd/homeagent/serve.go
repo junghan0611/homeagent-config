@@ -93,6 +93,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 		mux.HandleFunc("/wallpad", func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFile(w, r, filepath.Join(uiDir, "wallpad.html"))
 		})
+		// /docs → Swagger UI, /openapi.json → OpenAPI 스펙
+		mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, filepath.Join(uiDir, "docs.html"))
+		})
+		mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			http.ServeFile(w, r, filepath.Join(uiDir, "openapi.json"))
+		})
 		mux.Handle("/", fs)
 	}
 

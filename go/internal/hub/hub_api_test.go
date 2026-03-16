@@ -1003,3 +1003,227 @@ func TestAttrMap_SSEMapping(t *testing.T) {
 		t.Errorf("attrMap has %d entries, want %d", len(attrMap), len(expected))
 	}
 }
+
+// --- Edge case tests ---
+
+func TestAddNode_Temperature_Negative(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 20, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0":   []interface{}{map[string]interface{}{"0": float64(770)}},
+			"1/1026/0": float64(-1000), // -10.00°C
+		},
+	})
+	if ds.State["temperature"] != float64(-1000) {
+		t.Errorf("negative temperature: expected -1000, got %v", ds.State["temperature"])
+	}
+}
+
+func TestAddNode_Temperature_Zero(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 21, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0":   []interface{}{map[string]interface{}{"0": float64(770)}},
+			"1/1026/0": float64(0), // 0.00°C
+		},
+	})
+	if ds.State["temperature"] != float64(0) {
+		t.Errorf("zero temperature: expected 0, got %v", ds.State["temperature"])
+	}
+}
+
+func TestAddNode_Humidity_Full(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 22, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0":   []interface{}{map[string]interface{}{"0": float64(775)}},
+			"1/1029/0": float64(10000), // 100.00%
+		},
+	})
+	if ds.State["humidity"] != float64(10000) {
+		t.Errorf("100%% humidity: expected 10000, got %v", ds.State["humidity"])
+	}
+}
+
+func TestAddNode_Humidity_Zero(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 23, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0":   []interface{}{map[string]interface{}{"0": float64(775)}},
+			"1/1029/0": float64(0),
+		},
+	})
+	if ds.State["humidity"] != float64(0) {
+		t.Errorf("0%% humidity: expected 0, got %v", ds.State["humidity"])
+	}
+}
+
+func TestAddNode_Level_Boundaries(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	// level=0 (minimum)
+	ds := h.addNode(matter.Node{
+		NodeID: 30, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(257)}},
+			"1/6/0": false, "1/8/0": float64(0),
+		},
+	})
+	if ds.State["level"] != float64(0) {
+		t.Errorf("level min: expected 0, got %v", ds.State["level"])
+	}
+	// level=254 (maximum)
+	h2 := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds2 := h2.addNode(matter.Node{
+		NodeID: 31, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(257)}},
+			"1/6/0": true, "1/8/0": float64(254),
+		},
+	})
+	if ds2.State["level"] != float64(254) {
+		t.Errorf("level max: expected 254, got %v", ds2.State["level"])
+	}
+}
+
+func TestAttrMap_UnknownPath_Ignored(t *testing.T) {
+	h := &Hub{cfg: &config.Config{}, devices: make(map[int]*DeviceState), aliases: make(map[int]DeviceAlias)}
+	ds := h.addNode(matter.Node{
+		NodeID: 40, Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0":   []interface{}{map[string]interface{}{"0": float64(256)}},
+			"1/6/0":    true,
+			"1/999/0":  "unknown_value", // unknown attribute — NOT in attrMap
+		},
+	})
+	// "on" should be parsed via attrMap
+	if ds.State["on"] != true {
+		t.Errorf("expected on=true, got %v", ds.State["on"])
+	}
+	// unknown path should NOT appear in state (attrMap doesn't have it)
+	if _, exists := ds.State["1/999/0"]; exists {
+		t.Errorf("unknown attribute path should not be in initial state via attrMap")
+	}
+}
+
+// --- SSE regression: attrMap handles on/off and contact correctly ---
+
+func TestHandleMatterEvent_OnOff_Regression(t *testing.T) {
+	h := testHub(t)
+	// Seed a device
+	h.mu.Lock()
+	h.devices[8] = &DeviceState{NodeID: 8, Type: "on_off_plug", State: map[string]interface{}{"on": false}}
+	h.mu.Unlock()
+
+	// Simulate attribute update for on/off
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{8, "1/6/0", true}),
+	}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[8]
+	h.mu.RUnlock()
+
+	if ds.State["on"] != true {
+		t.Errorf("SSE regression: on/off should be true after attribute update, got %v", ds.State["on"])
+	}
+}
+
+func TestHandleMatterEvent_Contact_Regression(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[1] = &DeviceState{NodeID: 1, Type: "contact_sensor", State: map[string]interface{}{"contact": false}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{1, "1/69/0", true}),
+	}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[1]
+	h.mu.RUnlock()
+
+	if ds.State["contact"] != true {
+		t.Errorf("SSE regression: contact should be true after attribute update, got %v", ds.State["contact"])
+	}
+}
+
+func TestHandleMatterEvent_Level_Update(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[5] = &DeviceState{NodeID: 5, Type: "dimmable_light", State: map[string]interface{}{"on": true, "level": float64(100)}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{5, "1/8/0", float64(200)}),
+	}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[5]
+	h.mu.RUnlock()
+
+	if ds.State["level"] != float64(200) {
+		t.Errorf("level should be 200 after update, got %v", ds.State["level"])
+	}
+}
+
+func TestHandleMatterEvent_Temperature_Update(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[10] = &DeviceState{NodeID: 10, Type: "temperature_sensor", State: map[string]interface{}{"temperature": float64(2000)}}
+	h.mu.Unlock()
+
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{10, "1/1026/0", float64(2500)}),
+	}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[10]
+	h.mu.RUnlock()
+
+	if ds.State["temperature"] != float64(2500) {
+		t.Errorf("temperature should be 2500 after update, got %v", ds.State["temperature"])
+	}
+}
+
+func TestHandleMatterEvent_UnknownPath_Stored_Raw(t *testing.T) {
+	h := testHub(t)
+	h.mu.Lock()
+	h.devices[40] = &DeviceState{NodeID: 40, Type: "on_off_light", State: map[string]interface{}{}}
+	h.mu.Unlock()
+
+	// Unknown path should be stored by raw path (not in attrMap)
+	evt := matter.Event{
+		Type: matter.EventAttributeUpdated,
+		Data: mustMarshal(t, []interface{}{40, "1/999/0", "raw_value"}),
+	}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[40]
+	h.mu.RUnlock()
+
+	if ds.State["1/999/0"] != "raw_value" {
+		t.Errorf("unknown path should be stored raw, got %v", ds.State["1/999/0"])
+	}
+}
+
+func mustMarshal(t *testing.T, v interface{}) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}

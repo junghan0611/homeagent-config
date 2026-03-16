@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func mockOTBR(t *testing.T) *httptest.Server {
@@ -114,5 +115,61 @@ func TestGetState_HTTPError(t *testing.T) {
 	_, err := c.GetState()
 	if err == nil {
 		t.Fatal("expected error for HTTP 500")
+	}
+}
+
+func TestGetStatus_PartialFailure(t *testing.T) {
+	// Server only responds to /node/state, others 404
+	mux := http.NewServeMux()
+	mux.HandleFunc("/node/state", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("router\n"))
+	})
+	// /node/dataset/active → 404
+	// /node/ext-address → 404
+	// /node/rloc16 → 404
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	status, err := c.GetStatus()
+	if err != nil {
+		t.Fatalf("GetStatus should not fail if state succeeds: %v", err)
+	}
+	if status.State != "router" {
+		t.Errorf("expected state 'router', got %q", status.State)
+	}
+	// dataset/rloc/ext should be empty but not cause error
+	if status.Dataset != nil {
+		t.Logf("dataset unexpectedly present: %v (this is OK if 404 returns valid JSON)", status.Dataset)
+	}
+}
+
+func TestGetDataset_InvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	_, err := c.GetDataset()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestClient_Timeout(t *testing.T) {
+	// Server that delays longer than client timeout
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.Write([]byte("too late"))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	c.httpClient.Timeout = 100 * time.Millisecond // very short timeout for test
+
+	_, err := c.GetState()
+	if err == nil {
+		t.Fatal("expected timeout error")
 	}
 }

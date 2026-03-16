@@ -115,7 +115,15 @@ lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
     > $REMOTE/matterjs.log 2>&1 &
 sleep 4
 
+# DNS + TLS 인증서 (Android에 /etc/resolv.conf 없음)
+mkdir -p $REMOTE/etc_overlay
+cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null
+echo "nameserver 192.168.0.1
+nameserver 8.8.8.8" > $REMOTE/etc_overlay/resolv.conf
+mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null
+
 # Go homeagent
+SSL_CERT_DIR=/etc/security/cacerts \\
 HOMEAGENT_HTTP_ADDR=:8080 \\
 HOMEAGENT_MATTER_WS=ws://localhost:5580 \\
 HOMEAGENT_UI_DIR=$REMOTE/ui/dist \\

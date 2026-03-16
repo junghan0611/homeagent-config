@@ -4,8 +4,12 @@ import 'package:flutter/material.dart';
 
 import 'backend_process.dart';
 import 'shell_webview.dart';
-import 'shell_native.dart';
+import 'widgets/nav_shell.dart';
 import 'ble_commissioning.dart';
+import 'theme.dart';
+
+/// --dart-define=NATIVE_UI=true → Android에서도 네이티브 UI 사용
+const _forceNative = bool.fromEnvironment('NATIVE_UI', defaultValue: false);
 
 void main() {
   runApp(const HomeAgentApp());
@@ -17,14 +21,10 @@ class HomeAgentApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'HomeAgent',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blueGrey,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      title: 'IoT Hub',
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.dark,
       home: const HomeAgentShell(),
     );
   }
@@ -58,8 +58,9 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
   }
 
   /// Linux desktop → Flutter 네이티브 UI
-  /// Android/Yocto → WebView Shell
-  bool get _useWebView => Platform.isAndroid;
+  /// Android 기본 → WebView Shell
+  /// Android --dart-define=NATIVE_UI=true → 네이티브 UI
+  bool get _useWebView => Platform.isAndroid && !_forceNative;
 
   @override
   void initState() {
@@ -206,7 +207,7 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
           ],
         );
       } else {
-        return ShellNative(serverUrl: _serverUrl);
+        return NavShell(serverUrl: _serverUrl);
       }
     }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show visibleForTesting;
 import 'package:genui/genui.dart';
 
 import 'api_client.dart';
@@ -45,6 +46,11 @@ class HomeAgentA2uiAdapter {
       debugPrint('[A2uiAdapter] surface_update error: $e');
     }
   }
+
+  /// 테스트용 — Go JSON → A2UI v0.9 변환 결과 확인
+  @visibleForTesting
+  Map<String, dynamic> convertToA2uiForTest(Map<String, dynamic> goSurface) =>
+      _convertToA2ui(goSurface);
 
   /// Go surface.go JSON → A2UI v0.9 createSurface 메시지
   Map<String, dynamic> _convertToA2ui(Map<String, dynamic> goSurface) {

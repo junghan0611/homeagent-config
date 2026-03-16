@@ -26,13 +26,19 @@ class HomeAgentA2uiAdapter {
   Future<void> fetchAndRender() async {
     try {
       final homeData = await api.getHome();
-      if (homeData == null) return;
+      if (homeData == null) {
+        debugPrint('[A2uiAdapter] /api/home returned null');
+        return;
+      }
 
       final a2uiJson = _convertToA2ui(homeData);
+      debugPrint('[A2uiAdapter] A2UI JSON: ${a2uiJson['createSurface']?['components']?.length ?? 0} components');
       final message = A2uiMessage.fromJson(a2uiJson);
       _processor.handleMessage(message);
-    } catch (e) {
+      debugPrint('[A2uiAdapter] Surface message handled OK');
+    } catch (e, stack) {
       debugPrint('[A2uiAdapter] fetchAndRender error: $e');
+      debugPrint('[A2uiAdapter] stack: $stack');
     }
   }
 
@@ -70,9 +76,9 @@ class HomeAgentA2uiAdapter {
     };
   }
 
-  /// Go comp → A2UI component (type 소문자 변환)
+  /// Go comp → A2UI component (type 그대로 유지 — genui는 PascalCase)
   Map<String, dynamic> _convertComponent(Map<String, dynamic> comp) {
-    final type = (comp['type'] as String? ?? '').toLowerCase();
+    final type = comp['type'] as String? ?? '';
     final props = Map<String, dynamic>.from(comp['props'] ?? {});
     final children = (comp['children'] as List?)
         ?.map((c) => _convertComponent(Map<String, dynamic>.from(c)))

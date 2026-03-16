@@ -203,7 +203,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: GenUiSurface(
                   host: _a2ui.host,
                   surfaceId: 'home',
-                  defaultBuilder: (_) => const SizedBox.shrink(),
+                  defaultBuilder: (_) {
+                    debugPrint('[Dashboard] GenUiSurface defaultBuilder — surface not ready yet');
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.schedule, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Surface 로딩 중...',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

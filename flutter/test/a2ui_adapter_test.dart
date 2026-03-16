@@ -39,7 +39,7 @@ void main() {
 
       final components = a2ui['createSurface']['components'] as List;
       expect(components.length, 1);
-      expect(components[0]['type'], 'card'); // 소문자 변환
+      expect(components[0]['type'], 'Card'); // PascalCase 유지 (genui 카탈로그)
       expect(components[0]['props']['variant'], 'elevated');
     });
 
@@ -58,11 +58,11 @@ void main() {
       final a2ui = adapter.convertToA2uiForTest(goSurface);
       final comps = a2ui['createSurface']['components'] as List;
 
-      expect(comps[0]['type'], 'text');
-      expect(comps[1]['type'], 'icon');
-      expect(comps[2]['type'], 'row');
-      expect(comps[3]['type'], 'column');
-      expect(comps[4]['type'], 'divider');
+      expect(comps[0]['type'], 'Text');
+      expect(comps[1]['type'], 'Icon');
+      expect(comps[2]['type'], 'Row');
+      expect(comps[3]['type'], 'Column');
+      expect(comps[4]['type'], 'Divider');
     });
 
     test('중첩 children 재귀 변환', () {
@@ -92,8 +92,8 @@ void main() {
       final children = row['children'] as List;
 
       expect(children.length, 2);
-      expect(children[0]['type'], 'icon');
-      expect(children[1]['type'], 'text');
+      expect(children[0]['type'], 'Icon');
+      expect(children[1]['type'], 'Text');
       expect(children[1]['props']['text'], '거실');
     });
 
@@ -122,7 +122,7 @@ void main() {
 
       final a2ui = adapter.convertToA2uiForTest(goSurface);
       final comp = (a2ui['createSurface']['components'] as List)[0];
-      expect(comp['type'], 'divider');
+      expect(comp['type'], 'Divider');
       expect(comp['props'], isA<Map>());
     });
   });

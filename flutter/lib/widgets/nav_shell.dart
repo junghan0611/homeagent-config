@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../screens/dashboard_screen.dart';
+import '../screens/commission_screen.dart';
 import '../screens/settings_screen.dart';
 
-/// 하단 네비게이션 셸 — 대시보드 / 설정
+/// 하단 네비게이션 셸 — 대시보드 / 디바이스 추가 / 설정
 class NavShell extends StatefulWidget {
   final String serverUrl;
   const NavShell({super.key, required this.serverUrl});
@@ -22,6 +23,7 @@ class _NavShellState extends State<NavShell> {
         index: _currentIndex,
         children: [
           DashboardScreen(serverUrl: widget.serverUrl),
+          CommissionScreen(serverUrl: widget.serverUrl),
           SettingsScreen(serverUrl: widget.serverUrl),
         ],
       ),
@@ -34,6 +36,11 @@ class _NavShellState extends State<NavShell> {
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
             label: '대시보드',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.add_circle_outline),
+            selectedIcon: Icon(Icons.add_circle),
+            label: '추가',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

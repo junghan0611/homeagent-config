@@ -37,6 +37,8 @@ class Device {
   bool get contactOpen => state['contact'] == true;
   int get level => (state['level'] as num?)?.toInt() ?? 0;
   int get colorTemp => (state['color_temp'] as num?)?.toInt() ?? 0;
+  num? get temperature => state['temperature'] as num?;
+  num? get humidity => state['humidity'] as num?;
 
   bool get isContactSensor => type == 'contact_sensor';
   bool get isTemperatureSensor => type == 'temperature_sensor';
@@ -120,6 +122,31 @@ class ApiClient {
 
   Future<void> deleteDevice(int nodeId) async {
     await _delete('/api/devices/$nodeId');
+  }
+
+  // ─── 커미셔닝 ───
+
+  /// WiFi credentials 설정 → POST /api/wifi-credentials
+  Future<void> setWifiCredentials(String ssid, String password) async {
+    await _post('/api/wifi-credentials', {
+      'ssid': ssid,
+      'password': password,
+    });
+  }
+
+  /// BLE 커미셔닝 → POST /api/commission
+  Future<void> commission(String code, {bool networkOnly = false}) async {
+    await _post('/api/commission', {
+      'code': code,
+      'network_only': networkOnly,
+    });
+  }
+
+  /// On-network 커미셔닝 (BLE 우회) → POST /api/commission-on-network
+  Future<void> commissionOnNetwork(int pinCode, {String? ipAddr}) async {
+    final body = <String, dynamic>{'pin_code': pinCode};
+    if (ipAddr != null) body['ip_addr'] = ipAddr;
+    await _post('/api/commission-on-network', body);
   }
 
   // ─── SSE ───

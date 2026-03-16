@@ -42,7 +42,29 @@ class DeviceCard extends StatelessWidget {
                     const Icon(Icons.cloud_off, size: 16, color: AppTheme.errorColor),
                 ],
               ),
-              const Spacer(),
+              // 센서 큰 값 표시
+              if (device.isContactSensor) ...[
+                const Spacer(),
+                Icon(
+                  device.contactOpen ? Icons.door_front_door : Icons.door_front_door_outlined,
+                  size: 28,
+                  color: device.contactOpen ? AppTheme.openColor : AppTheme.closedColor,
+                ),
+              ] else if (device.isTemperatureSensor) ...[
+                const Spacer(),
+                Text(
+                  device.state['temperature'] != null
+                      ? '${device.state['temperature']}°'
+                      : '--',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.blue,
+                  ),
+                ),
+              ] else ...[
+                const Spacer(),
+              ],
               // 이름
               Text(
                 device.name,
@@ -100,10 +122,12 @@ class DeviceCard extends StatelessWidget {
     final parts = <String>[];
     if (device.room.isNotEmpty) parts.add(device.room);
     if (device.isContactSensor) {
-      parts.add(device.contactOpen ? '열림' : '닫힘');
+      parts.add(device.contactOpen ? '🔓 열림' : '🔒 닫힘');
     } else if (device.isTemperatureSensor) {
       final temp = device.state['temperature'];
+      final humidity = device.state['humidity'];
       if (temp != null) parts.add('${temp}°C');
+      if (humidity != null) parts.add('${humidity}%');
     } else {
       parts.add(device.isOn ? '켜짐' : '꺼짐');
       if (device.isDimmable && device.isOn) {

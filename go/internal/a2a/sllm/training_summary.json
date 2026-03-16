@@ -1,0 +1,14 @@
+{
+  "model": "Qwen3-0.6B + LoRA",
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "trainable_params": 10092544,
+  "total_params": 606142464,
+  "dataset_size": 52,
+  "epochs": 20,
+  "batch_size": 4,
+  "train_time_s": 43.3,
+  "final_loss": 0.317,
+  "vram_mb": 2742,
+  "output_dir": "/tmp/sllm-bench/homeagent-intent-lora"
+}

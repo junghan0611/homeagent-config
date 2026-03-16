@@ -1,0 +1,52 @@
+{"input": "거실 불 켜줘", "output": {"action": "on", "target": "거실", "device_type": "light"}}
+{"input": "거실 조명 꺼", "output": {"action": "off", "target": "거실", "device_type": "light"}}
+{"input": "침실 불 켜줘", "output": {"action": "on", "target": "침실", "device_type": "light"}}
+{"input": "화장실 불 좀 꺼줄래?", "output": {"action": "off", "target": "화장실", "device_type": "light"}}
+{"input": "안방 조명 켜줄래", "output": {"action": "on", "target": "안방", "device_type": "light"}}
+{"input": "거실 불 밝기 50으로", "output": {"action": "set_level", "target": "거실", "device_type": "light", "params": {"level": 50}}}
+{"input": "침실 조명 30퍼센트로 낮춰", "output": {"action": "set_level", "target": "침실", "device_type": "light", "params": {"level": 30}}}
+{"input": "거실 밝기 최대로", "output": {"action": "set_level", "target": "거실", "device_type": "light", "params": {"level": 100}}}
+{"input": "안방 불 어둡게 해줘", "output": {"action": "set_level", "target": "안방", "device_type": "light", "params": {"level": 20}}}
+{"input": "거실 조명 색온도 따뜻하게", "output": {"action": "set_color_temp", "target": "거실", "device_type": "light", "params": {"color_temp": "warm"}}}
+{"input": "침실 불 차갑게", "output": {"action": "set_color_temp", "target": "침실", "device_type": "light", "params": {"color_temp": "cool"}}}
+{"input": "거실 불 빨간색으로", "output": {"action": "set_color", "target": "거실", "device_type": "light", "params": {"color": "red"}}}
+{"input": "침실 조명 파란색", "output": {"action": "set_color", "target": "침실", "device_type": "light", "params": {"color": "blue"}}}
+{"input": "플러그 켜줘", "output": {"action": "on", "target": "default", "device_type": "plug"}}
+{"input": "거실 플러그 꺼", "output": {"action": "off", "target": "거실", "device_type": "plug"}}
+{"input": "스마트 플러그 켜", "output": {"action": "on", "target": "default", "device_type": "plug"}}
+{"input": "콘센트 꺼줘", "output": {"action": "off", "target": "default", "device_type": "plug"}}
+{"input": "에어컨 플러그 켜줘", "output": {"action": "on", "target": "에어컨", "device_type": "plug"}}
+{"input": "온도 몇 도야?", "output": {"action": "query", "target": "default", "device_type": "sensor", "params": {"attribute": "temperature"}}}
+{"input": "거실 온도 알려줘", "output": {"action": "query", "target": "거실", "device_type": "sensor", "params": {"attribute": "temperature"}}}
+{"input": "습도 얼마야?", "output": {"action": "query", "target": "default", "device_type": "sensor", "params": {"attribute": "humidity"}}}
+{"input": "안방 습도 확인해줘", "output": {"action": "query", "target": "안방", "device_type": "sensor", "params": {"attribute": "humidity"}}}
+{"input": "현관문 열려있어?", "output": {"action": "query", "target": "현관", "device_type": "contact_sensor", "params": {"attribute": "contact"}}}
+{"input": "화장실 문 상태", "output": {"action": "query", "target": "화장실", "device_type": "contact_sensor", "params": {"attribute": "contact"}}}
+{"input": "현관 잠겨있어?", "output": {"action": "query", "target": "현관", "device_type": "lock", "params": {"attribute": "locked"}}}
+{"input": "문 잠가줘", "output": {"action": "lock", "target": "현관", "device_type": "lock"}}
+{"input": "현관문 열어", "output": {"action": "unlock", "target": "현관", "device_type": "lock"}}
+{"input": "보일러 온도 22도로 설정해", "output": {"action": "set_thermostat", "target": "default", "device_type": "thermostat", "params": {"temperature": 22}}}
+{"input": "난방 24도", "output": {"action": "set_thermostat", "target": "default", "device_type": "thermostat", "params": {"temperature": 24}}}
+{"input": "히터 꺼줘", "output": {"action": "off", "target": "default", "device_type": "thermostat"}}
+{"input": "집 전체 불 꺼", "output": {"action": "off", "target": "all", "device_type": "light"}}
+{"input": "모든 조명 꺼줘", "output": {"action": "off", "target": "all", "device_type": "light"}}
+{"input": "전등 다 켜", "output": {"action": "on", "target": "all", "device_type": "light"}}
+{"input": "디바이스 목록 보여줘", "output": {"action": "list", "target": "all", "device_type": "all"}}
+{"input": "연결된 장치 뭐가 있어?", "output": {"action": "list", "target": "all", "device_type": "all"}}
+{"input": "집 상태 요약해줘", "output": {"action": "summary", "target": "all", "device_type": "all"}}
+{"input": "거실 상태 알려줘", "output": {"action": "summary", "target": "거실", "device_type": "all"}}
+{"input": "불 켜", "output": {"action": "on", "target": "default", "device_type": "light"}}
+{"input": "꺼", "output": {"action": "off", "target": "default", "device_type": "light"}}
+{"input": "켜줘", "output": {"action": "on", "target": "default", "device_type": "light"}}
+{"input": "조명 좀 밝게", "output": {"action": "set_level", "target": "default", "device_type": "light", "params": {"level": 80}}}
+{"input": "불 좀 어둡게 해", "output": {"action": "set_level", "target": "default", "device_type": "light", "params": {"level": 30}}}
+{"input": "화장실 불 켜줘 그리고 거실은 꺼", "output": {"action": "multi", "commands": [{"action": "on", "target": "화장실", "device_type": "light"}, {"action": "off", "target": "거실", "device_type": "light"}]}}
+{"input": "외출 모드", "output": {"action": "scene", "scene": "away"}}
+{"input": "취침 모드 해줘", "output": {"action": "scene", "scene": "sleep"}}
+{"input": "집에 왔어", "output": {"action": "scene", "scene": "home"}}
+{"input": "영화 모드", "output": {"action": "scene", "scene": "movie"}}
+{"input": "오늘 집에 누가 왔었어?", "output": {"action": "query_history", "target": "현관", "device_type": "contact_sensor"}}
+{"input": "거실 플러그 언제 켜졌어?", "output": {"action": "query_history", "target": "거실", "device_type": "plug"}}
+{"input": "turn on the light", "output": {"action": "on", "target": "default", "device_type": "light"}}
+{"input": "turn off living room", "output": {"action": "off", "target": "거실", "device_type": "light"}}
+{"input": "set brightness to 70", "output": {"action": "set_level", "target": "default", "device_type": "light", "params": {"level": 70}}}

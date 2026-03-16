@@ -1,0 +1,1290 @@
+{
+  "summary": {
+    "model": "Qwen3-0.6B",
+    "model_path": "/storage/models/huggingface/Qwen3-0.6B",
+    "dataset_size": 52,
+    "load_time_s": 6.6,
+    "vram_mb": 1434,
+    "accuracy": {
+      "json_parseable": "52/52 (100.0%)",
+      "action_match": "31/52 (59.6%)",
+      "target_match": "36/52 (69.2%)",
+      "device_type_match": "40/52 (76.9%)",
+      "full_match": "22/52 (42.3%)"
+    },
+    "performance": {
+      "total_time_s": 17.9,
+      "avg_time_per_sample_s": 0.344,
+      "avg_tokens_per_sample": 24.6,
+      "tokens_per_second": 71.6
+    }
+  },
+  "details": [
+    {
+      "idx": 0,
+      "input": "거실 불 켜줘",
+      "expected": {
+        "action": "on",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"거실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 21,
+      "time_s": 0.684
+    },
+    {
+      "idx": 1,
+      "input": "거실 조명 꺼",
+      "expected": {
+        "action": "off",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"거실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 2,
+      "input": "침실 불 켜줘",
+      "expected": {
+        "action": "on",
+        "target": "침실",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "침실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"침실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 21,
+      "time_s": 0.288
+    },
+    {
+      "idx": 3,
+      "input": "화장실 불 좀 꺼줄래?",
+      "expected": {
+        "action": "off",
+        "target": "화장실",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "화장실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"화장실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 22,
+      "time_s": 0.304
+    },
+    {
+      "idx": 4,
+      "input": "안방 조명 켜줄래",
+      "expected": {
+        "action": "on",
+        "target": "안방",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "안방",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"안방\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 5,
+      "input": "거실 불 밝기 50으로",
+      "expected": {
+        "action": "set_level",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "level": 50
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "brightness": 50
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"거실\", \"device_type\": \"light\", \"params\": {\"brightness\": 50}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 32,
+      "time_s": 0.437
+    },
+    {
+      "idx": 6,
+      "input": "침실 조명 30퍼센트로 낮춰",
+      "expected": {
+        "action": "set_level",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "level": 30
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "level": 30
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"침실\", \"device_type\": \"light\", \"params\": {\"level\": 30}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 32,
+      "time_s": 0.437
+    },
+    {
+      "idx": 7,
+      "input": "거실 밝기 최대로",
+      "expected": {
+        "action": "set_level",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "level": 100
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"거실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 22,
+      "time_s": 0.301
+    },
+    {
+      "idx": 8,
+      "input": "안방 불 어둡게 해줘",
+      "expected": {
+        "action": "set_level",
+        "target": "안방",
+        "device_type": "light",
+        "params": {
+          "level": 20
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "안방",
+        "device_type": "light",
+        "params": {
+          "color": "dark"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"안방\", \"device_type\": \"light\", \"params\": {\"color\": \"dark\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 31,
+      "time_s": 0.423
+    },
+    {
+      "idx": 9,
+      "input": "거실 조명 색온도 따뜻하게",
+      "expected": {
+        "action": "set_color_temp",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "color_temp": "warm"
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "color": "warm"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"거실\", \"device_type\": \"light\", \"params\": {\"color\": \"warm\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 31,
+      "time_s": 0.425
+    },
+    {
+      "idx": 10,
+      "input": "침실 불 차갑게",
+      "expected": {
+        "action": "set_color_temp",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "color_temp": "cool"
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "color": "black"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"침실\", \"device_type\": \"light\", \"params\": {\"color\": \"black\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 31,
+      "time_s": 0.424
+    },
+    {
+      "idx": 11,
+      "input": "거실 불 빨간색으로",
+      "expected": {
+        "action": "set_color",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "color": "red"
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "거실",
+        "device_type": "light",
+        "params": {
+          "color": "red"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"거실\", \"device_type\": \"light\", \"params\": {\"color\": \"red\"}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 31,
+      "time_s": 0.423
+    },
+    {
+      "idx": 12,
+      "input": "침실 조명 파란색",
+      "expected": {
+        "action": "set_color",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "color": "blue"
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "침실",
+        "device_type": "light",
+        "params": {
+          "color": "blue"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"침실\", \"device_type\": \"light\", \"params\": {\"color\": \"blue\"}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 31,
+      "time_s": 0.422
+    },
+    {
+      "idx": 13,
+      "input": "플러그 켜줘",
+      "expected": {
+        "action": "on",
+        "target": "default",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "plug",
+        "device_type": "plug"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"plug\", \"device_type\": \"plug\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.274
+    },
+    {
+      "idx": 14,
+      "input": "거실 플러그 꺼",
+      "expected": {
+        "action": "off",
+        "target": "거실",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "거실",
+        "device_type": "plug"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"거실\", \"device_type\": \"plug\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 15,
+      "input": "스마트 플러그 켜",
+      "expected": {
+        "action": "on",
+        "target": "default",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "plug",
+        "device_type": "plug"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"plug\", \"device_type\": \"plug\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.274
+    },
+    {
+      "idx": 16,
+      "input": "콘센트 꺼줘",
+      "expected": {
+        "action": "off",
+        "target": "default",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "default",
+        "device_type": "plug"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"default\", \"device_type\": \"plug\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 17,
+      "input": "에어컨 플러그 켜줘",
+      "expected": {
+        "action": "on",
+        "target": "에어컨",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "plug",
+        "device_type": "plug"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"plug\", \"device_type\": \"plug\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.274
+    },
+    {
+      "idx": 18,
+      "input": "온도 몇 도야?",
+      "expected": {
+        "action": "query",
+        "target": "default",
+        "device_type": "sensor",
+        "params": {
+          "attribute": "temperature"
+        }
+      },
+      "predicted": {
+        "action": "query",
+        "target": "default",
+        "device_type": "thermostat"
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"default\", \"device_type\": \"thermostat\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.288
+    },
+    {
+      "idx": 19,
+      "input": "거실 온도 알려줘",
+      "expected": {
+        "action": "query",
+        "target": "거실",
+        "device_type": "sensor",
+        "params": {
+          "attribute": "temperature"
+        }
+      },
+      "predicted": {
+        "action": "query",
+        "target": "거실",
+        "device_type": "thermostat",
+        "params": {
+          "temperature": "unknown"
+        }
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"거실\", \"device_type\": \"thermostat\", \"params\": {\"temperature\": \"unknown\"}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 31,
+      "time_s": 0.423
+    },
+    {
+      "idx": 20,
+      "input": "습도 얼마야?",
+      "expected": {
+        "action": "query",
+        "target": "default",
+        "device_type": "sensor",
+        "params": {
+          "attribute": "humidity"
+        }
+      },
+      "predicted": {
+        "action": "query",
+        "target": "default",
+        "device_type": "sensor",
+        "params": {
+          "humidity": "value"
+        }
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"default\", \"device_type\": \"sensor\", \"params\": {\"humidity\": \"value\"}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 29,
+      "time_s": 0.395
+    },
+    {
+      "idx": 21,
+      "input": "안방 습도 확인해줘",
+      "expected": {
+        "action": "query",
+        "target": "안방",
+        "device_type": "sensor",
+        "params": {
+          "attribute": "humidity"
+        }
+      },
+      "predicted": {
+        "action": "query",
+        "target": "안방",
+        "device_type": "sensor",
+        "params": {
+          "temperature": "humidity"
+        }
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"안방\", \"device_type\": \"sensor\", \"params\": {\"temperature\": \"humidity\"}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 30,
+      "time_s": 0.409
+    },
+    {
+      "idx": 22,
+      "input": "현관문 열려있어?",
+      "expected": {
+        "action": "query",
+        "target": "현관",
+        "device_type": "contact_sensor",
+        "params": {
+          "attribute": "contact"
+        }
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "현관문",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"현관문\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 22,
+      "time_s": 0.3
+    },
+    {
+      "idx": 23,
+      "input": "화장실 문 상태",
+      "expected": {
+        "action": "query",
+        "target": "화장실",
+        "device_type": "contact_sensor",
+        "params": {
+          "attribute": "contact"
+        }
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "화장실",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"화장실\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 22,
+      "time_s": 0.3
+    },
+    {
+      "idx": 24,
+      "input": "현관 잠겨있어?",
+      "expected": {
+        "action": "query",
+        "target": "현관",
+        "device_type": "lock",
+        "params": {
+          "attribute": "locked"
+        }
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "현관",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"현관\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.286
+    },
+    {
+      "idx": 25,
+      "input": "문 잠가줘",
+      "expected": {
+        "action": "lock",
+        "target": "현관",
+        "device_type": "lock"
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "default",
+        "device_type": "lock",
+        "params": {}
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"default\", \"device_type\": \"lock\", \"params\": {}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 25,
+      "time_s": 0.341
+    },
+    {
+      "idx": 26,
+      "input": "현관문 열어",
+      "expected": {
+        "action": "unlock",
+        "target": "현관",
+        "device_type": "lock"
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "현관문",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"현관문\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 22,
+      "time_s": 0.301
+    },
+    {
+      "idx": 27,
+      "input": "보일러 온도 22도로 설정해",
+      "expected": {
+        "action": "set_thermostat",
+        "target": "default",
+        "device_type": "thermostat",
+        "params": {
+          "temperature": 22
+        }
+      },
+      "predicted": {
+        "action": "set_thermostat",
+        "target": "default",
+        "device_type": "thermostat",
+        "params": {
+          "temperature": 22
+        }
+      },
+      "raw_output": "{\"action\": \"set_thermostat\", \"target\": \"default\", \"device_type\": \"thermostat\", \"params\": {\"temperature\": 22}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 34,
+      "time_s": 0.464
+    },
+    {
+      "idx": 28,
+      "input": "난방 24도",
+      "expected": {
+        "action": "set_thermostat",
+        "target": "default",
+        "device_type": "thermostat",
+        "params": {
+          "temperature": 24
+        }
+      },
+      "predicted": {
+        "action": "set_thermostat",
+        "target": "default",
+        "device_type": "thermostat",
+        "params": {
+          "temperature": 24
+        }
+      },
+      "raw_output": "{\"action\": \"set_thermostat\", \"target\": \"default\", \"device_type\": \"thermostat\", \"params\": {\"temperature\": 24}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 34,
+      "time_s": 0.464
+    },
+    {
+      "idx": 29,
+      "input": "히터 꺼줘",
+      "expected": {
+        "action": "off",
+        "target": "default",
+        "device_type": "thermostat"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "히터",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"히터\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 30,
+      "input": "집 전체 불 꺼",
+      "expected": {
+        "action": "off",
+        "target": "all",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "all",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"all\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 31,
+      "input": "모든 조명 꺼줘",
+      "expected": {
+        "action": "off",
+        "target": "all",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "all",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"all\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.272
+    },
+    {
+      "idx": 32,
+      "input": "전등 다 켜",
+      "expected": {
+        "action": "on",
+        "target": "all",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"default\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 33,
+      "input": "디바이스 목록 보여줘",
+      "expected": {
+        "action": "list",
+        "target": "all",
+        "device_type": "all"
+      },
+      "predicted": {
+        "action": "list",
+        "target": "all",
+        "device_type": "all"
+      },
+      "raw_output": "{\"action\": \"list\", \"target\": \"all\", \"device_type\": \"all\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 34,
+      "input": "연결된 장치 뭐가 있어?",
+      "expected": {
+        "action": "list",
+        "target": "all",
+        "device_type": "all"
+      },
+      "predicted": {
+        "action": "list",
+        "target": "all",
+        "device_type": "all"
+      },
+      "raw_output": "{\"action\": \"list\", \"target\": \"all\", \"device_type\": \"all\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 35,
+      "input": "집 상태 요약해줘",
+      "expected": {
+        "action": "summary",
+        "target": "all",
+        "device_type": "all"
+      },
+      "predicted": {
+        "action": "summary",
+        "target": "all",
+        "device_type": "all",
+        "params": {}
+      },
+      "raw_output": "{\"action\": \"summary\", \"target\": \"all\", \"device_type\": \"all\", \"params\": {}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 25,
+      "time_s": 0.342
+    },
+    {
+      "idx": 36,
+      "input": "거실 상태 알려줘",
+      "expected": {
+        "action": "summary",
+        "target": "거실",
+        "device_type": "all"
+      },
+      "predicted": {
+        "action": "query",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"거실\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.286
+    },
+    {
+      "idx": 37,
+      "input": "불 켜",
+      "expected": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"default\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 38,
+      "input": "꺼",
+      "expected": {
+        "action": "off",
+        "target": "default",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "unlock",
+        "target": "all",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"unlock\", \"target\": \"all\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.272
+    },
+    {
+      "idx": 39,
+      "input": "켜줘",
+      "expected": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"default\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.274
+    },
+    {
+      "idx": 40,
+      "input": "조명 좀 밝게",
+      "expected": {
+        "action": "set_level",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "level": 80
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "brightness": "high"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"default\", \"device_type\": \"light\", \"params\": {\"brightness\": \"high\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 30,
+      "time_s": 0.41
+    },
+    {
+      "idx": 41,
+      "input": "불 좀 어둡게 해",
+      "expected": {
+        "action": "set_level",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "level": 30
+        }
+      },
+      "predicted": {
+        "action": "set_color",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "color": "dark"
+        }
+      },
+      "raw_output": "{\"action\": \"set_color\", \"target\": \"default\", \"device_type\": \"light\", \"params\": {\"color\": \"dark\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 30,
+      "time_s": 0.41
+    },
+    {
+      "idx": 42,
+      "input": "화장실 불 켜줘 그리고 거실은 꺼",
+      "expected": {
+        "action": "multi",
+        "commands": [
+          {
+            "action": "on",
+            "target": "화장실",
+            "device_type": "light"
+          },
+          {
+            "action": "off",
+            "target": "거실",
+            "device_type": "light"
+          }
+        ]
+      },
+      "predicted": {
+        "action": "on",
+        "target": "화장실",
+        "device_type": "light",
+        "params": {}
+      },
+      "raw_output": "```json\n{\"action\": \"on\", \"target\": \"화장실\", \"device_type\": \"light\", \"params\": {}}\n```",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 31,
+      "time_s": 0.424
+    },
+    {
+      "idx": 43,
+      "input": "외출 모드",
+      "expected": {
+        "action": "scene",
+        "scene": "away"
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "all",
+        "device_type": "lock",
+        "params": {}
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"all\", \"device_type\": \"lock\", \"params\": {}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 25,
+      "time_s": 0.341
+    },
+    {
+      "idx": 44,
+      "input": "취침 모드 해줘",
+      "expected": {
+        "action": "scene",
+        "scene": "sleep"
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "default",
+        "device_type": "lock"
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"default\", \"device_type\": \"lock\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 45,
+      "input": "집에 왔어",
+      "expected": {
+        "action": "scene",
+        "scene": "home"
+      },
+      "predicted": {
+        "action": "lock",
+        "target": "all",
+        "device_type": "lock",
+        "params": {}
+      },
+      "raw_output": "{\"action\": \"lock\", \"target\": \"all\", \"device_type\": \"lock\", \"params\": {}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 25,
+      "time_s": 0.341
+    },
+    {
+      "idx": 46,
+      "input": "영화 모드",
+      "expected": {
+        "action": "scene",
+        "scene": "movie"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "default",
+        "device_type": "thermostat"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"default\", \"device_type\": \"thermostat\"}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": false,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 47,
+      "input": "오늘 집에 누가 왔었어?",
+      "expected": {
+        "action": "query_history",
+        "target": "현관",
+        "device_type": "contact_sensor"
+      },
+      "predicted": {
+        "action": "query",
+        "target": "default",
+        "device_type": "contact_sensor",
+        "params": {
+          "contact": "user"
+        }
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"default\", \"device_type\": \"contact_sensor\", \"params\": {\"contact\": \"user\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 30,
+      "time_s": 0.41
+    },
+    {
+      "idx": 48,
+      "input": "거실 플러그 언제 켜졌어?",
+      "expected": {
+        "action": "query_history",
+        "target": "거실",
+        "device_type": "plug"
+      },
+      "predicted": {
+        "action": "query",
+        "target": "거실",
+        "device_type": "plug",
+        "params": {
+          "time": "on"
+        }
+      },
+      "raw_output": "{\"action\": \"query\", \"target\": \"거실\", \"device_type\": \"plug\", \"params\": {\"time\": \"on\"}}",
+      "json_ok": true,
+      "action_match": false,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 30,
+      "time_s": 0.41
+    },
+    {
+      "idx": 49,
+      "input": "turn on the light",
+      "expected": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "on",
+        "target": "default",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"on\", \"target\": \"default\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 20,
+      "time_s": 0.273
+    },
+    {
+      "idx": 50,
+      "input": "turn off living room",
+      "expected": {
+        "action": "off",
+        "target": "거실",
+        "device_type": "light"
+      },
+      "predicted": {
+        "action": "off",
+        "target": "living room",
+        "device_type": "light"
+      },
+      "raw_output": "{\"action\": \"off\", \"target\": \"living room\", \"device_type\": \"light\"}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": false,
+      "device_type_match": true,
+      "full_match": false,
+      "tokens": 21,
+      "time_s": 0.287
+    },
+    {
+      "idx": 51,
+      "input": "set brightness to 70",
+      "expected": {
+        "action": "set_level",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "level": 70
+        }
+      },
+      "predicted": {
+        "action": "set_level",
+        "target": "default",
+        "device_type": "light",
+        "params": {
+          "brightness": 70
+        }
+      },
+      "raw_output": "{\"action\": \"set_level\", \"target\": \"default\", \"device_type\": \"light\", \"params\": {\"brightness\": 70}}",
+      "json_ok": true,
+      "action_match": true,
+      "target_match": true,
+      "device_type_match": true,
+      "full_match": true,
+      "tokens": 31,
+      "time_s": 0.421
+    }
+  ]
+}

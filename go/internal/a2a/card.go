@@ -15,7 +15,7 @@ func NewAgentCard(baseURL string) *a2a.AgentCard {
 		DefaultInputModes:  []string{"text"},
 		DefaultOutputModes: []string{"text"},
 		Capabilities: a2a.AgentCapabilities{
-			Streaming: false, // Phase 0: no streaming
+			Streaming: true, // Phase 1: SSE streaming enabled
 		},
 		Skills: []a2a.AgentSkill{
 			{

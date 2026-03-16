@@ -6,6 +6,7 @@ Agent2Agent Protocol 적용 — 에이전트 간 통신 구현 가이드
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-03-16 | **Phase 1 구현**: Task lifecycle (submitted→working→completed), streaming 활성, 테스트 6개 |
 | 2026-03-11 | **ACP vs A2A 비교 추가**: "누가 에이전트인가?" 관점, HomeAgent 선택 근거 |
 | 2026-03-11 | **v1.0 RC 기준 전면 개편**: Go SDK(a2a-go/v2), 3계층 spec, 로컬 검증 액션플랜 |
 | 2026-02-09 | 런타임 스택 확정: Go(컨트롤러) + Node.js(프로토콜) + Zig(소형 디바이스 펌웨어) |
@@ -470,13 +471,61 @@ curl -X POST http://localhost:8080/a2a \
 
 **의존성**: a2a-go/v2 SDK. matterjs-server 없어도 됨 — mock 디바이스 데이터.
 
-### Phase 1: 실제 디바이스 연동
+### Phase 1: Task Lifecycle + Streaming (2026-03-16 구현)
 
-기존 matterjs-server 연결 상태에서 A2A 요청 → 실제 디바이스 제어.
+**목표**: stateless Message 반환 → stateful Task lifecycle + SSE streaming
 
-### Phase 2: 멀티 에이전트
+**핵심 발견**: a2a-go/v2 SDK가 TaskStore, lifecycle 관리, OCC를 전부 제공.
+`a2asrv.NewHandler(executor)` 호출 시 in-memory TaskStore가 자동 생성되므로,
+HomeAgent가 할 일은 executor에서 올바른 이벤트를 yield하는 것뿐.
+
+**구현 내용**:
+
+1. `executor.go` — Message 반환 → 4단계 Task lifecycle 이벤트:
+   ```
+   NewSubmittedTask() → StatusUpdate(working) → ArtifactEvent(결과) → StatusUpdate(completed)
+   ```
+2. `card.go` — `Streaming: true` 활성화 (SSE 기반)
+3. `executor_test.go` — 6개 테스트 (lifecycle, empty msg, existing task, chat fallback, cancel, card)
+
+**변경 없는 것**:
+- `serve.go` — `a2asrv.NewHandler(executor)` 그대로. SDK가 자동 처리.
+- `hub_adapter.go` — 인터페이스 변경 없음.
+- TaskStore — SDK의 `taskstore.NewInMemory()` 자동 사용. 커스텀 불필요.
+
+**자동으로 동작하게 된 것** (SDK 제공):
+- `GetTask` — Task ID로 상태 조회
+- `ListTasks` — Task 목록 (cursor 페이지네이션)
+- `CancelTask` — 실행 중인 Task 취소
+- `SendStreamingMessage` — SSE로 진행 상태 스트리밍
+- `SubscribeToTask` — 기존 Task 이벤트 구독
+
+**검증**:
+
+```bash
+# JSON-RPC 호출 (Task 반환)
+curl -X POST http://localhost:8080/a2a \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"message/send","id":"1",
+       "params":{"message":{"messageId":"m1","role":"user",
+       "parts":[{"text":"디바이스 목록"}]}}}'
+
+# 응답: Task 객체 (status: completed, artifacts 포함)
+
+# SSE 스트리밍
+curl -X POST http://localhost:8080/a2a \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"message/sendStream","id":"2",
+       "params":{"message":{"messageId":"m2","role":"user",
+       "parts":[{"text":"거실 상태"}]}}}'
+
+# 응답: SSE 이벤트 스트림 (submitted → working → artifact → completed)
+```
+
+### Phase 2: 멀티 에이전트 + 인증
 
 HomeAgent ↔ 외부 에이전트 (OpenClaw, durable-iot-migrate) 연동.
+디스커버리: mDNS (`_a2a._tcp`). 인증: Bearer token → OAuth 2.0.
 
 ---
 

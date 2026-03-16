@@ -35,22 +35,44 @@ type HomeAgentExecutor struct {
 
 var _ a2asrv.AgentExecutor = (*HomeAgentExecutor)(nil)
 
-// Execute processes an incoming A2A message and yields response events.
+// Execute processes an incoming A2A message and yields Task lifecycle events.
+//
+// Phase 1: Full Task lifecycle (submitted → working → artifact → completed).
+// SDK's TaskStore automatically persists the task, so GetTask/ListTasks work out of the box.
 func (e *HomeAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		// Extract text from message parts
 		text := extractText(execCtx.Message)
 		if text == "" {
-			msg := a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("메시지에 텍스트가 없습니다."))
-			yield(msg, nil)
+			event := a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateFailed,
+				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("메시지에 텍스트가 없습니다.")))
+			yield(event, nil)
 			return
 		}
 
-		// Route to appropriate skill based on intent
-		response := e.handleMessage(ctx, text)
+		// 1. Submit task (new task only)
+		if execCtx.StoredTask == nil {
+			if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
+				return
+			}
+		}
 
-		msg := a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(response))
-		yield(msg, nil)
+		// 2. Working
+		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, nil), nil) {
+			return
+		}
+
+		// 3. Process and emit artifact
+		response := e.handleMessage(ctx, text)
+		artifact := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(response))
+		if !yield(artifact, nil) {
+			return
+		}
+
+		// 4. Completed
+		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, nil), nil) {
+			return
+		}
 	}
 }
 

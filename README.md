@@ -62,29 +62,40 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
 | RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap | ZBDongle-E (USB) | ✅ Production |
 | RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
 
-### Cross-Platform Verification (2026-03-13)
+### Cross-Platform Verification (2026-03-16)
 
 Same codebase, both platforms, same devices — verified end-to-end.
 
 | | Android (RK3576) | RPi5 (Yocto) |
 |---|---|---|
-| WiFi Plug (BLE→WiFi→CASE) | ✅ Node 3 | ✅ Node 11 |
-| Thread Door Sensor (BLE→Thread→CASE) | ✅ Node 1 | ✅ Node 13 |
-| On/Off Control | ✅ | ✅ |
-| Contact State | ✅ | ✅ |
-| LLM Agent | ✅ | ✅ "문이 열렸습니다" |
+| WiFi Plug (BLE→WiFi→CASE) | ✅ | ✅ |
+| Thread Door Sensor (BLE→Thread→CASE) | ✅ | ✅ |
+| On/Off Control + SSE realtime | ✅ | ✅ |
+| Contact State + SSE realtime | ✅ | ✅ |
+| LLM Agent (cloud) | ✅ | ✅ |
+| sLLM on-device (Qwen3-0.6B, 379MB) | ✅ 4s/req | — |
+| Flutter Native UI | ✅ | ✅ (desktop) |
+| Swagger UI (/docs) | ✅ | ✅ |
+| A2A Protocol (/.well-known/agent.json) | ✅ | ✅ |
+| Thread auto-start on deploy | ✅ | N/A (systemd) |
+
+### Test Coverage
+
+```
+  Go:      85 tests (hub 48, matter 11, otbr 9, a2a 6, config 0)
+  Flutter: 67 tests (api_client 24, device_card 15, widget 2, ble_relay 26)
+  Total:   152 tests, 0 failures
+```
 
 ### Codebase Sharing — 96% Common
 
 ```
   Shared (96%)                    Platform-specific (4%)
   ────────────────────            ────────────────────
-  Go server      4,625 lines     Flutter Android   804 lines
-  Go tests       1,431 lines       (BLE relay + WebView)
+  Go server      4,900+ lines    Flutter Android   804 lines
+  Go tests       2,000+ lines      (BLE relay + WebView)
   Lit UI         1,418 lines     Flutter Linux     201 lines
   matterjs WS      766 lines       (native widgets)
-  ──────────────────────
-  Total shared   8,240 lines     Total specific  1,005 lines
 
   Go server:  0 lines of platform-specific code
   Lit UI:     0 lines of platform-specific code
@@ -152,13 +163,17 @@ Multi-platform. Same hub, different hardware.
 - [x] **Cross-platform verification** — WiFi + Thread devices on both RPi5 and RK3576
 - [ ] **Yocto homeagent recipe** — SD flash → boot → works (ha-2ua)
 
-### Phase 4: Agent Intelligence
+### Phase 4: Agent Intelligence ← **current**
 
 The mind. AI that understands context.
 
-- [ ] A2A protocol + Constitutional AI (ha-2h5)
+- [x] **A2A Phase 0+1** — AgentCard + JSON-RPC + Task lifecycle + SSE streaming
+- [x] **sLLM benchmark** — Qwen3-0.6B: baseline 42% → LoRA 88% (action 100%)
+- [x] **GGUF pipeline** — LoRA merge → f16 → Q4_K_M (379MB, ARM 4s/req)
+- [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
+- [ ] sLLM Go integration — llama-server HTTP → agent.go fallback chain (ha-17d)
+- [ ] A2UI native renderer — JSON Surface → Flutter Widget (bd-i6o)
 - [ ] OpenClaw integration — TTS/Telegram/chat delegated (ha-3nc)
-- [ ] On-device sLLM fine-tuning pipeline (ha-17d)
 - [ ] EdgeAI Runtime: Hailo + ONNX/TFLite (ha-3lu)
 
 ### Phase 5: Production + Scale
@@ -265,11 +280,11 @@ HomeAgent is not a rule engine. It's an **agent with context, principles, and ju
 
 ```
 RPi5 (Yocto) / RK3576 (Android) — HomeAgent Hub
-├── Go       HomeAgent (controller, AI, state machine, A2A)
+├── Go       HomeAgent (controller, AI, state machine, A2A, Swagger UI)
 ├── Node.js  matterjs-server (Matter protocol engine)
-├── Dart     Flutter WebView Shell + pure Dart BLE commissioning
-├── C/C++    otbr-agent (Thread Border Router)
-└── (none)   Python — not used on the hub
+├── Dart     Flutter Native UI / WebView Shell + BLE commissioning
+├── C/C++    otbr-agent (Thread Border Router) + llama.cpp (sLLM)
+└── (none)   Python — not used on the hub (training only on GPU cluster)
 
 Dev environment (NixOS host)
 ├── Go 1.25  go build / GOOS=linux GOARCH=arm64

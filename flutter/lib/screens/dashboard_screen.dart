@@ -206,15 +206,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(
-                        width: 32, height: 32,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      const Icon(Icons.devices, size: 64, color: Colors.grey),
                       const SizedBox(height: 16),
-                      Text('디바이스 연결 대기 중...',
+                      Text('등록된 디바이스가 없습니다',
                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey)),
                       const SizedBox(height: 8),
-                      Text('SSE로 디바이스가 하나씩 나타납니다',
+                      Text('아래 "추가" 탭에서 디바이스를 페어링하세요',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
                     ],
                   ),

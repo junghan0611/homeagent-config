@@ -277,7 +277,7 @@ cmd_thread_start() {
 
     # 6. Thread dataset — 영속성 보장
     # otbr-agent가 data-path에서 로드할 시간 대기 (최대 10초 재시도)
-    local EXISTING=""
+    local EXISTING="" CREATED_NEW=false
     log "Thread dataset 로드 대기..."
     for _try in $(seq 1 5); do
         EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
@@ -290,10 +290,8 @@ cmd_thread_start() {
 
     if [[ -n "$EXISTING" ]] && [[ "$EXISTING" != "Done" ]] && [[ "$EXISTING" != *"Error"* ]] && [[ "$EXISTING" != *"NotFound"* ]]; then
         log "기존 dataset 사용 (otbr-data에서 복원됨)"
-        # 백업 갱신
         adb shell "echo '$EXISTING' > $REMOTE/otbr-data/dataset-backup.hex"
-    elif [[ -f /dev/null ]] && adb shell "test -f $REMOTE/otbr-data/dataset-backup.hex" 2>/dev/null; then
-        # otbr-agent가 못 읽었지만 백업 파일이 있으면 수동 복원
+    elif adb shell "test -f $REMOTE/otbr-data/dataset-backup.hex" 2>/dev/null; then
         local BACKUP_HEX
         BACKUP_HEX=$(adb shell "cat $REMOTE/otbr-data/dataset-backup.hex" | tr -d '\r')
         if [[ -n "$BACKUP_HEX" ]] && [[ ${#BACKUP_HEX} -gt 20 ]]; then
@@ -301,23 +299,27 @@ cmd_thread_start() {
             adb shell "$REMOTE/otbr/ot-ctl dataset set active $BACKUP_HEX"
             adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
         else
-            log "새 Thread 네트워크 생성 (백업 없음)..."
+            log "새 Thread 네트워크 생성 (백업 손상)..."
             adb shell "$REMOTE/otbr/ot-ctl dataset init new"
             adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
-            # 생성 즉시 백업
-            local NEW_HEX
-            NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
-            [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
+            CREATED_NEW=true
         fi
     else
         log "새 Thread 네트워크 생성..."
         adb shell "$REMOTE/otbr/ot-ctl dataset init new"
         adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
-        # 생성 즉시 백업
+        CREATED_NEW=true
+    fi
+
+    # 새 dataset 생성 시 백업 저장 + matter-data 초기화
+    if [[ "$CREATED_NEW" == "true" ]]; then
         sleep 1
         local NEW_HEX
         NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
         [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
+        # matter-data 초기화 — 캐시된 이전 dataset과 불일치 방지
+        log "새 Thread 네트워크 → matter-data 초기화 (캐시 불일치 방지)"
+        adb shell "rm -rf $REMOTE/matter-data/*"
     fi
     adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
     adb shell "$REMOTE/otbr/ot-ctl thread start"

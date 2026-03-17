@@ -169,8 +169,7 @@ nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
         sleep 5
 
         # Thread dataset — 영속성 보장 (android-deploy.sh와 동일 로직)
-        # otbr-agent가 data-path에서 로드할 시간 대기 (최대 10초 재시도)
-        local EXISTING=""
+        local EXISTING="" CREATED_NEW=false
         log "Thread dataset 로드 대기..."
         for _try in $(seq 1 5); do
             EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
@@ -191,21 +190,26 @@ nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
                 adb shell "$REMOTE/otbr/ot-ctl dataset set active $BACKUP_HEX"
                 adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
             else
-                log "새 Thread 네트워크 생성 (백업 없음)..."
+                log "새 Thread 네트워크 생성 (백업 손상)..."
                 adb shell "$REMOTE/otbr/ot-ctl dataset init new"
                 adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
-                local NEW_HEX
-                NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
-                [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
+                CREATED_NEW=true
             fi
         else
             log "새 Thread 네트워크 생성..."
             adb shell "$REMOTE/otbr/ot-ctl dataset init new"
             adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
+            CREATED_NEW=true
+        fi
+
+        # 새 dataset 생성 시 백업 저장 + matter-data 초기화
+        if [[ "$CREATED_NEW" == "true" ]]; then
             sleep 1
             local NEW_HEX
             NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
             [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
+            log "새 Thread 네트워크 → matter-data 초기화 (캐시 불일치 방지)"
+            adb shell "rm -rf $REMOTE/matter-data/*"
         fi
         adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
         adb shell "$REMOTE/otbr/ot-ctl thread start"

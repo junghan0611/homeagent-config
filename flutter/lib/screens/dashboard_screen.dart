@@ -135,7 +135,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           name: old.name,
           room: old.room,
           type: old.type,
-          available: old.available,
+          available: event.key == 'available'
+              ? (event.value == true)
+              : old.available,
           state: newState,
         );
       }

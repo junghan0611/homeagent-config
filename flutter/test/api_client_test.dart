@@ -163,6 +163,20 @@ void main() {
       expect(e.value, true);
     });
 
+    test('device_state available 이벤트', () {
+      final e = SseEvent.fromJson({
+        'type': 'device_state',
+        'device_id': 9,
+        'key': 'available',
+        'value': true,
+      });
+
+      expect(e.type, 'device_state');
+      expect(e.deviceId, 9);
+      expect(e.key, 'available');
+      expect(e.value, true);
+    });
+
     test('device_added 이벤트', () {
       final e = SseEvent.fromJson({
         'type': 'device_added',

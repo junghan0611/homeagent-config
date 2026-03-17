@@ -427,6 +427,39 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 	case matter.EventNodeAdded, matter.EventNodeUpdated:
 		log.Printf("[hub] %s: %s", evt.Type, string(evt.Data))
 
+		// node_updated → available 갱신 (SED 배터리 디바이스 reconnect 반영)
+		// node_added → 새 노드 자동 등록 (외부 커미셔닝 감지)
+		var node matter.Node
+		if err := json.Unmarshal(evt.Data, &node); err == nil && node.NodeID > 0 {
+			h.mu.Lock()
+			if ds, ok := h.devices[node.NodeID]; ok {
+				// 기존 디바이스: available 갱신
+				changed := ds.Available != node.Available
+				ds.Available = node.Available
+				h.mu.Unlock()
+				if changed {
+					log.Printf("[hub] node %d available: %v", node.NodeID, node.Available)
+					h.eventCh <- Event{
+						Type:     "device_state",
+						DeviceID: node.NodeID,
+						Key:      "available",
+						Value:    node.Available,
+					}
+				}
+			} else {
+				h.mu.Unlock()
+				// 새 디바이스: addNode으로 등록 (node_added)
+				if evt.Type == matter.EventNodeAdded {
+					ds := h.addNode(node)
+					h.eventCh <- Event{
+						Type:     "device_added",
+						DeviceID: node.NodeID,
+						Value:    ds,
+					}
+				}
+			}
+		}
+
 	case matter.EventNodeRemoved:
 		var nodeID int
 		if err := json.Unmarshal(evt.Data, &nodeID); err != nil {

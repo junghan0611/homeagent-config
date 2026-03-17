@@ -1343,3 +1343,147 @@ func TestSSEKey_UnknownPath_RawPreserved(t *testing.T) {
 		t.Fatal("no event in eventCh")
 	}
 }
+
+// --- EventNodeUpdated / EventNodeAdded tests ---
+
+func TestHandleMatterEvent_NodeUpdated_AvailableTrue(t *testing.T) {
+	h := testHub(t)
+	// Set device 1 to unavailable
+	h.mu.Lock()
+	h.devices[1].Available = false
+	h.mu.Unlock()
+
+	// Simulate node_updated event with available=true
+	nodeData := mustMarshal(t, matter.Node{NodeID: 1, Available: true})
+	evt := matter.Event{Type: matter.EventNodeUpdated, Data: nodeData}
+	h.handleMatterEvent(evt)
+
+	// Verify available is now true
+	h.mu.RLock()
+	ds := h.devices[1]
+	h.mu.RUnlock()
+	if !ds.Available {
+		t.Error("node 1 should be available after node_updated")
+	}
+
+	// Verify SSE event emitted
+	select {
+	case e := <-h.eventCh:
+		if e.Type != "device_state" || e.Key != "available" || e.Value != true {
+			t.Errorf("expected device_state available=true, got %+v", e)
+		}
+	default:
+		t.Fatal("expected available change event in eventCh")
+	}
+}
+
+func TestHandleMatterEvent_NodeUpdated_AvailableFalse(t *testing.T) {
+	h := testHub(t)
+	// Device 1 starts available (testHub default)
+	h.mu.RLock()
+	if !h.devices[1].Available {
+		t.Fatal("device 1 should start available")
+	}
+	h.mu.RUnlock()
+
+	// Simulate node going offline
+	nodeData := mustMarshal(t, matter.Node{NodeID: 1, Available: false})
+	evt := matter.Event{Type: matter.EventNodeUpdated, Data: nodeData}
+	h.handleMatterEvent(evt)
+
+	h.mu.RLock()
+	ds := h.devices[1]
+	h.mu.RUnlock()
+	if ds.Available {
+		t.Error("node 1 should be unavailable after node_updated")
+	}
+
+	select {
+	case e := <-h.eventCh:
+		if e.Type != "device_state" || e.Key != "available" || e.Value != false {
+			t.Errorf("expected device_state available=false, got %+v", e)
+		}
+	default:
+		t.Fatal("expected available change event")
+	}
+}
+
+func TestHandleMatterEvent_NodeUpdated_NoChange(t *testing.T) {
+	h := testHub(t)
+	// Device 1 already available — no event should be emitted
+	nodeData := mustMarshal(t, matter.Node{NodeID: 1, Available: true})
+	evt := matter.Event{Type: matter.EventNodeUpdated, Data: nodeData}
+	h.handleMatterEvent(evt)
+
+	// No event should be in channel (no change)
+	select {
+	case e := <-h.eventCh:
+		t.Errorf("no event expected when available unchanged, got %+v", e)
+	default:
+		// OK — no event
+	}
+}
+
+func TestHandleMatterEvent_NodeAdded_NewDevice(t *testing.T) {
+	h := testHub(t)
+	// Verify node 99 doesn't exist
+	h.mu.RLock()
+	_, exists := h.devices[99]
+	h.mu.RUnlock()
+	if exists {
+		t.Fatal("node 99 should not exist initially")
+	}
+
+	// Simulate node_added for a new device
+	node := matter.Node{
+		NodeID:    99,
+		Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(266)}},
+			"1/6/0":  true,
+		},
+	}
+	nodeData := mustMarshal(t, node)
+	evt := matter.Event{Type: matter.EventNodeAdded, Data: nodeData}
+	h.handleMatterEvent(evt)
+
+	// Verify device was registered
+	h.mu.RLock()
+	ds, ok := h.devices[99]
+	h.mu.RUnlock()
+	if !ok {
+		t.Fatal("node 99 should be registered after node_added")
+	}
+	if ds.Type != "on_off_plug" {
+		t.Errorf("expected type on_off_plug, got %q", ds.Type)
+	}
+	if ds.State["on"] != true {
+		t.Errorf("expected on=true, got %v", ds.State["on"])
+	}
+
+	// Verify device_added event emitted
+	select {
+	case e := <-h.eventCh:
+		if e.Type != "device_added" || e.DeviceID != 99 {
+			t.Errorf("expected device_added node 99, got %+v", e)
+		}
+	default:
+		t.Fatal("expected device_added event")
+	}
+}
+
+func TestHandleMatterEvent_NodeUpdated_UnknownNode(t *testing.T) {
+	h := testHub(t)
+	// node_updated for unknown node — should not crash, just log
+	nodeData := mustMarshal(t, matter.Node{NodeID: 999, Available: true})
+	evt := matter.Event{Type: matter.EventNodeUpdated, Data: nodeData}
+	h.handleMatterEvent(evt) // should not panic
+
+	// Unknown node should NOT be added by node_updated (only node_added does that)
+	h.mu.RLock()
+	_, exists := h.devices[999]
+	h.mu.RUnlock()
+	if exists {
+		t.Error("node_updated should not register unknown nodes")
+	}
+}

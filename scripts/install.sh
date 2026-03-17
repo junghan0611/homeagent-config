@@ -128,12 +128,73 @@ do_install() {
 do_start() {
     log "=== 서비스 시작 ==="
 
-    # 1. 기존 프로세스 정리
-    adb shell "pkill -f MatterServer 2>/dev/null" || true
-    adb shell "pkill -f 'homeagent serve' 2>/dev/null" || true
-    sleep 1
+    # 0. 기존 프로세스 전부 정리
+    for pattern in "homeagent serve" "MatterServer" "ld-linux.*node" "otbr-agent"; do
+        adb shell "pkill -f '$pattern' 2>/dev/null" || true
+    done
+    sleep 2
 
-    # 2. matterjs-server
+    # 1. Thread HAL 중지 + DNS 설정
+    log "Thread HAL 중지 + DNS..."
+    adb shell "stop vendor.threadnetwork_hal 2>/dev/null; stop ot-daemon 2>/dev/null" || true
+    adb shell "setenforce 0 2>/dev/null" || true
+    adb shell "mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null" || true
+
+    # DNS overlay (Android에 /etc/resolv.conf 없음 → Go HTTP/TLS 필요)
+    adb shell "mkdir -p $REMOTE/etc_overlay && \
+        cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null; \
+        echo 'nameserver 192.168.0.1
+nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
+        mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null" || true
+
+    # 2. OTBR 시작
+    log "OTBR 시작..."
+    if adb shell "test -f $REMOTE/otbr/otbr-agent" 2>/dev/null; then
+        adb shell "sysctl -w net.ipv6.conf.all.forwarding=1 2>/dev/null" || true
+        adb shell "nohup $REMOTE/otbr/otbr-agent \
+            -I wpan0 -B wlan0 -d7 -v \
+            --vendor-name HomeAgent --model-name OTBR \
+            --data-path $REMOTE/otbr-data \
+            'spinel+hdlc+uart:///dev/ttyS5?uart-baudrate=460800' \
+            > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
+        sleep 4
+
+        # Thread 네트워크 구성
+        local EXISTING
+        EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
+        if [[ -z "$EXISTING" ]] || [[ "$EXISTING" == "Done" ]] || [[ "$EXISTING" == *"Error"* ]] || [[ "$EXISTING" == *"NotFound"* ]]; then
+            log "새 Thread 네트워크 생성..."
+            adb shell "$REMOTE/otbr/ot-ctl dataset init new"
+            adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
+        else
+            log "기존 Thread dataset 사용"
+        fi
+        adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
+        adb shell "$REMOTE/otbr/ot-ctl thread start"
+        adb shell "$REMOTE/otbr/ot-ctl srp server enable"
+
+        # Leader 대기 (최대 30초)
+        for i in $(seq 1 10); do
+            sleep 3
+            local STATE
+            STATE=$(adb shell "$REMOTE/otbr/ot-ctl state" 2>/dev/null | head -1 | tr -d '\r')
+            [[ "$STATE" == "leader" || "$STATE" == "router" ]] && { log "Thread: $STATE"; break; }
+            [[ $i -eq 10 ]] && warn "Thread: $STATE (타임아웃)"
+        done
+
+        # IPv6 정책 라우팅
+        local WPAN_TABLE
+        WPAN_TABLE=$(adb shell "ip -6 route show table all dev wpan0 2>/dev/null" | \
+            grep "table [0-9]" | head -1 | sed 's/.*table \([0-9]*\).*/\1/' || true)
+        if [[ -n "$WPAN_TABLE" ]]; then
+            adb shell "ip -6 rule add from all lookup $WPAN_TABLE prio 15000 2>/dev/null" || true
+            log "IPv6 정책 라우팅: table $WPAN_TABLE"
+        fi
+    else
+        warn "OTBR 없음 (건너뜀)"
+    fi
+
+    # 3. matterjs-server
     log "matterjs 시작..."
     adb shell "cd $REMOTE/nodejs-bundle && \
         nohup lib/ld-linux-aarch64.so.1 --library-path lib ./node \
@@ -142,20 +203,29 @@ do_start() {
         --storage-path $REMOTE/matter-data --port 5580 \
         --bluetooth-adapter 0 --primary-interface wlan0 \
         > $REMOTE/matterjs.log 2>&1 &"
-    sleep 4
+    sleep 5
 
-    # 3. Go homeagent
+    # 4. Go homeagent (adb shell nohup 블록 방지 — 스크립트 파일 방식)
     log "Go 서버 시작..."
-    adb shell "cd $REMOTE && \
-        HOMEAGENT_MATTER_WS=ws://localhost:5580 \
-        HOMEAGENT_ALIASES_FILE=$REMOTE/aliases.json \
-        HOMEAGENT_UI_DIR=$REMOTE/ui/dist \
-        nohup ./homeagent serve > $REMOTE/homeagent.log 2>&1 &"
-    sleep 2
+    adb shell "cat > $REMOTE/_ha_start.sh << 'GOEOF'
+#!/system/bin/sh
+SSL_CERT_DIR=/etc/security/cacerts \
+HOMEAGENT_HTTP_ADDR=:8080 \
+HOMEAGENT_MATTER_WS=ws://localhost:5580 \
+HOMEAGENT_UI_DIR=/data/local/tmp/ui/dist \
+HOMEAGENT_ALIASES_FILE=/data/local/tmp/aliases.json \
+HOMEAGENT_OT_CTL=/data/local/tmp/otbr/ot-ctl \
+/data/local/tmp/homeagent serve > /data/local/tmp/homeagent.log 2>&1 &
+echo done
+GOEOF
+chmod +x $REMOTE/_ha_start.sh"
+    adb shell "nohup $REMOTE/_ha_start.sh > /dev/null 2>&1 &" < /dev/null
+    sleep 5
 
-    # 4. APK
+    # 5. APK
     log "APK 시작..."
     adb shell "am force-stop com.homeagent.app 2>/dev/null" || true
+    sleep 1
     adb shell "am start -n com.homeagent.app/com.homeagent.homeagent.MainActivity"
 
     do_status

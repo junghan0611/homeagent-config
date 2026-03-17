@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import 'a2ui_test_screen.dart';
 
 /// 설정 화면 — 테마 전환 + 서버 정보
 class SettingsScreen extends StatelessWidget {
@@ -49,6 +50,31 @@ class SettingsScreen extends StatelessWidget {
             value: ThemeMode.system,
             groupValue: currentMode,
             onChanged: (v) => appState?.setThemeMode(v!),
+          ),
+
+          const Divider(),
+
+          // 개발자 도구
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              '개발자',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.science),
+            title: const Text('A2UI 테스트'),
+            subtitle: const Text('genui Surface 렌더링 검증'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => A2uiTestScreen(serverUrl: serverUrl),
+              ),
+            ),
           ),
 
           const Divider(),

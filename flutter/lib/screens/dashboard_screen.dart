@@ -1,9 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:genui/genui.dart' show GenUiSurface;
 
-import '../a2ui_adapter.dart';
 import '../api_client.dart';
 import '../theme.dart';
 import '../widgets/device_card.dart';
@@ -20,7 +18,6 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final ApiClient _api;
-  late final HomeAgentA2uiAdapter _a2ui;
   List<Device> _devices = [];
   bool _loading = true;
   String? _error;
@@ -30,10 +27,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _api = ApiClient(baseUrl: widget.serverUrl);
-    _a2ui = HomeAgentA2uiAdapter(api: _api);
     _fetchAll();
     _connectSse();
-    _a2ui.fetchAndRender();
   }
 
   @override
@@ -50,8 +45,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loading = false;
         _error = null;
       });
-      // A2UI Surface 새로고침
-      _a2ui.fetchAndRender();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -96,10 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             });
             break;
           case 'surface_update':
-            if (event.value is Map) {
-              _a2ui.handleSurfaceUpdate(
-                  Map<String, dynamic>.from(event.value));
-            }
+            // A2UI surface_update는 설정→A2UI 테스트 화면에서 처리
             break;
         }
       },
@@ -203,35 +193,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-
-            // A2UI Home Surface (시간 카드 + 디바이스 요약)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: GenUiSurface(
-                  host: _a2ui.host,
-                  surfaceId: 'home',
-                  defaultBuilder: (_) {
-                    debugPrint('[Dashboard] GenUiSurface defaultBuilder — surface not ready yet');
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.schedule, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Surface 로딩 중...',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
 
             // 상태 요약
             SliverToBoxAdapter(

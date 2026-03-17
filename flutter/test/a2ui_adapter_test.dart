@@ -3,7 +3,7 @@ import 'package:homeagent/a2ui_adapter.dart';
 import 'package:homeagent/api_client.dart';
 
 void main() {
-  group('HomeAgentA2uiAdapter JSON 변환', () {
+  group('HomeAgentA2uiAdapter 트리 평탄화', () {
     late HomeAgentA2uiAdapter adapter;
 
     setUp(() {
@@ -12,118 +12,110 @@ void main() {
       );
     });
 
-    test('Go surface JSON → A2UI v0.9 createSurface 포맷', () {
-      // Go surface.go가 생성하는 형식
-      final goSurface = {
+    test('단일 Text 컴포넌트 → 평탄화', () {
+      final result = adapter.convertToA2uiForTest({
+        'surfaceId': 'home',
+        'components': [
+          {'type': 'Text', 'props': {'variant': 'h3', 'text': '15:04'}},
+        ],
+      });
+
+      final comps = result['surfaceUpdate']['components'] as List;
+      expect(comps.length, 1);
+      expect(comps[0]['id'], isA<String>());
+      expect(comps[0]['component']['Text']['text'], '15:04');
+      expect(result['rootId'], comps[0]['id']);
+    });
+
+    test('Card + children → 평탄화 (children이 ID 참조)', () {
+      final result = adapter.convertToA2uiForTest({
         'surfaceId': 'home',
         'components': [
           {
             'type': 'Card',
             'props': {'variant': 'elevated'},
             'children': [
-              {
-                'type': 'Text',
-                'props': {'variant': 'h3', 'text': '15:04'},
-              },
+              {'type': 'Text', 'props': {'text': 'hello'}},
+              {'type': 'Divider'},
             ],
           },
         ],
-        'theme': {'accent': '#FF9800', 'mood': 'morning'},
-      };
+      });
 
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
+      final comps = result['surfaceUpdate']['components'] as List;
+      // Text + Divider + Card = 3개
+      expect(comps.length, 3);
 
-      expect(a2ui['version'], 'v0.9');
-      expect(a2ui['createSurface'], isNotNull);
-      expect(a2ui['createSurface']['surfaceId'], 'home');
-
-      final components = a2ui['createSurface']['components'] as List;
-      expect(components.length, 1);
-      expect(components[0]['type'], 'Card'); // PascalCase 유지 (genui 카탈로그)
-      expect(components[0]['props']['variant'], 'elevated');
+      // Card의 children이 ID 참조 배열
+      final card = comps.lastWhere((c) => c['component'].containsKey('Card'));
+      final childIds = card['component']['Card']['children'] as List;
+      expect(childIds.length, 2);
+      expect(childIds.every((id) => id is String), true);
     });
 
-    test('컴포넌트 type이 소문자로 변환됨', () {
-      final goSurface = {
-        'surfaceId': 'test',
-        'components': [
-          {'type': 'Text', 'props': {'text': 'hello'}},
-          {'type': 'Icon', 'props': {'name': 'sun'}},
-          {'type': 'Row', 'props': {'gap': 8}},
-          {'type': 'Column', 'props': {'gap': 4}},
-          {'type': 'Divider'},
-        ],
-      };
-
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
-      final comps = a2ui['createSurface']['components'] as List;
-
-      expect(comps[0]['type'], 'Text');
-      expect(comps[1]['type'], 'Icon');
-      expect(comps[2]['type'], 'Row');
-      expect(comps[3]['type'], 'Column');
-      expect(comps[4]['type'], 'Divider');
-    });
-
-    test('중첩 children 재귀 변환', () {
-      final goSurface = {
+    test('여러 최상위 컴포넌트 → Column 래퍼', () {
+      final result = adapter.convertToA2uiForTest({
         'surfaceId': 'home',
         'components': [
-          {
-            'type': 'Card',
-            'props': {'variant': 'outlined'},
-            'children': [
-              {
-                'type': 'Row',
-                'props': {'gap': 10},
-                'children': [
-                  {'type': 'Icon', 'props': {'name': 'door', 'size': 20}},
-                  {'type': 'Text', 'props': {'variant': 'body', 'text': '거실'}},
-                ],
-              },
-            ],
-          },
+          {'type': 'Card', 'props': {'variant': 'elevated'}},
+          {'type': 'Card', 'props': {'variant': 'outlined'}},
         ],
-      };
+      });
 
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
-      final card = (a2ui['createSurface']['components'] as List)[0];
-      final row = (card['children'] as List)[0];
-      final children = row['children'] as List;
+      final comps = result['surfaceUpdate']['components'] as List;
+      // Card1 + Card2 + Column = 3개
+      expect(comps.length, 3);
 
-      expect(children.length, 2);
-      expect(children[0]['type'], 'Icon');
-      expect(children[1]['type'], 'Text');
-      expect(children[1]['props']['text'], '거실');
+      final root = comps.lastWhere((c) => c['component'].containsKey('Column'));
+      expect(root['id'], result['rootId']);
+      expect((root['component']['Column']['children'] as List).length, 2);
     });
 
-    test('빈 components → 빈 리스트', () {
-      final goSurface = {'surfaceId': 'empty'};
+    test('빈 components → 빈 리스트 + root null', () {
+      final result = adapter.convertToA2uiForTest({
+        'surfaceId': 'empty',
+        'components': [],
+      });
 
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
-      final comps = a2ui['createSurface']['components'] as List;
+      final comps = result['surfaceUpdate']['components'] as List;
+      // 빈 리스트 → Column 래퍼도 없음
       expect(comps, isEmpty);
     });
 
-    test('surfaceId 기본값 home', () {
-      final goSurface = {'components': []};
+    test('깊은 중첩 — Row > Icon + Text', () {
+      final result = adapter.convertToA2uiForTest({
+        'surfaceId': 'test',
+        'components': [
+          {
+            'type': 'Row',
+            'props': {'gap': 10},
+            'children': [
+              {'type': 'Icon', 'props': {'name': 'sun', 'size': 32}},
+              {'type': 'Text', 'props': {'variant': 'body', 'text': '거실'}},
+            ],
+          },
+        ],
+      });
 
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
-      expect(a2ui['createSurface']['surfaceId'], 'home');
+      final comps = result['surfaceUpdate']['components'] as List;
+      expect(comps.length, 3); // Icon + Text + Row
+
+      final row = comps.lastWhere((c) => c['component'].containsKey('Row'));
+      expect(row['component']['Row']['gap'], 10);
+      expect((row['component']['Row']['children'] as List).length, 2);
     });
 
-    test('props 없는 컴포넌트 처리', () {
-      final goSurface = {
+    test('props 없는 Divider', () {
+      final result = adapter.convertToA2uiForTest({
         'surfaceId': 'test',
         'components': [
           {'type': 'Divider'},
         ],
-      };
+      });
 
-      final a2ui = adapter.convertToA2uiForTest(goSurface);
-      final comp = (a2ui['createSurface']['components'] as List)[0];
-      expect(comp['type'], 'Divider');
-      expect(comp['props'], isA<Map>());
+      final comps = result['surfaceUpdate']['components'] as List;
+      expect(comps.length, 1);
+      expect(comps[0]['component'].containsKey('Divider'), true);
     });
   });
 }

@@ -166,20 +166,20 @@ class HomeAgentA2uiAdapter {
     return columnId;
   }
 
-  /// 단일 Go 컴포넌트 → 평탄화. 반환: 이 컴포넌트의 ID
+  /// 단일 Go 컴포넌트 → genui 포맷으로 변환. 반환: 이 컴포넌트의 ID
   String _flattenComponent(
     Map<String, dynamic> comp,
     List<Map<String, dynamic>> output,
     String prefix,
   ) {
     final type = comp['type'] as String? ?? 'Text';
-    final props = Map<String, dynamic>.from(comp['props'] ?? {});
+    final goProps = Map<String, dynamic>.from(comp['props'] ?? {});
     final children = comp['children'] as List?;
     final id = _nextId(prefix);
 
-    // children이 있으면 재귀 평탄화 → ID 참조로 교체
+    // children 재귀 평탄화 → ID 리스트
+    var childIds = <String>[];
     if (children != null && children.isNotEmpty) {
-      final childIds = <String>[];
       for (final child in children) {
         final childId = _flattenComponent(
           Map<String, dynamic>.from(child),
@@ -188,17 +188,94 @@ class HomeAgentA2uiAdapter {
         );
         childIds.add(childId);
       }
-      props['children'] = childIds;
     }
 
-    // genui 컴포넌트 포맷: {id, component: {TypeName: {props}}}
+    // Card는 child 1개만 받으므로, children 여러개면 Column 래퍼
+    if (type == 'Card' && childIds.length > 1) {
+      final colId = _nextId('${id}_wrap');
+      output.add({
+        'id': colId,
+        'component': {
+          'Column': {'children': childIds},
+        },
+      });
+      childIds = [colId];
+    }
+
+    // Go props → genui props 변환 (타입별)
+    final genProps = _convertProps(type, goProps, childIds);
+
     output.add({
       'id': id,
-      'component': {
-        type: props,
-      },
+      'component': {type: genProps},
     });
 
     return id;
+  }
+
+  /// Go surface.go props → genui CoreCatalog props 변환
+  Map<String, dynamic> _convertProps(
+    String type,
+    Map<String, dynamic> goProps,
+    List<String> childIds,
+  ) {
+    switch (type) {
+      case 'Text':
+        // Go: {text: "hello", variant: "h3"}
+        // genui: {text: {literalString: "hello"}, usageHint: "h3"}
+        return {
+          'text': {'literalString': goProps['text'] ?? ''},
+          if (goProps['variant'] != null) 'usageHint': goProps['variant'],
+        };
+
+      case 'Icon':
+        // Go: {name: "sun", size: 32, color: "#FF9800"}
+        // genui: {name: {literalString: "home"}}  (제한된 아이콘 세트)
+        final iconName = _mapIconName(goProps['name'] as String? ?? 'info');
+        return {
+          'name': {'literalString': iconName},
+        };
+
+      case 'Card':
+        // Go: {variant: "elevated", children: [...]}
+        // genui: {child: "childId"}  (단일 child)
+        // children 여러 개면 이미 _flattenComponent에서 Column 감싸기 처리
+        if (childIds.isEmpty) {
+          return {'child': ''};
+        }
+        return {'child': childIds[0]};
+
+      case 'Row':
+        // Go: {gap: 12, children: [...]}
+        // genui: {children: ["id1", "id2"]}
+        return {'children': childIds};
+
+      case 'Column':
+        // Go: {gap: 8, children: [...]}
+        // genui: {children: ["id1", "id2"]}
+        return {'children': childIds};
+
+      case 'Divider':
+        // Go: {} → genui: {}
+        return {};
+
+      default:
+        return goProps;
+    }
+  }
+
+  /// Go 아이콘 이름 → genui AvailableIcons 매핑
+  String _mapIconName(String goName) {
+    const iconMap = {
+      'sun': 'star',
+      'sunrise': 'star',
+      'home': 'home',
+      'door': 'lockOpen',
+      'plug': 'power',
+      'light': 'lightbulb',
+      'sensor': 'info',
+      'lock': 'lock',
+    };
+    return iconMap[goName] ?? 'info';
   }
 }

@@ -39,7 +39,17 @@ class DeviceCard extends StatelessWidget {
                 children: [
                   Icon(_icon, color: _iconColor, size: 32),
                   if (!device.available)
-                    const Icon(Icons.cloud_off, size: 16, color: AppTheme.errorColor),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 12, height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.cloud_off, size: 14, color: AppTheme.errorColor),
+                      ],
+                    ),
                 ],
               ),
               // 센서 큰 값 표시
@@ -137,6 +147,9 @@ class DeviceCard extends StatelessWidget {
   }
 
   String get _subtitle {
+    if (!device.available) {
+      return device.room.isNotEmpty ? '${device.room} · 연결 중...' : '연결 중...';
+    }
     final parts = <String>[];
     if (device.room.isNotEmpty) parts.add(device.room);
     if (device.isContactSensor) {

@@ -201,15 +201,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // 디바이스 그리드
             if (_devices.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.devices, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text('디바이스 없음',
-                          style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      const SizedBox(
+                        width: 32, height: 32,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('디바이스 연결 대기 중...',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      Text('SSE로 디바이스가 하나씩 나타납니다',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
                     ],
                   ),
                 ),

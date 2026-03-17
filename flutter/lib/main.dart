@@ -101,20 +101,28 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
     }
   }
 
+  int _retryCount = 0;
+  static const int _maxRetries = 30; // 부팅 후 최대 90초 대기 (3초×30)
+
   Future<void> _startBackend() async {
-    // 항상 외부 서버 모드로 시작 (서버 URL은 dart-define으로 지정)
-    // 추후 번들 모드 추가 시 detectBackendMode() 사용
-    setState(() => _status = '서버 연결 중... $_serverUrl');
+    setState(() {
+      _status = '서버 시작 대기 중...';
+      _retryCount = 0;
+    });
     debugPrint('[HomeAgent] 서버 연결 시도: $_serverUrl');
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < _maxRetries; i++) {
+      setState(() {
+        _retryCount = i + 1;
+        _status = '서버 시작 대기 중... (${i + 1}/$_maxRetries)';
+      });
       try {
         final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
         final request = await client.getUrl(Uri.parse('$_serverUrl/api/devices'));
         final response = await request.close();
         await response.drain();
         if (response.statusCode == 200) {
-          debugPrint('[HomeAgent] 서버 연결 성공!');
+          debugPrint('[HomeAgent] 서버 연결 성공! (${i + 1}번째 시도)');
           setState(() {
             _serverReady = true;
             _isLoading = false;
@@ -123,15 +131,15 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
           return;
         }
       } catch (e) {
-        debugPrint('[HomeAgent] 연결 시도 ${i + 1}/10: $e');
+        debugPrint('[HomeAgent] 연결 시도 ${i + 1}/$_maxRetries: $e');
       }
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 3));
     }
 
     debugPrint('[HomeAgent] 서버 연결 실패: $_serverUrl');
     setState(() {
       _isLoading = false;
-      _error = '서버를 찾을 수 없습니다\n$_serverUrl\nGo 서버를 먼저 실행하세요';
+      _error = '서버를 찾을 수 없습니다\n$_serverUrl\n$_maxRetries회 시도 후 포기';
     });
   }
 
@@ -150,20 +158,30 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
   }
 
   Widget _buildBody() {
-    // 로딩 중
+    // 로딩 중 — 서버 시작 대기 (부팅 후 50~80초)
     if (_isLoading) {
       return Container(
-        color: const Color(0xFF1A1A2E),
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(
-                width: 48, height: 48,
-                child: CircularProgressIndicator(strokeWidth: 3),
+              SizedBox(
+                width: 64, height: 64,
+                child: CircularProgressIndicator(
+                  strokeWidth: 4,
+                  value: _maxRetries > 0 ? _retryCount / _maxRetries : null,
+                ),
               ),
               const SizedBox(height: 24),
-              Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              const Icon(Icons.router, size: 48, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(_status, style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text(
+                '부팅 후 서버가 시작될 때까지 기다리는 중입니다',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
             ],
           ),
         ),

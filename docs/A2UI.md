@@ -1,11 +1,51 @@
 # A2UI: Agent-to-User Interface
 
-HomeAgent의 동적 UI 전략. 에이전트가 선언적 JSON으로 UI를 기술하면 뷰어가 렌더링한다.
+HomeAgent의 동적 UI 전략. **에이전트가 선언적 JSON으로 UI를 기술하면 뷰어가 렌더링한다.**
+
+## 핵심 개념: "에이전트"는 AI만이 아니다
+
+A2UI에서 **Agent(에이전트)**는 "UI를 결정하는 주체" — AI일 수도 있고, 룰 엔진일 수도 있다.
+
+```
+A2UI = Agent → JSON Surface → Viewer(렌더러)
+
+Agent가 될 수 있는 것:
+  1. Go surface.go (룰 기반) — 시간/상태 보고 JSON 생성 ("나른한 오후예요")
+  2. LLM (DeepSeek/sLLM) — 대화 중 동적 surface 생성 ("디바이스 목록")
+  3. 자동화 규칙 — 이벤트 트리거 시 UI 변경
+```
+
+**"A2UI = AI가 UI를 만든다"가 아니다.** AI는 하나의 Agent일 뿐. 핵심은 **UI가 코드가 아닌 데이터(JSON)로 선언**된다는 것. 코드를 보내면 보안 위험. 데이터를 보내면 안전.
+
+### HomeAgent의 두 A2UI 경로
+
+| 경로 | Agent | 트리거 | 예시 |
+|------|-------|--------|------|
+| **Home Surface** | Go `surface.go` | 시간/상태 변화 | "17:00", "나른한 오후예요 🌇", "기기 2개 온라인" |
+| **Chat Surface** | LLM (DeepSeek/sLLM) | 사용자 질문 | "디바이스 목록" → 카드형 디바이스 리스트 |
+
+둘 다 같은 JSON 포맷 → 같은 genui 렌더러로 표시.
+
+### 실제 흐름
+
+```
+[1] Home Surface (Go 룰 기반, AI 호출 없음)
+    서버 시작 → surface.go가 현재 시각 + 디바이스 상태 조회
+    → JSON 생성 → GET /api/home → Flutter genui 렌더링
+
+[2] Chat Surface (AI 호출)
+    사용자: "디바이스 목록 알려줘"
+    → Go agent.go → DeepSeek API 호출
+    → LLM 응답에 surface 블록 포함
+    → SSE surface_update 이벤트 → Flutter genui 렌더링
+```
 
 ## History
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-03-17 | **genui 통합 성공**: Go→JSON→genui 어댑터(트리 평탄화)→Flutter Widget 렌더링. Text/Card/Icon/Row 변환 해결 |
+| 2026-03-16 | **genui SDK 분석**: A2UI 프로토콜 4종 (surfaceUpdate, beginRendering, dataModelUpdate, deleteSurface). 트리→ID 평탄화 필요 확인 |
 | 2026-02-23 | **Phase 3 완료**: Lit 프론트엔드 + SSE + On/Off 제어. 멀티디바이스(Thread×2, WiFi×1). 방향 전환: OpenClaw 대신 OpenRouter 직접 연동 |
 | 2026-02-20 | HomeAgent 프로젝트 문서 신설 |
 | 2026-02-18 | OpenClaw Canvas A2UI v0.8 구현체 분석 |

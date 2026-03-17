@@ -183,7 +183,24 @@ void main() {
       expect(e.deviceId, 3);
     });
 
-    test('snapshot 이벤트 — devices 리스트', () {
+    test('snapshot 이벤트 — rawJson으로 devices 접근', () {
+      final json = {
+        'type': 'snapshot',
+        'devices': [
+          {'node_id': 6, 'name': 'Plug', 'type': 'on_off_plug', 'available': true, 'state': {'on': false}},
+        ],
+      };
+      final e = SseEvent.fromJson(json);
+
+      expect(e.type, 'snapshot');
+      // Go SSE는 snapshot에서 devices를 최상위에 넣음 (value 아님)
+      expect(e.rawJson['devices'], isA<List>());
+      expect((e.rawJson['devices'] as List).length, 1);
+      // value는 null일 수 있음
+      expect(e.value, isNull);
+    });
+
+    test('snapshot 이벤트 — value에 devices가 있는 경우도 처리', () {
       final e = SseEvent.fromJson({
         'type': 'snapshot',
         'value': {
@@ -194,9 +211,9 @@ void main() {
       });
 
       expect(e.type, 'snapshot');
-      expect(e.value, isA<Map>());
-      final devices = (e.value['devices'] as List);
-      expect(devices.length, 1);
+      // rawJson.devices가 없으면 value.devices fallback
+      final devicesRaw = e.rawJson['devices'] ?? e.value?['devices'];
+      expect(devicesRaw, isA<List>());
     });
 
     test('commission_error 이벤트', () {
@@ -217,6 +234,7 @@ void main() {
       expect(e.deviceId, 0);
       expect(e.key, '');
       expect(e.value, isNull);
+      expect(e.rawJson, isA<Map>());
     });
   });
 

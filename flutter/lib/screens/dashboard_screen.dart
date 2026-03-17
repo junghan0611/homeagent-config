@@ -65,19 +65,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (event) {
         switch (event.type) {
           case 'snapshot':
-            // 초기 스냅샷 — 전체 디바이스 목록
-            if (event.value is Map && event.value['devices'] is List) {
-              final list = (event.value['devices'] as List)
+            // 초기 스냅샷 — rawJson에서 devices 추출 (value가 아닌 최상위)
+            final raw = event.rawJson;
+            final devicesRaw = raw['devices'] ?? event.value?['devices'];
+            if (devicesRaw is List) {
+              final list = devicesRaw
                   .map((d) =>
                       Device.fromJson(Map<String, dynamic>.from(d)))
                   .toList();
+              debugPrint('[Dashboard] SSE snapshot: ${list.length} devices');
               setState(() {
                 _devices = list;
                 _error = null;
               });
+            } else {
+              debugPrint('[Dashboard] SSE snapshot: devices not found in raw=$raw');
             }
             break;
           case 'device_state':
+            debugPrint('[Dashboard] SSE device_state: node=${event.deviceId} key=${event.key} value=${event.value}');
             _handleDeviceState(event);
             break;
           case 'device_added':
@@ -120,9 +126,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final old = _devices[idx];
         final newState = Map<String, dynamic>.from(old.state);
         if (event.key.isNotEmpty) {
-          // SSE key가 원시 path이면 매핑, 아니면 그대로
           final mappedKey = _attrMap[event.key] ?? event.key;
           newState[mappedKey] = event.value;
+          debugPrint('[Dashboard] state update: node=${old.nodeId} $mappedKey=${event.value}');
         }
         _devices[idx] = Device(
           nodeId: old.nodeId,

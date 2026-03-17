@@ -59,12 +59,14 @@ class SseEvent {
   final int deviceId;
   final String key;
   final dynamic value;
+  final Map<String, dynamic> rawJson; // 전체 JSON 보존 (snapshot 등)
 
   SseEvent({
     required this.type,
     this.deviceId = 0,
     this.key = '',
     this.value,
+    this.rawJson = const {},
   });
 
   factory SseEvent.fromJson(Map<String, dynamic> json) {
@@ -73,6 +75,7 @@ class SseEvent {
       deviceId: json['device_id'] ?? 0,
       key: json['key'] ?? '',
       value: json['value'],
+      rawJson: json,
     );
   }
 }

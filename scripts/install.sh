@@ -130,34 +130,43 @@ do_start() {
 
     # 0. 기존 프로세스 전부 정리
     for pattern in "homeagent serve" "MatterServer" "ld-linux.*node" "otbr-agent"; do
-        adb shell "pkill -f '$pattern' 2>/dev/null" || true
+        adb shell "pkill -9 -f '$pattern' 2>/dev/null" || true
     done
     sleep 2
 
-    # 1. Thread HAL 중지 + DNS 설정
-    log "Thread HAL 중지 + DNS..."
+    # 1. Thread HAL 중지 — 연속 8회 kill로 apex crash limit 트리거하여 재시작 방지
+    log "Thread HAL 제거 (8초)..."
     adb shell "stop vendor.threadnetwork_hal 2>/dev/null; stop ot-daemon 2>/dev/null" || true
+    for i in $(seq 1 8); do
+        adb shell "pkill -9 -f threadnetwork-service 2>/dev/null; pkill -9 -f ot-daemon 2>/dev/null" || true
+        sleep 1
+    done
+
+    # 2. SELinux + 디렉토리 + DNS
     adb shell "setenforce 0 2>/dev/null" || true
-    adb shell "mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null" || true
+    adb shell "mount -o rw,remount / 2>/dev/null; \
+        mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null" || true
 
     # DNS overlay (Android에 /etc/resolv.conf 없음 → Go HTTP/TLS 필요)
-    adb shell "mkdir -p $REMOTE/etc_overlay && \
+    log "DNS 설정..."
+    adb shell "mkdir -p $REMOTE/etc_overlay 2>/dev/null && \
         cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null; \
         echo 'nameserver 192.168.0.1
 nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
         mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null" || true
 
-    # 2. OTBR 시작
+    # 3. OTBR 시작 (setsid: init cgroup 자식 정리 방지, REST: :8081)
     log "OTBR 시작..."
     if adb shell "test -f $REMOTE/otbr/otbr-agent" 2>/dev/null; then
         adb shell "sysctl -w net.ipv6.conf.all.forwarding=1 2>/dev/null" || true
-        adb shell "nohup $REMOTE/otbr/otbr-agent \
+        adb shell "setsid $REMOTE/otbr/otbr-agent \
             -I wpan0 -B wlan0 -d7 -v \
             --vendor-name HomeAgent --model-name OTBR \
             --data-path $REMOTE/otbr-data \
+            --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
             'spinel+hdlc+uart:///dev/ttyS5?uart-baudrate=460800' \
             > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
-        sleep 4
+        sleep 5
 
         # Thread 네트워크 구성
         local EXISTING
@@ -174,30 +183,37 @@ nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
         adb shell "$REMOTE/otbr/ot-ctl srp server enable"
 
         # Leader 대기 (최대 30초)
+        log "Thread leader 대기..."
         for i in $(seq 1 10); do
             sleep 3
             local STATE
             STATE=$(adb shell "$REMOTE/otbr/ot-ctl state" 2>/dev/null | head -1 | tr -d '\r')
-            [[ "$STATE" == "leader" || "$STATE" == "router" ]] && { log "Thread: $STATE"; break; }
-            [[ $i -eq 10 ]] && warn "Thread: $STATE (타임아웃)"
+            [[ "$STATE" == "leader" || "$STATE" == "router" ]] && { log "Thread: $STATE (${i}x3초)"; break; }
+            [[ $i -eq 10 ]] && warn "Thread: $STATE (타임아웃 30초)"
         done
 
-        # IPv6 정책 라우팅
+        # IPv6 정책 라우팅 — wpan0 테이블 자동 감지
+        log "IPv6 정책 라우팅..."
+        sleep 2
         local WPAN_TABLE
         WPAN_TABLE=$(adb shell "ip -6 route show table all dev wpan0 2>/dev/null" | \
             grep "table [0-9]" | head -1 | sed 's/.*table \([0-9]*\).*/\1/' || true)
         if [[ -n "$WPAN_TABLE" ]]; then
-            adb shell "ip -6 rule add from all lookup $WPAN_TABLE prio 15000 2>/dev/null" || true
-            log "IPv6 정책 라우팅: table $WPAN_TABLE"
+            if ! adb shell "ip -6 rule show" 2>/dev/null | grep -q "lookup $WPAN_TABLE"; then
+                adb shell "ip -6 rule add from all lookup $WPAN_TABLE prio 15000 2>/dev/null" || true
+            fi
+            log "정책 라우팅: table $WPAN_TABLE"
+        else
+            warn "wpan0 라우트 테이블 감지 실패"
         fi
     else
         warn "OTBR 없음 (건너뜀)"
     fi
 
-    # 3. matterjs-server
+    # 4. matterjs-server (setsid: init cgroup 방지, HOME: Node.js homedir 에러 방지)
     log "matterjs 시작..."
     adb shell "cd $REMOTE/nodejs-bundle && \
-        nohup lib/ld-linux-aarch64.so.1 --library-path lib ./node \
+        HOME=$REMOTE setsid lib/ld-linux-aarch64.so.1 --library-path lib ./node \
         --import ./matterjs-server/remote-ble/ws-bridge.js \
         matterjs-server/node_modules/matter-server/dist/esm/MatterServer.js \
         --storage-path $REMOTE/matter-data --port 5580 \
@@ -205,28 +221,29 @@ nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
         > $REMOTE/matterjs.log 2>&1 &"
     sleep 5
 
-    # 4. Go homeagent (adb shell nohup 블록 방지 — 스크립트 파일 방식)
+    # 5. Go homeagent (setsid: init cgroup 방지, 스크립트 파일 방식으로 adb 블록 방지)
     log "Go 서버 시작..."
     adb shell "cat > $REMOTE/_ha_start.sh << 'GOEOF'
 #!/system/bin/sh
-SSL_CERT_DIR=/etc/security/cacerts \
+setsid sh -c "SSL_CERT_DIR=/etc/security/cacerts \
 HOMEAGENT_HTTP_ADDR=:8080 \
 HOMEAGENT_MATTER_WS=ws://localhost:5580 \
 HOMEAGENT_UI_DIR=/data/local/tmp/ui/dist \
 HOMEAGENT_ALIASES_FILE=/data/local/tmp/aliases.json \
 HOMEAGENT_OT_CTL=/data/local/tmp/otbr/ot-ctl \
-/data/local/tmp/homeagent serve > /data/local/tmp/homeagent.log 2>&1 &
+HOMEAGENT_OTBR_REST=http://127.0.0.1:8081 \
+/data/local/tmp/homeagent serve" > /data/local/tmp/homeagent.log 2>&1 &
 echo done
 GOEOF
 chmod +x $REMOTE/_ha_start.sh"
     adb shell "nohup $REMOTE/_ha_start.sh > /dev/null 2>&1 &" < /dev/null
     sleep 5
 
-    # 5. APK
+    # 6. APK
     log "APK 시작..."
     adb shell "am force-stop com.homeagent.app 2>/dev/null" || true
     sleep 1
-    adb shell "am start -n com.homeagent.app/com.homeagent.homeagent.MainActivity"
+    adb shell "am start -n com.homeagent.app/com.homeagent.homeagent.MainActivity" 2>/dev/null || true
 
     do_status
     log "=== 시작 완료 ==="

@@ -168,15 +168,44 @@ nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
             > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
         sleep 5
 
-        # Thread 네트워크 구성
-        local EXISTING
-        EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
-        if [[ -z "$EXISTING" ]] || [[ "$EXISTING" == "Done" ]] || [[ "$EXISTING" == *"Error"* ]] || [[ "$EXISTING" == *"NotFound"* ]]; then
+        # Thread dataset — 영속성 보장 (android-deploy.sh와 동일 로직)
+        # otbr-agent가 data-path에서 로드할 시간 대기 (최대 10초 재시도)
+        local EXISTING=""
+        log "Thread dataset 로드 대기..."
+        for _try in $(seq 1 5); do
+            EXISTING=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r' || true)
+            if [[ -n "$EXISTING" ]] && [[ "$EXISTING" != "Done" ]] && [[ "$EXISTING" != *"Error"* ]] && [[ "$EXISTING" != *"NotFound"* ]]; then
+                break
+            fi
+            sleep 2
+        done
+
+        if [[ -n "$EXISTING" ]] && [[ "$EXISTING" != "Done" ]] && [[ "$EXISTING" != *"Error"* ]] && [[ "$EXISTING" != *"NotFound"* ]]; then
+            log "기존 dataset 사용 (otbr-data에서 복원됨)"
+            adb shell "echo '$EXISTING' > $REMOTE/otbr-data/dataset-backup.hex"
+        elif adb shell "test -f $REMOTE/otbr-data/dataset-backup.hex" 2>/dev/null; then
+            local BACKUP_HEX
+            BACKUP_HEX=$(adb shell "cat $REMOTE/otbr-data/dataset-backup.hex" | tr -d '\r')
+            if [[ -n "$BACKUP_HEX" ]] && [[ ${#BACKUP_HEX} -gt 20 ]]; then
+                log "백업에서 dataset 복원 (${#BACKUP_HEX}자)..."
+                adb shell "$REMOTE/otbr/ot-ctl dataset set active $BACKUP_HEX"
+                adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
+            else
+                log "새 Thread 네트워크 생성 (백업 없음)..."
+                adb shell "$REMOTE/otbr/ot-ctl dataset init new"
+                adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
+                local NEW_HEX
+                NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
+                [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
+            fi
+        else
             log "새 Thread 네트워크 생성..."
             adb shell "$REMOTE/otbr/ot-ctl dataset init new"
             adb shell "$REMOTE/otbr/ot-ctl dataset commit active"
-        else
-            log "기존 Thread dataset 사용"
+            sleep 1
+            local NEW_HEX
+            NEW_HEX=$(adb shell "$REMOTE/otbr/ot-ctl dataset active -x 2>/dev/null | head -1" | tr -d '\r')
+            [[ -n "$NEW_HEX" ]] && adb shell "echo '$NEW_HEX' > $REMOTE/otbr-data/dataset-backup.hex"
         fi
         adb shell "$REMOTE/otbr/ot-ctl ifconfig up"
         adb shell "$REMOTE/otbr/ot-ctl thread start"

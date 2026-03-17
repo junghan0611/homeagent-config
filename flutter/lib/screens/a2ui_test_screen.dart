@@ -94,14 +94,15 @@ class _A2uiTestScreenState extends State<A2uiTestScreen> {
                   const SizedBox(height: 8),
                   SizedBox(
                     height: 300,
-                    child: GenUiSurface(
-                      host: _a2ui.host,
-                      surfaceId: 'home',
-                      defaultBuilder: (_) => Center(
-                        child: Text(
-                          'Surface 미렌더링\n(genui가 컴포넌트를 인식하지 못함)',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall,
+                    child: _GenUiErrorBoundary(
+                      child: GenUiSurface(
+                        host: _a2ui.host,
+                        surfaceId: 'home',
+                        defaultBuilder: (_) => const Center(
+                          child: Text(
+                            'Surface 미렌더링\n(beginRendering 대기 중 또는 컴포넌트 미인식)',
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                     ),
@@ -159,5 +160,61 @@ class _A2uiTestScreenState extends State<A2uiTestScreen> {
     for (final child in children) {
       _printComp(child, buf, '$indent  ');
     }
+  }
+}
+
+/// genui 렌더링 에러를 잡아서 에러 메시지로 표시
+class _GenUiErrorBoundary extends StatefulWidget {
+  final Widget child;
+  const _GenUiErrorBoundary({required this.child});
+
+  @override
+  State<_GenUiErrorBoundary> createState() => _GenUiErrorBoundaryState();
+}
+
+class _GenUiErrorBoundaryState extends State<_GenUiErrorBoundary> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Flutter 프레임워크 에러 캐치
+    FlutterError.onError = (details) {
+      if (mounted) {
+        setState(() => _error = details.exceptionAsString());
+      }
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('⚠️ genui 렌더링 에러',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(_error!,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => setState(() => _error = null),
+                child: const Text('재시도'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return widget.child;
   }
 }

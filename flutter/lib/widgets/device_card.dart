@@ -113,6 +113,7 @@ class DeviceCard extends StatelessWidget {
         return Icons.thermostat;
       case 'humidity_sensor':
         return Icons.water_drop;
+      case 'on_off_light':
       case 'dimmable_light':
       case 'color_temp_light':
       case 'extended_color_light':

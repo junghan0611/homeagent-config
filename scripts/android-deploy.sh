@@ -110,9 +110,19 @@ cmd_start() {
     # --- 시작 스크립트를 디바이스에 생성 ---
     adb shell "cat > $REMOTE/_start.sh" << STARTEOF
 #!/system/bin/sh
-# matterjs-server (--import로 BLE WS bridge 로드 → :5581)
+# HOME 설정 — Node.js os.homedir() 에러 방지 (init 실행 시 HOME 없음)
+export HOME=$REMOTE
+
+# DNS + TLS 인증서 (Android에 /etc/resolv.conf 없음)
+mkdir -p $REMOTE/etc_overlay 2>/dev/null
+cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null
+echo "nameserver 192.168.0.1
+nameserver 8.8.8.8" > $REMOTE/etc_overlay/resolv.conf
+mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null
+
+# matterjs-server (setsid: init cgroup 방지, --import로 BLE WS bridge 로드 → :5581)
 cd $REMOTE/nodejs-bundle
-lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
+setsid lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
     --import ./matterjs-server/remote-ble/ws-bridge.js \\
     matterjs-server/node_modules/matter-server/dist/esm/MatterServer.js \\
     --storage-path $REMOTE/matter-data \\
@@ -120,17 +130,10 @@ lib/ld-linux-aarch64.so.1 --library-path lib ./node \\
     --bluetooth-adapter 0 \\
     --primary-interface wlan0 \\
     > $REMOTE/matterjs.log 2>&1 &
-sleep 4
+sleep 5
 
-# DNS + TLS 인증서 (Android에 /etc/resolv.conf 없음)
-mkdir -p $REMOTE/etc_overlay
-cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null
-echo "nameserver 192.168.0.1
-nameserver 8.8.8.8" > $REMOTE/etc_overlay/resolv.conf
-mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null
-
-# Go homeagent
-SSL_CERT_DIR=/etc/security/cacerts \\
+# Go homeagent (setsid: init cgroup 방지)
+setsid sh -c "SSL_CERT_DIR=/etc/security/cacerts \\
 HOMEAGENT_HTTP_ADDR=:8080 \\
 HOMEAGENT_MATTER_WS=ws://localhost:5580 \\
 HOMEAGENT_UI_DIR=$REMOTE/ui/dist \\
@@ -143,7 +146,7 @@ ${SLLM_ENDPOINT_ARG} \\
 ${OT_CTL_ARG} \\
 ${WIFI_SSID_ARG} \\
 ${WIFI_PASS_ARG} \\
-$REMOTE/homeagent serve \\
+$REMOTE/homeagent serve" \\
     > $REMOTE/homeagent.log 2>&1 &
 
 echo "started"
@@ -235,15 +238,18 @@ cmd_thread_start() {
 
     log "Thread Border Router 시작..."
 
-    # 1. Android Thread HAL 중지
+    # 1. Android Thread HAL 중지 — 연속 kill로 apex crash limit 트리거하여 재시작 방지
     adb shell "stop vendor.threadnetwork_hal 2>/dev/null; stop ot-daemon 2>/dev/null" || true
-    sleep 1
+    log "Thread HAL 제거 (8초)..."
+    for i in $(seq 1 8); do
+        adb shell "pkill -9 -f threadnetwork-service 2>/dev/null; pkill -9 -f ot-daemon 2>/dev/null" || true
+        sleep 1
+    done
 
     # 2. SELinux permissive + 디바이스 권한 + 필요 디렉토리
     adb shell "setenforce 0; chmod 666 $RCP_DEVICE" || true
-    # Android: /run, /tmp 없을 수 있음 → otbr-agent 소켓/lockfile 경로 필요
     adb shell "mount -o rw,remount / 2>/dev/null || true; \
-        mkdir -p /run /tmp 2>/dev/null || true" || true
+        mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null || true" || true
 
     # 3. IPv6 forwarding (wpan0 TUN은 otbr-agent가 자동 생성)
     adb shell "
@@ -251,17 +257,17 @@ cmd_thread_start() {
         sysctl -w net.ipv6.conf.all.forwarding=1
     "
 
-    # 4. otbr-agent 시작
+    # 4. otbr-agent 시작 (setsid: init cgroup 자식 정리 방지, REST: :8081)
     adb shell "pkill -f otbr-agent 2>/dev/null" || true
     sleep 1
-    adb shell "mkdir -p $REMOTE/otbr-data"
-    adb shell "nohup $REMOTE/otbr/otbr-agent \
+    adb shell "setsid $REMOTE/otbr/otbr-agent \
         -I $WPAN_IF -B $BACKBONE_IF -d7 -v \
         --vendor-name HomeAgent --model-name OTBR \
         --data-path $REMOTE/otbr-data \
+        --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
         'spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$RCP_BAUDRATE' \
         > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
-    sleep 3
+    sleep 5
 
     # 5. otbr-agent 확인
     if ! adb shell "pgrep -f otbr-agent" > /dev/null 2>&1; then

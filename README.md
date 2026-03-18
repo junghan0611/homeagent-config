@@ -62,7 +62,7 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
 | RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap | ZBDongle-E (USB) | ✅ Production |
 | RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
 
-### Cross-Platform Verification (2026-03-16)
+### Cross-Platform Verification (2026-03-18)
 
 Same codebase, both platforms, same devices — verified end-to-end.
 
@@ -70,6 +70,7 @@ Same codebase, both platforms, same devices — verified end-to-end.
 |---|---|---|
 | WiFi Plug (BLE→WiFi→CASE) | ✅ | ✅ |
 | Thread Door Sensor (BLE→Thread→CASE) | ✅ | ✅ |
+| Thread Light Bulb (BLE→Thread→CASE) | ✅ | — |
 | On/Off Control + SSE realtime | ✅ | ✅ |
 | Contact State + SSE realtime | ✅ | ✅ |
 | LLM Agent (cloud) | ✅ | ✅ |
@@ -78,27 +79,50 @@ Same codebase, both platforms, same devices — verified end-to-end.
 | Swagger UI (/docs) | ✅ | ✅ |
 | A2A Protocol (/.well-known/agent.json) | ✅ | ✅ |
 | Thread auto-start on deploy | ✅ | N/A (systemd) |
+| **Power-cycle resilience** | ✅ | ✅ |
+| **No internet → local control** | ✅ | ✅ |
+
+### Boot Resilience (2026-03-18)
+
+Power off → power on → everything starts automatically. No human intervention.
+
+```
+  Power on
+    └── sys.boot_completed=1
+         └── homeagent.rc (init service)
+              └── start.sh
+                   ├── [1] kill Android Thread HAL (stop + 8s kill loop)
+                   ├── [2] OTBR start (UART flush + 3 retries)
+                   │        └── Thread dataset 3-layer protection:
+                   │             1st: otbr-data restore (automatic)
+                   │             2nd: dataset-backup.hex (file fallback)
+                   │             3rd: new network (last resort + matter-data reset)
+                   ├── [3] matterjs-server (:5580, :5581 BLE relay)
+                   ├── [4] Go homeagent (:8080)
+                   └── [5] APK auto-launch
+```
+
+Verified: physical power cycle → Thread leader + 3 devices reconnected in ~80 seconds.
 
 ### Test Coverage
 
 ```
-  Go:      85 tests (hub 48, matter 11, otbr 9, a2a 6, config 0)
-  Flutter: 67 tests (api_client 24, device_card 15, widget 2, ble_relay 26)
-  Total:   152 tests, 0 failures
+  Go:      98 tests (hub 48, matter 16, otbr 14, agent 14, a2a 6)
+  Flutter: 53 tests (api_client, device_card, ble_relay, a2ui_adapter)
+  Total:   151 tests, 0 failures
 ```
 
-### Codebase Sharing — 96% Common
+### Codebase
 
 ```
-  Shared (96%)                    Platform-specific (4%)
-  ────────────────────            ────────────────────
-  Go server      4,900+ lines    Flutter Android   804 lines
-  Go tests       2,000+ lines      (BLE relay + WebView)
-  Lit UI         1,418 lines     Flutter Linux     201 lines
-  matterjs WS      766 lines       (native widgets)
+  Go server       3,800 lines     Go tests         2,775 lines
+  Flutter app     3,128 lines     Flutter tests    1,034 lines
+  Lit UI          1,567 lines     Scripts          2,500 lines
+  matterjs WS      766 lines     Documentation    3,340 lines
 
-  Go server:  0 lines of platform-specific code
-  Lit UI:     0 lines of platform-specific code
+  Go binary: 9.5MB (android/arm64, static)
+  APK:       51MB  (Flutter + WebView shell)
+  OTBR:      7MB   (NDK arm64 cross-build)
 ```
 
 ---
@@ -161,6 +185,10 @@ Multi-platform. Same hub, different hardware.
 - [x] **Thread on RK3576** — OTBR + ESP32-H2 + IPv6 policy routing (bd-277.1)
 - [x] **A2UI theme invariant** — CSS variable single path, 0 violations (ha-2y3)
 - [x] **Cross-platform verification** — WiFi + Thread devices on both RPi5 and RK3576
+- [x] **Thread dataset persistence** — 3-layer protection: auto-restore, backup file, new+reset
+- [x] **OTBR boot resilience** — UART flush + 3 retries (Android HAL conflict solved)
+- [x] **Power-cycle auto-start** — init service, ~80s to full stack, no human intervention
+- [x] **One-command deployment** — `./run.sh android deploy` or `install.sh` for field use
 - [ ] **Yocto homeagent recipe** — SD flash → boot → works (ha-2ua)
 
 ### Phase 4: Agent Intelligence ← **current**
@@ -328,7 +356,12 @@ OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 
 ```bash
 ./run.sh android deploy    # Build + push + start (one command)
-# or step by step:
+./run.sh android status    # Verify: processes, ports, Thread state
+
+# After deploy: power off → power on → auto-start (~80s)
+# No adb needed after initial install.
+
+# Step-by-step if needed:
 ./run.sh apk-build         # Build APK
 ./run.sh otbr-build        # Build OTBR (NDK arm64)
 ./run.sh android start     # Start matterjs + Go
@@ -354,14 +387,22 @@ OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 
 ---
 
-## Demo (2026-02-23)
+## Demo (2026-03-18)
 
-3 devices managed simultaneously:
+RK3576 Android board, power-cycle resilient. 3 Matter devices:
 
 | Device | Protocol | Features |
 |--------|----------|----------|
-| Tuya Door Sensor ×2 | Matter over Thread | Real-time open/close events |
-| Tapo Smart Plug ×1 | Matter over WiFi | On/Off toggle control |
+| Tuya Door Sensor | Matter over Thread | Real-time open/close events via SSE |
+| Tapo Smart Plug | Matter over WiFi | On/Off toggle control |
+| Matter Light Bulb | Matter over Thread | On/Off + Brightness + Color temp |
+
+**No internet required** for device control. LLM chat needs internet (DeepSeek API).
+
+```
+Power off → Power on → 80 seconds → All devices reconnected
+No adb, no SSH, no human — just plug in power.
+```
 
 LLM Agent:
 ```
@@ -407,8 +448,8 @@ homeagent-config/
 
 | Target | Command | Output |
 |--------|---------|--------|
-| Go arm64 | `./run.sh go-build` | `go/bin/homeagent` (8.5MB) |
-| Flutter APK | `./run.sh apk-build` | `app-release.apk` (44MB) |
+| Go arm64 | `./run.sh go-build` | `go/bin/homeagent` (9.5MB) |
+| Flutter APK | `./run.sh apk-build` | `app-release.apk` (51MB) |
 | OTBR arm64 | `./run.sh otbr-build` | `dist/otbr-arm64/` (7MB) |
 | UI | `cd ui && npm run build` | `ui/dist/` (40KB) |
 | Full bundle | `./run.sh bundle` | `dist/homeagent-bundle-arm64/` |

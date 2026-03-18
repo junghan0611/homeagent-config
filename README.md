@@ -464,6 +464,7 @@ homeagent-config/
 | Doc | Content |
 |-----|---------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture Decision Records — why Go, Flutter, matterjs |
+| [docs/MATTER.md](docs/MATTER.md) | Matter SDK strategy — why matter.js, runtime analysis, roadmap |
 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs RK3576 stack comparison |
 | [docs/THREAD.md](docs/THREAD.md) | Thread Border Router (Yocto + Android NDK) |
 | [docs/API.md](docs/API.md) | REST API spec (8 commands, OHF compatible) |

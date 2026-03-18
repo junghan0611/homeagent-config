@@ -155,18 +155,36 @@ do_start() {
 nameserver 8.8.8.8' > $REMOTE/etc_overlay/resolv.conf; \
         mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null" || true
 
-    # 3. OTBR 시작 (setsid: init cgroup 자식 정리 방지, REST: :8081)
+    # 3. OTBR 시작 (재시도 최대 3회 — 부팅 시 HAL 잔여 UART 데이터로 Init 실패 대비)
     log "OTBR 시작..."
     if adb shell "test -f $REMOTE/otbr/otbr-agent" 2>/dev/null; then
         adb shell "sysctl -w net.ipv6.conf.all.forwarding=1 2>/dev/null" || true
-        adb shell "setsid $REMOTE/otbr/otbr-agent \
-            -I wpan0 -B wlan0 -d7 -v \
-            --vendor-name HomeAgent --model-name OTBR \
-            --data-path $REMOTE/otbr-data \
-            --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
-            'spinel+hdlc+uart:///dev/ttyS5?uart-baudrate=460800' \
-            > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
-        sleep 5
+
+        local OTBR_STARTED=false
+        for _otbr_try in $(seq 1 3); do
+            # UART 버퍼 플러시 — HAL이 남긴 잔여 spinel 프레임 제거
+            adb shell "cat /dev/ttyS5 > /dev/null 2>&1 &
+                sleep 1; kill \$! 2>/dev/null
+                stty -F /dev/ttyS5 raw 2>/dev/null" || true
+
+            adb shell "setsid $REMOTE/otbr/otbr-agent \
+                -I wpan0 -B wlan0 -d7 -v \
+                --vendor-name HomeAgent --model-name OTBR \
+                --data-path $REMOTE/otbr-data \
+                --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
+                'spinel+hdlc+uart:///dev/ttyS5?uart-baudrate=460800' \
+                > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
+            sleep 5
+
+            if adb shell "pgrep -f otbr-agent" > /dev/null 2>&1; then
+                OTBR_STARTED=true
+                break
+            fi
+            warn "otbr-agent 시작 실패 (시도 $_otbr_try/3) — 재시도..."
+            adb shell "pkill -f otbr-agent 2>/dev/null" || true
+            sleep 2
+        done
+        [[ "$OTBR_STARTED" != "true" ]] && warn "otbr-agent 3회 시도 모두 실패"
 
         # Thread dataset — 영속성 보장 (android-deploy.sh와 동일 로직)
         local EXISTING="" CREATED_NEW=false

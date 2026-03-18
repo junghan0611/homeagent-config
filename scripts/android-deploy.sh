@@ -257,23 +257,40 @@ cmd_thread_start() {
         sysctl -w net.ipv6.conf.all.forwarding=1
     "
 
-    # 4. otbr-agent 시작 (setsid: init cgroup 자식 정리 방지, REST: :8081)
+    # 4. otbr-agent 시작 (재시도 최대 3회 — 부팅 시 HAL 잔여 UART 데이터로 Init 실패 대비)
     adb shell "pkill -f otbr-agent 2>/dev/null" || true
     sleep 1
-    adb shell "setsid $REMOTE/otbr/otbr-agent \
-        -I $WPAN_IF -B $BACKBONE_IF -d7 -v \
-        --vendor-name HomeAgent --model-name OTBR \
-        --data-path $REMOTE/otbr-data \
-        --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
-        'spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$RCP_BAUDRATE' \
-        > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
-    sleep 5
+
+    local OTBR_STARTED=false
+    for _otbr_try in $(seq 1 3); do
+        # UART 버퍼 플러시 — HAL이 남긴 잔여 spinel 프레임 제거
+        adb shell "cat $RCP_DEVICE > /dev/null 2>&1 &
+            sleep 1; kill \$! 2>/dev/null
+            stty -F $RCP_DEVICE raw 2>/dev/null" || true
+
+        adb shell "setsid $REMOTE/otbr/otbr-agent \
+            -I $WPAN_IF -B $BACKBONE_IF -d7 -v \
+            --vendor-name HomeAgent --model-name OTBR \
+            --data-path $REMOTE/otbr-data \
+            --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
+            'spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$RCP_BAUDRATE' \
+            > $REMOTE/otbr-agent.log 2>&1 &" < /dev/null
+        sleep 5
+
+        if adb shell "pgrep -f otbr-agent" > /dev/null 2>&1; then
+            OTBR_STARTED=true
+            break
+        fi
+        warn "otbr-agent 시작 실패 (시도 $_otbr_try/3) — UART 재플러시 후 재시도..."
+        adb shell "pkill -f otbr-agent 2>/dev/null" || true
+        sleep 2
+    done
 
     # 5. otbr-agent 확인
-    if ! adb shell "pgrep -f otbr-agent" > /dev/null 2>&1; then
-        err "otbr-agent 시작 실패. 로그: adb shell cat $REMOTE/otbr-agent.log"
+    if [[ "$OTBR_STARTED" != "true" ]]; then
+        err "otbr-agent 3회 시도 모두 실패. 로그: adb shell cat $REMOTE/otbr-agent.log"
     fi
-    log "otbr-agent 시작됨"
+    log "otbr-agent 시작됨 (시도 $_otbr_try/3)"
 
     # 6. Thread dataset — 영속성 보장
     # otbr-agent가 data-path에서 로드할 시간 대기 (최대 10초 재시도)

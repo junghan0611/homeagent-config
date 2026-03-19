@@ -66,7 +66,8 @@ type Hub struct {
 	commissioning int32 // atomic: 0=idle, 1=in_progress
 
 	// Device aliases
-	aliases map[int]DeviceAlias
+	aliases   map[int]DeviceAlias
+	startTime time.Time
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -102,6 +103,7 @@ func New(cfg *config.Config) *Hub {
 		sseClients: make(map[chan Event]struct{}),
 		agent:      ag,
 		aliases:    loadAliases(cfg.AliasesFile),
+		startTime:  time.Now(),
 	}
 }
 
@@ -552,6 +554,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/home", h.handleHomeSurface)
 	mux.HandleFunc("/api/events", h.handleSSE)
 	mux.HandleFunc("/api/thread/status", h.handleThreadStatus)
+	mux.HandleFunc("/api/system", h.handleSystem)
 }
 
 func (h *Hub) handleThreadStatus(w http.ResponseWriter, r *http.Request) {
@@ -575,14 +578,69 @@ func (h *Hub) handleThreadStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+func (h *Hub) handleSystem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	info := map[string]interface{}{
+		"version":    "0.9.0",
+		"uptime":     time.Since(h.startTime).Round(time.Second).String(),
+		"uptime_sec": int(time.Since(h.startTime).Seconds()),
+		"devices":    len(h.Devices()),
+	}
+
+	// Thread 상태 (best-effort)
+	if h.otbr != nil {
+		if status, err := h.otbr.GetStatus(); err == nil {
+			info["thread"] = status
+		}
+	}
+
+	// LLM 설정
+	if h.agent != nil {
+		info["llm"] = map[string]interface{}{
+			"enabled":  true,
+			"endpoint": h.cfg.LLMEndpoint,
+			"model":    h.cfg.LLMModel,
+		}
+	} else {
+		info["llm"] = map[string]interface{}{"enabled": false}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
 func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {
 	// /api/devices 정확히 매치 (trailing slash 없음)
 	if r.URL.Path != "/api/devices" {
 		http.NotFound(w, r)
 		return
 	}
+
+	devices := h.Devices()
+
+	// 쿼리 필터: ?room=거실&type=on_off_plug
+	roomFilter := r.URL.Query().Get("room")
+	typeFilter := r.URL.Query().Get("type")
+	if roomFilter != "" || typeFilter != "" {
+		var filtered []DeviceState
+		for _, d := range devices {
+			if roomFilter != "" && d.Room != roomFilter {
+				continue
+			}
+			if typeFilter != "" && d.Type != typeFilter {
+				continue
+			}
+			filtered = append(filtered, d)
+		}
+		devices = filtered
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.Devices())
+	json.NewEncoder(w).Encode(devices)
 }
 
 // handleDeviceByID handles GET/DELETE /api/devices/:node_id
@@ -625,9 +683,54 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		h.handleDeleteDevice(w, r, nodeID)
 
+	case http.MethodPatch:
+		h.handlePatchDevice(w, r, nodeID)
+
 	default:
-		http.Error(w, "GET or DELETE only", http.StatusMethodNotAllowed)
+		http.Error(w, "GET, DELETE, or PATCH only", http.StatusMethodNotAllowed)
 	}
+}
+
+// handlePatchDevice updates device name/room and persists to aliases.json
+func (h *Hub) handlePatchDevice(w http.ResponseWriter, r *http.Request, nodeID int) {
+	var req struct {
+		Name *string `json:"name,omitempty"`
+		Room *string `json:"room,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"잘못된 JSON 형식"}`, http.StatusBadRequest)
+		return
+	}
+
+	h.mu.Lock()
+	dev, ok := h.devices[nodeID]
+	if !ok {
+		h.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "디바이스를 찾을 수 없습니다"})
+		return
+	}
+	if req.Name != nil {
+		dev.Name = *req.Name
+	}
+	if req.Room != nil {
+		dev.Room = *req.Room
+	}
+	// aliases 내부 맵도 갱신
+	h.aliases[nodeID] = DeviceAlias{Name: dev.Name, Room: dev.Room}
+	h.mu.Unlock()
+
+	// aliases.json 영속
+	if err := h.saveAliases(); err != nil {
+		log.Printf("[hub] aliases 저장 실패: %v", err)
+	}
+
+	// SSE 이벤트
+	h.eventCh <- Event{Type: "device_updated", DeviceID: nodeID, Value: dev}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dev)
 }
 
 // handleDeleteDevice removes a device from the fabric

@@ -44,3 +44,27 @@ func loadAliases(path string) map[int]DeviceAlias {
 	log.Printf("[aliases] loaded %d device alias(es)", len(aliases))
 	return aliases
 }
+
+// saveAliases writes device aliases to aliases.json
+func (h *Hub) saveAliases() error {
+	if h.cfg.AliasesFile == "" {
+		return nil
+	}
+
+	h.mu.RLock()
+	raw := make(map[string]DeviceAlias)
+	for id, alias := range h.aliases {
+		raw[fmt.Sprintf("%d", id)] = alias
+	}
+	h.mu.RUnlock()
+
+	data, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("aliases marshal: %w", err)
+	}
+	if err := os.WriteFile(h.cfg.AliasesFile, data, 0644); err != nil {
+		return fmt.Errorf("aliases write: %w", err)
+	}
+	log.Printf("[aliases] saved %d alias(es) to %s", len(raw), h.cfg.AliasesFile)
+	return nil
+}

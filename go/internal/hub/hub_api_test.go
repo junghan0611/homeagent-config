@@ -1487,3 +1487,190 @@ func TestHandleMatterEvent_NodeUpdated_UnknownNode(t *testing.T) {
 		t.Error("node_updated should not register unknown nodes")
 	}
 }
+
+// --- PATCH /api/devices/:id ---
+
+func TestAPIPatchDevice_NameRoom(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// PATCH name + room
+	body := strings.NewReader(`{"name":"부엌 플러그","room":"부엌"}`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/devices/8", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var dev DeviceState
+	json.NewDecoder(resp.Body).Decode(&dev)
+	if dev.Name != "부엌 플러그" {
+		t.Errorf("expected name '부엌 플러그', got %q", dev.Name)
+	}
+	if dev.Room != "부엌" {
+		t.Errorf("expected room '부엌', got %q", dev.Room)
+	}
+
+	// Verify in-memory state
+	h.mu.RLock()
+	d := h.devices[8]
+	h.mu.RUnlock()
+	if d.Name != "부엌 플러그" || d.Room != "부엌" {
+		t.Error("device state not updated in memory")
+	}
+}
+
+func TestAPIPatchDevice_PartialUpdate(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// PATCH only name (room should stay)
+	body := strings.NewReader(`{"name":"새 이름"}`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/devices/1", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	var dev DeviceState
+	json.NewDecoder(resp.Body).Decode(&dev)
+	if dev.Name != "새 이름" {
+		t.Errorf("name should be '새 이름', got %q", dev.Name)
+	}
+	// Room should keep original value from testHub
+	if dev.Room != "현관" {
+		t.Errorf("room should stay '현관', got %q", dev.Room)
+	}
+}
+
+func TestAPIPatchDevice_NotFound(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	body := strings.NewReader(`{"name":"x"}`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/devices/999", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIPatchDevice_BadJSON(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	body := strings.NewReader(`not json`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/devices/8", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// --- GET /api/devices?filter ---
+
+func TestAPIGetDevices_FilterRoom(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, _ := http.Get(srv.URL + "/api/devices?room=" + "현관")
+	defer resp.Body.Close()
+
+	var devices []DeviceState
+	json.NewDecoder(resp.Body).Decode(&devices)
+
+	for _, d := range devices {
+		if d.Room != "현관" {
+			t.Errorf("filter failed: expected room '현관', got %q (node %d)", d.Room, d.NodeID)
+		}
+	}
+}
+
+func TestAPIGetDevices_FilterType(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, _ := http.Get(srv.URL + "/api/devices?type=on_off_plug")
+	defer resp.Body.Close()
+
+	var devices []DeviceState
+	json.NewDecoder(resp.Body).Decode(&devices)
+
+	for _, d := range devices {
+		if d.Type != "on_off_plug" {
+			t.Errorf("filter failed: expected type 'on_off_plug', got %q (node %d)", d.Type, d.NodeID)
+		}
+	}
+}
+
+func TestAPIGetDevices_FilterNoMatch(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, _ := http.Get(srv.URL + "/api/devices?room=없는방")
+	defer resp.Body.Close()
+
+	var devices []DeviceState
+	json.NewDecoder(resp.Body).Decode(&devices)
+
+	if len(devices) != 0 {
+		t.Errorf("expected 0 devices for nonexistent room, got %d", len(devices))
+	}
+}
+
+// --- GET /api/system ---
+
+func TestAPISystem(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var info map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&info)
+
+	if info["version"] != "0.9.0" {
+		t.Errorf("expected version '0.9.0', got %v", info["version"])
+	}
+	if info["devices"] == nil {
+		t.Error("expected 'devices' field")
+	}
+	if info["uptime"] == nil {
+		t.Error("expected 'uptime' field")
+	}
+}

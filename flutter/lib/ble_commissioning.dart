@@ -221,12 +221,13 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     final pwController = TextEditingController();
     bool isThread = false;
     bool ssidLoaded = false;
+    bool wifiAutoDetected = false;
 
     return showDialog<({String pairingCode, String ssid, String password, bool isThread})>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-        // WiFi SSID 자동 로드 (1회만)
+        // WiFi SSID+PW 자동 로드 (1회만)
         if (!ssidLoaded) {
           ssidLoaded = true;
           () async {
@@ -236,11 +237,15 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
               final response = await request.close();
               final body = await response.transform(const SystemEncoding().decoder).join();
               final data = jsonDecode(body);
-              if (data['ssid'] != null && (data['ssid'] as String).isNotEmpty) {
-                setDialogState(() {
+              setDialogState(() {
+                if (data['ssid'] != null && (data['ssid'] as String).isNotEmpty) {
                   ssidController.text = data['ssid'];
-                });
-              }
+                }
+                if (data['password'] != null && (data['password'] as String).isNotEmpty) {
+                  pwController.text = data['password'];
+                }
+                wifiAutoDetected = data['auto'] == true;
+              });
             } catch (_) {}
           }();
         }
@@ -277,16 +282,16 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: codeController,
-                decoration: const InputDecoration(
-                  labelText: 'Pairing Code',
-                  hintText: '11자리 숫자 (예: 0073-043-4300)',
-                ),
-              ),
               // WiFi 모드일 때만 SSID/PW 입력
               if (!isThread) ...[
-                const SizedBox(height: 12),
+                if (wifiAutoDetected) ...[
+                  const SizedBox(height: 8),
+                  Chip(
+                    avatar: const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    label: Text('WiFi 자동 감지됨: ${ssidController.text}'),
+                  ),
+                ],
+                const SizedBox(height: 8),
                 TextField(
                   controller: ssidController,
                   decoration: InputDecoration(
@@ -300,7 +305,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                 TextField(
                   controller: pwController,
                   decoration: const InputDecoration(
-                    labelText: 'WiFi Password',
+                    labelText: 'WiFi 비밀번호',
                   ),
                   obscureText: true,
                 ),
@@ -311,6 +316,15 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                   style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey),
                 ),
               ],
+              // Pairing Code — 항상 표시
+              const SizedBox(height: 12),
+              TextField(
+                controller: codeController,
+                decoration: const InputDecoration(
+                  labelText: '페어링 코드',
+                  hintText: '숫자만 입력 (예: 05641540754)',
+                ),
+              ),
             ],
           ),
         ),

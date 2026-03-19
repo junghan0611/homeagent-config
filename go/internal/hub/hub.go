@@ -732,8 +732,10 @@ func (h *Hub) handleWifiInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ssid := h.cfg.WifiSSID
+	password := h.cfg.WifiPassword
+	auto := ssid != "" && password != ""
 
-	// 2순위: Android dumpsys wifi
+	// 2순위: Android dumpsys wifi → 현재 연결 SSID
 	if ssid == "" {
 		if out, err := exec.Command("dumpsys", "wifi").Output(); err == nil {
 			s := string(out)
@@ -746,8 +748,34 @@ func (h *Hub) handleWifiInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// SSID 있고 비밀번호 없으면 → WifiConfigStore.xml에서 매칭
+	if ssid != "" && password == "" {
+		const xmlPath = "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
+		if data, err := os.ReadFile(xmlPath); err == nil {
+			content := string(data)
+			target := "\"" + ssid + "\""
+			if idx := strings.Index(content, target); idx != -1 {
+				rest := content[idx:]
+				if pskIdx := strings.Index(rest, "PreSharedKey"); pskIdx != -1 {
+					pskRest := rest[pskIdx:]
+					if q1 := strings.Index(pskRest, "&quot;"); q1 != -1 {
+						q1 += 6
+						if q2 := strings.Index(pskRest[q1:], "&quot;"); q2 > 0 {
+							password = pskRest[q1 : q1+q2]
+							auto = true
+						}
+					}
+				}
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"ssid": ssid})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ssid":     ssid,
+		"password": password,
+		"auto":     auto,
+	})
 }
 
 func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {

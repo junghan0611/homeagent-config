@@ -13,7 +13,7 @@
 library;
 
 import 'dart:async';
-import 'dart:convert' show jsonEncode;
+import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -220,11 +220,31 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     final ssidController = TextEditingController();
     final pwController = TextEditingController();
     bool isThread = false;
+    bool ssidLoaded = false;
 
     return showDialog<({String pairingCode, String ssid, String password, bool isThread})>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) {
+        // WiFi SSID 자동 로드 (1회만)
+        if (!ssidLoaded) {
+          ssidLoaded = true;
+          () async {
+            try {
+              final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+              final request = await client.getUrl(Uri.parse('${widget.serverUrl}/api/wifi-info'));
+              final response = await request.close();
+              final body = await response.transform(const SystemEncoding().decoder).join();
+              final data = jsonDecode(body);
+              if (data['ssid'] != null && (data['ssid'] as String).isNotEmpty) {
+                setDialogState(() {
+                  ssidController.text = data['ssid'];
+                });
+              }
+            } catch (_) {}
+          }();
+        }
+        return AlertDialog(
         title: const Text('Matter 디바이스 페어링'),
         content: SingleChildScrollView(
           child: Column(
@@ -269,8 +289,11 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: ssidController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'WiFi SSID',
+                    suffixIcon: ssidController.text.isNotEmpty
+                        ? const Icon(Icons.wifi, color: Colors.green, size: 20)
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -313,7 +336,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
             child: const Text('커미셔닝 시작'),
           ),
         ],
-      )),
+      );
+    }),
     );
   }
 

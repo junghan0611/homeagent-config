@@ -1,3 +1,6 @@
+import 'dart:convert' show jsonEncode;
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../main.dart';
@@ -65,6 +68,13 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           ListTile(
+            leading: const Icon(Icons.lan),
+            title: const Text('Thread On-Network 커미셔닝'),
+            subtitle: const Text('PIN + IPv6으로 직접 연결 (BLE 없이)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showOnNetworkDialog(context, serverUrl),
+          ),
+          ListTile(
             leading: const Icon(Icons.science),
             title: const Text('A2UI 테스트'),
             subtitle: const Text('genui Surface 렌더링 검증'),
@@ -98,6 +108,83 @@ class SettingsScreen extends StatelessWidget {
             leading: Icon(Icons.info_outline),
             title: Text('버전'),
             subtitle: Text('0.1.0'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showOnNetworkDialog(BuildContext context, String serverUrl) {
+    final pinController = TextEditingController();
+    final ipController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Thread On-Network 커미셔닝'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pinController,
+              decoration: const InputDecoration(
+                labelText: 'Setup PIN Code',
+                hintText: '예: 56204424',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ipController,
+              decoration: const InputDecoration(
+                labelText: 'IPv6 주소 (선택)',
+                hintText: '비우면 mDNS 자동 탐색',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final pin = int.tryParse(pinController.text.trim());
+              if (pin == null) return;
+              Navigator.pop(ctx);
+
+              final ip = ipController.text.trim();
+              try {
+                final client = HttpClient();
+                final body = <String, dynamic>{'pin_code': pin};
+                if (ip.isNotEmpty) body['ip_addr'] = ip;
+                final request = await client.postUrl(
+                  Uri.parse('$serverUrl/api/commission-on-network'),
+                );
+                request.headers.contentType = ContentType.json;
+                request.write(jsonEncode(body));
+                final response = await request.close();
+                await response.drain();
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(
+                      response.statusCode == 202
+                          ? '커미셔닝 요청 전송됨 (PIN: $pin)'
+                          : '요청 실패: HTTP ${response.statusCode}',
+                    )),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('에러: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('시작'),
           ),
         ],
       ),

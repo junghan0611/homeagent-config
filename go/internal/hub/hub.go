@@ -546,6 +546,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/commission", h.handleCommission)
 	mux.HandleFunc("/api/commission-on-network", h.handleCommissionOnNetwork)
 	mux.HandleFunc("/api/wifi-credentials", h.handleWifiCredentials)
+	mux.HandleFunc("/api/wifi-info", h.handleWifiInfo)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
 	mux.HandleFunc("/api/chat", h.handleChat)
 	mux.HandleFunc("/api/home", h.handleHomeSurface)
@@ -722,6 +723,31 @@ func (h *Hub) handleWifiCredentials(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] wifi credentials set: %s", req.SSID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Hub) handleWifiInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ssid := h.cfg.WifiSSID
+
+	// 2순위: Android dumpsys wifi
+	if ssid == "" {
+		if out, err := exec.Command("dumpsys", "wifi").Output(); err == nil {
+			s := string(out)
+			if idx := strings.Index(s, "SSID: \""); idx != -1 {
+				start := idx + 7
+				if end := strings.Index(s[start:], "\""); end > 0 {
+					ssid = s[start : start+end]
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"ssid": ssid})
 }
 
 func (h *Hub) handleCommission(w http.ResponseWriter, r *http.Request) {

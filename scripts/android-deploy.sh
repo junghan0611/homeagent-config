@@ -255,6 +255,16 @@ cmd_thread_start() {
     adb shell "mount -o rw,remount / 2>/dev/null || true; \
         mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null || true" || true
 
+    # HAL 완전 죽었는지 확인
+    local HAL_CHECK
+    HAL_CHECK=$(adb shell "pgrep -f 'ot-daemon|threadnetwork' 2>/dev/null" | tr -d '\r' || true)
+    if [[ -n "$HAL_CHECK" ]]; then
+        warn "HAL 잔여 프로세스 — 추가 3초 대기 + kill"
+        sleep 3
+        adb shell "pkill -9 -f ot-daemon 2>/dev/null; pkill -9 -f threadnetwork 2>/dev/null" || true
+        sleep 1
+    fi
+
     # 3. IPv6 forwarding (wpan0 TUN은 otbr-agent가 자동 생성)
     adb shell "
         ip tuntap del dev $WPAN_IF mode tun 2>/dev/null
@@ -267,9 +277,9 @@ cmd_thread_start() {
 
     local OTBR_STARTED=false
     for _otbr_try in $(seq 1 3); do
-        # UART 버퍼 플러시 — HAL이 남긴 잔여 spinel 프레임 제거
+        # UART 버퍼 플러시 (3초) — HAL이 남긴 잔여 spinel 프레임 제거
         adb shell "cat $RCP_DEVICE > /dev/null 2>&1 &
-            sleep 1; kill \$! 2>/dev/null
+            sleep 3; kill \$! 2>/dev/null
             stty -F $RCP_DEVICE raw 2>/dev/null" || true
 
         adb shell "setsid $REMOTE/otbr/otbr-agent \
@@ -285,9 +295,9 @@ cmd_thread_start() {
             OTBR_STARTED=true
             break
         fi
-        warn "otbr-agent 시작 실패 (시도 $_otbr_try/3) — UART 재플러시 후 재시도..."
+        warn "otbr-agent 시작 실패 (시도 $_otbr_try/3) — 5초 후 재시도..."
         adb shell "pkill -f otbr-agent 2>/dev/null" || true
-        sleep 2
+        sleep 5
     done
 
     # 5. otbr-agent 확인

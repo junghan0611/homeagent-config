@@ -753,7 +753,7 @@ func (h *Hub) handleWifiInfo(w http.ResponseWriter, r *http.Request) {
 		const xmlPath = "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
 		if data, err := os.ReadFile(xmlPath); err == nil {
 			content := string(data)
-			target := "\"" + ssid + "\""
+			target := "&quot;" + ssid + "&quot;"
 			if idx := strings.Index(content, target); idx != -1 {
 				rest := content[idx:]
 				if pskIdx := strings.Index(rest, "PreSharedKey"); pskIdx != -1 {

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -654,6 +656,9 @@ func (h *Hub) handleDeleteDevice(w http.ResponseWriter, r *http.Request, nodeID 
 	delete(h.devices, nodeID)
 	h.mu.Unlock()
 
+	// Peer 스토리지 정리 (matter-server GC 미비 workaround)
+	h.cleanPeerStorage(nodeID)
+
 	log.Printf("[hub] node %d removed", nodeID)
 	h.eventCh <- Event{
 		Type:     "device_removed",
@@ -662,6 +667,32 @@ func (h *Hub) handleDeleteDevice(w http.ResponseWriter, r *http.Request, nodeID 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// cleanPeerStorage removes leftover peer files from matter-data
+// matter-server doesn't clean up nodes.peerN.* files on remove_node
+func (h *Hub) cleanPeerStorage(nodeID int) {
+	storagePath := h.cfg.MatterStoragePath
+	fabricDir := filepath.Join(storagePath, "server-1-fff1")
+	peerPrefix := fmt.Sprintf("nodes.peer%d.", nodeID)
+
+	entries, err := os.ReadDir(fabricDir)
+	if err != nil {
+		log.Printf("[hub] peer storage dir not found: %s (%v)", fabricDir, err)
+		return
+	}
+
+	count := 0
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), peerPrefix) {
+			if err := os.Remove(filepath.Join(fabricDir, e.Name())); err == nil {
+				count++
+			}
+		}
+	}
+	if count > 0 {
+		log.Printf("[hub] cleaned peer%d storage: %d files removed", nodeID, count)
+	}
 }
 
 func (h *Hub) handleWifiCredentials(w http.ResponseWriter, r *http.Request) {

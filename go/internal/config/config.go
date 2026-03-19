@@ -27,6 +27,9 @@ type Config struct {
 	// Device aliases
 	AliasesFile string
 
+	// Matter storage path (matterjs --storage-path)
+	MatterStoragePath string
+
 	// OTBR ot-ctl path (for Thread dataset retrieval)
 	OtCtlPath string
 
@@ -48,7 +51,8 @@ func Load() *Config {
 		LLMEndpoint:  envOr("HOMEAGENT_LLM_ENDPOINT", "https://api.deepseek.com/v1"),
 		LLMAPIKey:    llmAPIKey(), // HOMEAGENT_LLM_API_KEY → DEEPSEEK_API_KEY → OPENROUTER_API_KEY
 		LLMModel:     envOr("HOMEAGENT_LLM_MODEL", "deepseek-chat"),
-		AliasesFile:   envOr("HOMEAGENT_ALIASES_FILE", "/opt/homeagent/aliases.json"),
+		MatterStoragePath: envOr("HOMEAGENT_MATTER_STORAGE", "matter-data"),
+		AliasesFile:       envOr("HOMEAGENT_ALIASES_FILE", "/opt/homeagent/aliases.json"),
 		OtCtlPath:     envOr("HOMEAGENT_OT_CTL", "ot-ctl"),
 		OtbrRESTURL:   envOr("HOMEAGENT_OTBR_REST", "http://localhost:8081"),
 		SLLMEndpoint:  envOr("HOMEAGENT_SLLM_ENDPOINT", "http://localhost:8082"),

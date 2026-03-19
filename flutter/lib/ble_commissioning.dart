@@ -123,23 +123,26 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
 
     setState(() {
       _commissioning = true;
-      _status = '🔄 WiFi 정보 설정 중...';
+      _status = info.isThread ? '🔄 Thread 커미셔닝 준비 중...' : '🔄 WiFi 정보 설정 중...';
     });
 
     try {
-      // 2. WiFi credentials를 Go 서버에 설정
-      await _setWifiCredentials(info.ssid, info.password);
+      // 2. WiFi credentials — Thread일 때는 스킵
+      if (!info.isThread) {
+        await _setWifiCredentials(info.ssid, info.password);
+      }
       setState(() => _status = '🔄 커미셔닝 요청 중...');
 
       // 3. Commission 요청 (network_only=false → matterjs가 BLE 커미셔닝)
       await _requestCommission(info.pairingCode);
 
+      final networkType = info.isThread ? 'Thread' : 'WiFi';
       setState(() => _status = '⏳ 커미셔닝 진행 중...\n'
-          'BLE 스캔 → BTP 핸드셰이크 → PASE 인증 → WiFi 설정\n'
+          'BLE 스캔 → BTP 핸드셰이크 → PASE 인증 → $networkType 설정\n'
           '(60~120초 소요, 디바이스가 페어링 모드인지 확인)');
 
       // SSE로 커미셔닝 결과 추적
-      _listenCommissionResult(info.pairingCode, info.ssid);
+      _listenCommissionResult(info.pairingCode, info.isThread ? 'Thread' : info.ssid);
     } catch (e) {
       setState(() {
         _commissioning = false;
@@ -210,44 +213,81 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     );
   }
 
-  /// WiFi + Pairing Code 입력 다이얼로그
-  Future<({String pairingCode, String ssid, String password})?>
+  /// WiFi/Thread + Pairing Code 입력 다이얼로그
+  Future<({String pairingCode, String ssid, String password, bool isThread})?>
       _showCommissionDialog() async {
-    final codeController = TextEditingController(text: '0564-154-0754');
-    final ssidController = TextEditingController(text: 'TP-Link_E426');
-    final pwController = TextEditingController(text: '93666367');
+    final codeController = TextEditingController();
+    final ssidController = TextEditingController();
+    final pwController = TextEditingController();
+    bool isThread = false;
 
-    return showDialog<({String pairingCode, String ssid, String password})>(
+    return showDialog<({String pairingCode, String ssid, String password, bool isThread})>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         title: const Text('Matter 디바이스 페어링'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Thread/WiFi 선택
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.wifi),
+                      label: const Text('WiFi'),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: !isThread ? Theme.of(ctx).colorScheme.primaryContainer : null,
+                      ),
+                      onPressed: () => setDialogState(() => isThread = false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.cable),
+                      label: const Text('Thread'),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: isThread ? Theme.of(ctx).colorScheme.primaryContainer : null,
+                      ),
+                      onPressed: () => setDialogState(() => isThread = true),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: codeController,
                 decoration: const InputDecoration(
                   labelText: 'Pairing Code',
-                  hintText: 'MT:... 또는 11자리 숫자',
-                  helperText: 'QR코드(MT:...) 또는 Manual Code',
+                  hintText: '11자리 숫자 (예: 0073-043-4300)',
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ssidController,
-                decoration: const InputDecoration(
-                  labelText: 'WiFi SSID',
+              // WiFi 모드일 때만 SSID/PW 입력
+              if (!isThread) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ssidController,
+                  decoration: const InputDecoration(
+                    labelText: 'WiFi SSID',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: pwController,
-                decoration: const InputDecoration(
-                  labelText: 'WiFi Password',
+                const SizedBox(height: 8),
+                TextField(
+                  controller: pwController,
+                  decoration: const InputDecoration(
+                    labelText: 'WiFi Password',
+                  ),
+                  obscureText: true,
                 ),
-                obscureText: true,
-              ),
+              ] else ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Thread 디바이스는 WiFi 정보가 필요 없습니다.\nOTBR에서 자동으로 Thread Dataset이 주입됩니다.',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                ),
+              ],
             ],
           ),
         ),
@@ -260,18 +300,20 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
             onPressed: () {
               final code =
                   codeController.text.replaceAll(' ', '').replaceAll('-', '');
-              if (code.isNotEmpty && ssidController.text.isNotEmpty) {
+              final needsWifi = !isThread;
+              if (code.isNotEmpty && (!needsWifi || ssidController.text.isNotEmpty)) {
                 Navigator.pop(ctx, (
                   pairingCode: code,
                   ssid: ssidController.text,
                   password: pwController.text,
+                  isThread: isThread,
                 ));
               }
             },
             child: const Text('커미셔닝 시작'),
           ),
         ],
-      ),
+      )),
     );
   }
 

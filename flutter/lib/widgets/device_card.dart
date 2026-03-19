@@ -8,11 +8,13 @@ import '../theme.dart';
 class DeviceCard extends StatelessWidget {
   final Device device;
   final void Function(int nodeId, String command, {dynamic value})? onCommand;
+  final void Function(int nodeId)? onDelete;
 
   const DeviceCard({
     super.key,
     required this.device,
     this.onCommand,
+    this.onDelete,
   });
 
   @override
@@ -28,6 +30,9 @@ class DeviceCard extends StatelessWidget {
                   device.nodeId,
                   device.isOn ? 'off' : 'on',
                 ),
+        onLongPress: onDelete == null
+            ? null
+            : () => _showDeleteDialog(context),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -194,6 +199,33 @@ class DeviceCard extends StatelessWidget {
           ),
           onChanged: (_) {},
         ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${device.name} 삭제'),
+        content: Text(
+          '노드 ${device.nodeId}을 삭제하시겠습니까?\n\n'
+          '디바이스가 오프라인이면 공장초기화 후\n재페어링이 필요합니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete?.call(device.nodeId);
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('삭제'),
+          ),
+        ],
       ),
     );
   }

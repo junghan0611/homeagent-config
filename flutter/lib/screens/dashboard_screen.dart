@@ -134,6 +134,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _onDelete(int nodeId) {
+    _api.deleteDevice(nodeId).then((_) {
+      debugPrint('[Dashboard] device $nodeId deleted');
+      // SSE device_removed가 올 거지만, 즉시 반영
+      setState(() {
+        _devices.removeWhere((d) => d.nodeId == nodeId);
+      });
+    }).catchError((e) {
+      debugPrint('[Dashboard] delete error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $e')),
+        );
+      }
+    });
+  }
+
   void _onCommand(int nodeId, String command, {dynamic value}) {
     _api.sendCommand(nodeId, command, value: value).then((_) {
       // SSE의 key가 원시 path("1/6/0")로 오는 문제 우회:
@@ -232,6 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     (context, index) => DeviceCard(
                       device: _devices[index],
                       onCommand: _onCommand,
+                      onDelete: _onDelete,
                     ),
                     childCount: _devices.length,
                   ),

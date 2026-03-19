@@ -113,6 +113,10 @@ cmd_start() {
 # HOME 설정 — Node.js os.homedir() 에러 방지 (init 실행 시 HOME 없음)
 export HOME=$REMOTE
 
+# WiFi 설정 복사 (Go wifi-info API용 — SELinux로 원본 직접 읽기 불가)
+cp /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml $REMOTE/WifiConfigStore.xml 2>/dev/null
+chmod 644 $REMOTE/WifiConfigStore.xml 2>/dev/null
+
 # DNS + TLS 인증서 (Android에 /etc/resolv.conf 없음)
 mkdir -p $REMOTE/etc_overlay 2>/dev/null
 cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null

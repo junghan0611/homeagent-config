@@ -750,7 +750,12 @@ func (h *Hub) handleWifiInfo(w http.ResponseWriter, r *http.Request) {
 
 	// SSID 있고 비밀번호 없으면 → WifiConfigStore.xml에서 매칭
 	if ssid != "" && password == "" {
-		const xmlPath = "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
+		// 1차: start.sh가 복사한 로컬 사본 (SELinux 우회)
+		// 2차: 원본 (adb root에서 직접 실행 시)
+		xmlPath := "/data/local/tmp/WifiConfigStore.xml"
+		if _, err := os.Stat(xmlPath); err != nil {
+			xmlPath = "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
+		}
 		if data, err := os.ReadFile(xmlPath); err == nil {
 			content := string(data)
 			target := "&quot;" + ssid + "&quot;"

@@ -1674,3 +1674,34 @@ func TestAPISystem(t *testing.T) {
 		t.Error("expected 'uptime' field")
 	}
 }
+
+// --- GET /dashboard ---
+
+func TestAPIDashboardRedirect(t *testing.T) {
+	h := testHub(t)
+	h.cfg.MatterWSURL = "ws://localhost:5580"
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // don't follow redirects
+		},
+	}
+
+	resp, err := client.Get(srv.URL + "/dashboard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("expected 307, got %d", resp.StatusCode)
+	}
+
+	loc := resp.Header.Get("Location")
+	if loc != "http://localhost:5580" {
+		t.Errorf("expected redirect to http://localhost:5580, got %q", loc)
+	}
+}

@@ -3,13 +3,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../ble_commissioning.dart';
+import '../matter_client.dart';
 import '../theme.dart';
 
-/// 커미셔닝 화면 — 단일 페어링 버튼
-/// WiFi/Thread 선택은 BleCommissioningScreen 다이얼로그에서 처리
+/// 커미셔닝 화면 — 플랫폼별 분기
+///
+/// Android: BLE 커미셔닝 (기존 BleCommissioningScreen)
+/// Linux: On-network 커미셔닝 (matterjs WS 직접)
 class CommissionScreen extends StatelessWidget {
   final String serverUrl;
-  const CommissionScreen({super.key, required this.serverUrl});
+  final MatterWsClient? matterClient;
+
+  const CommissionScreen({
+    super.key,
+    required this.serverUrl,
+    this.matterClient,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +30,6 @@ class CommissionScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Spacer(),
-            // 안내
             Icon(Icons.add_link, size: 64, color: AppTheme.orange.withAlpha(180)),
             const SizedBox(height: 24),
             Text(
@@ -31,39 +39,134 @@ class CommissionScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'WiFi 디바이스와 Thread 디바이스 모두 지원합니다.',
+              Platform.isAndroid
+                  ? 'WiFi 디바이스와 Thread 디바이스 모두 지원합니다.'
+                  : 'Linux에서는 네트워크 커미셔닝만 지원합니다.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
 
-            // 메인 버튼
-            FilledButton.icon(
-              icon: const Icon(Icons.bluetooth_searching, size: 24),
-              label: const Text('디바이스 페어링', style: TextStyle(fontSize: 16)),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed: Platform.isAndroid
-                  ? () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => BleCommissioningScreen(serverUrl: serverUrl),
-                        ),
-                      )
-                  : null,
-            ),
-
-            if (!Platform.isAndroid) ...[
-              const SizedBox(height: 12),
-              Text(
-                'BLE 커미셔닝은 Android에서만 가능합니다.\nLinux에서는 WebView 모드를 사용하세요.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
-                textAlign: TextAlign.center,
+            if (Platform.isAndroid) ...[
+              // Android: BLE 커미셔닝
+              FilledButton.icon(
+                icon: const Icon(Icons.bluetooth_searching, size: 24),
+                label: const Text('BLE 디바이스 페어링', style: TextStyle(fontSize: 16)),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BleCommissioningScreen(serverUrl: serverUrl),
+                  ),
+                ),
               ),
             ],
 
+            // 모든 플랫폼: On-network 커미셔닝 (setup code)
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.lan, size: 24),
+              label: Text(
+                Platform.isAndroid ? '네트워크 커미셔닝' : '디바이스 페어링',
+                style: const TextStyle(fontSize: 16),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: () => _showNetworkCommissionDialog(context),
+            ),
+
             const Spacer(flex: 2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNetworkCommissionDialog(BuildContext context) {
+    final codeController = TextEditingController();
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('네트워크 커미셔닝'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'QR코드의 Setup Code 또는 Manual Pairing Code를 입력하세요.\n'
+                'BLE 없이 IP 네트워크로 직접 페어링합니다.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                decoration: const InputDecoration(
+                  labelText: 'Setup Code',
+                  hintText: '숫자만 입력 (예: 05641540754)',
+                ),
+                enabled: !loading,
+              ),
+              if (loading) ...[
+                const SizedBox(height: 16),
+                const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                const Text('커미셔닝 진행 중... (최대 3분)', style: TextStyle(fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      final code = codeController.text.replaceAll('-', '').trim();
+                      if (code.isEmpty) return;
+
+                      setDialogState(() => loading = true);
+
+                      try {
+                        if (matterClient != null && matterClient!.connected.value) {
+                          // WS 직접 커미셔닝
+                          await matterClient!.commissionWithCode(code, networkOnly: true);
+                        } else {
+                          // Go REST 폴백
+                          final client = HttpClient();
+                          final request = await client.postUrl(
+                            Uri.parse('$serverUrl/api/commission'),
+                          );
+                          request.headers.contentType = ContentType.json;
+                          request.write('{"code":"$code","network_only":true}');
+                          final response = await request.close();
+                          await response.drain();
+                          client.close();
+                        }
+
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('디바이스 페어링 성공!')),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => loading = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('페어링 실패: $e')),
+                          );
+                        }
+                      }
+                    },
+              child: const Text('시작'),
+            ),
           ],
         ),
       ),

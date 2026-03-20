@@ -555,6 +555,9 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/events", h.handleSSE)
 	mux.HandleFunc("/api/thread/status", h.handleThreadStatus)
 	mux.HandleFunc("/api/system", h.handleSystem)
+
+	// matterjs-server 대시보드 리다이렉트 — ws://host:5580 → http://host:5580
+	mux.HandleFunc("/dashboard", h.handleDashboardRedirect)
 }
 
 func (h *Hub) handleThreadStatus(w http.ResponseWriter, r *http.Request) {
@@ -611,6 +614,15 @@ func (h *Hub) handleSystem(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(info)
+}
+
+// handleDashboardRedirect redirects to matterjs-server dashboard
+// Converts ws://host:port → http://host:port
+func (h *Hub) handleDashboardRedirect(w http.ResponseWriter, r *http.Request) {
+	wsURL := h.cfg.MatterWSURL // e.g. "ws://localhost:5580"
+	dashURL := strings.Replace(wsURL, "ws://", "http://", 1)
+	dashURL = strings.Replace(dashURL, "wss://", "https://", 1)
+	http.Redirect(w, r, dashURL, http.StatusTemporaryRedirect)
 }
 
 func (h *Hub) handleDevices(w http.ResponseWriter, r *http.Request) {

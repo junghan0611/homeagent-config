@@ -23,6 +23,25 @@
 3. **Flutter = 유니버셜 클라이언트** — Linux(RPi5) 먼저 → Android 지원. Android 종속 금지
 4. **HA Kotlin→Dart** — ha-android 핵심 로직을 Flutter로 포팅, 오픈소스 기여 경로
 
+### 아키텍처 결정 (2026-03-20 확정, 흔들리지 않음)
+
+```
+APP → Go Server (:8080) → matterjs-server (:5580) → Matter 디바이스
+```
+
+- **앱은 Go 서버만 안다** (단일 진입점, 이중 경로 금지)
+- **Go가 matterjs WS를 래핑** (13/31 명령, 42% 커버리지)
+- **Go가 확장 API 추가** (aliases, LLM, A2UI, OTBR, SSE)
+- **matter_client.dart는 예비용** (경량 모드/디버깅, 현재 미사용)
+
+### 현재 상태 (2026-03-20)
+
+- Go: 18 REST 엔드포인트, 117 PASS
+- Flutter: 89 PASS, 디바이스 상세 화면 완성
+- WS 커버리지: 13/31 (42%)
+- RPi5 + Android 양쪽 배포 동작
+- 에이전트4 리서치: HA 생태계 5개 분석 완료 (office/research-*.md)
+
 ---
 
 # 현재 디바이스 확인
@@ -190,14 +209,18 @@ br list --status open            # 열린 이슈만
 
 | 문서 | 내용 |
 |------|------|
-| [docs/API.md](docs/API.md) | REST API 명세 (8 commands, SSE, OHF 호환) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ADR 5개 — Go, Flutter, matterjs, 프로세스 분리, 부팅 복원 |
+| [docs/MATTER.md](docs/MATTER.md) | Matter SDK 전략, 런타임 실측(65MB), matter.js 로드맵 |
+| [docs/BUILD.md](docs/BUILD.md) | 빌드 환경, 리소스, 개발 머신 + 빌드 팜 분업 |
+| [docs/GO-MATTERJS-OVERLAP.md](docs/GO-MATTERJS-OVERLAP.md) | Go↔matterjs 중복 분석 — 프록시+확장 유지 판단 |
+| [docs/API.md](docs/API.md) | REST API 명세 (18 엔드포인트, SSE, OHF 호환) |
 | [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS 빌드 가이드 |
 | [docs/A2UI.md](docs/A2UI.md) | 에이전트 주도 동적 UI 전략 |
 | [docs/A2A.md](docs/A2A.md) | 에이전트 프로토콜, Constitutional AI |
 | [docs/THREAD.md](docs/THREAD.md) | OTBR NDK 빌드 가이드 + 7개 CMake 이슈 해결 |
 | [docs/INSTALL.md](docs/INSTALL.md) | Android 보드 설치 가이드 (원커맨드 배포) |
 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs Android 전체 스택 비교 |
-| [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter 버전 매트릭스 |
+| [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter/matter-server 버전 매트릭스 |
 
 ## Landing the Plane (세션 종료)
 

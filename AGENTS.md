@@ -5,6 +5,26 @@
 
 ---
 
+## Phase 로드맵 (흔들리지 않는 방향)
+
+| Phase | 이름 | 핵심 | 상태 |
+|-------|------|------|------|
+| 1 | Yocto + Protocol | RPi5에서 Matter 동작 증명 | ✅ |
+| 2 | Matter + Go Controller | 동작하는 스마트홈 허브 (v0.8) | ✅ |
+| 3 | Cross-platform | 같은 코드, 다른 하드웨어 (RPi5 + RK3576) | ✅ |
+| **4** | **HA Ecosystem + Flutter-first** | **matterjs-server 위임, Go 확장, Flutter 유니버셜 클라이언트** | **← current** |
+| 5 | Agent Intelligence | sLLM, A2UI, A2A, EdgeAI | |
+| 6 | Production + Scale | 양산, RK3588, Hailo NPU | |
+
+### Phase 4 원칙
+
+1. **matterjs-server = Matter 프로토콜 엔진** — Matter 로직은 건드리지 않음, HA 호환 유지
+2. **Go 서버 = 확장 레이어** — 커스텀 REST, aliases, sLLM, A2UI, 클라이언트별 API
+3. **Flutter = 유니버셜 클라이언트** — Linux(RPi5) 먼저 → Android 지원. Android 종속 금지
+4. **HA Kotlin→Dart** — ha-android 핵심 로직을 Flutter로 포팅, 오픈소스 기여 경로
+
+---
+
 # 현재 디바이스 확인
 
 ``` bash
@@ -139,134 +159,6 @@ br list --status open            # 열린 이슈만
 | TTS/Telegram/채팅봇 직접 구현 | OpenClaw 생태계에 위임 | 보안 + 생태계 전략 |
 | br 이슈 범위 밖 코드 수정 | 이슈에 명시된 파일/기능만 수정 | 병렬 작업 충돌 방지 |
 | 인바리언트 위반 "임시" 코드 | 없음. 인바리언트는 예외 없음 | 되돌리기 비용 > 처음부터 준수 |
-
----
-
-## 프로젝트 현황 (2026-03-12)
-
-### 동작 중인 스택
-
-```
-Flutter App (Android APK / ivi-homescreen)
-  └── WebView ──▶ Go HomeAgent v0.8 (:8080)
-                   ├── REST API: /api/devices, /api/devices/:id, /api/devices/command (8 cmds)
-                   │             /api/commission, /api/chat, /api/home, /api/events(SSE)
-                   ├── LLM: OpenRouter (Gemini 2.5 Flash) — 자연어→디바이스 제어
-                   ├── A2UI: 시간 기반 Home Surface + LLM 동적 surfaceUpdate
-                   ├── Matter WS (단일 ReadLoop) → matterjs-server (:5580)
-                   ├── BLE relay: Flutter ↔ matterjs WS (:5581) — Android BLE 중계
-                   ├── OTBR: ot-br-posix NDK arm64 — Thread Border Router
-                   └── Lit UI: 대시보드, 디바이스 카드, 채팅 패널, A2UI 렌더러
-```
-
-### 크로스플랫폼 빌드 상태
-
-| 타겟 | 빌드 | 상태 |
-|------|------|------|
-| Flutter Linux Desktop | `./run.sh flutter-build` | ✅ 동작 |
-| Flutter Android APK | `./run.sh apk-build` | ✅ 46MB (targetSdk=35, Android 15) |
-| Go Android arm64 | `./run.sh apk-go` | ✅ 7.2MB |
-| OTBR NDK arm64 | `./run.sh otbr-build` | ✅ otbr-agent 6.9MB + ot-ctl 12KB |
-| Yocto flutter-engine | `bitbake flutter-engine` | ✅ 빌드 성공 |
-| Yocto 전체 이미지 | `bitbake homeagent-app` | 🔲 ivi-homescreen 빌드 미완 |
-
-### REST API 명령 (8개)
-
-`POST /api/devices/command` — `on`, `off`, `set_level`, `set_color`, `set_color_temp`, `set_thermostat`, `lock`, `unlock`
-
-상세: [docs/API.md](docs/API.md)
-
-### 디바이스 (aliases.json)
-- Node 1: 현관문 센서 (현관, contact_sensor, Thread)
-- Node 7: 화장실 센서 (화장실, contact_sensor, Thread)
-- Node 8: 거실 플러그 (거실, on_off_plug, WiFi)
-
-### 배포 / 개발 명령
-
-```bash
-# RPi5 배포 (Yocto 기준)
-./run.sh ha-deploy          # 전체 빌드+배포+시작 (원커맨드)
-./run.sh ha-status / ha-logs
-
-# Android 보드 배포 (범용 — RK3576/RK3588/etc.)
-./run.sh android deploy     # 전체 빌드+배포+시작
-./run.sh android start      # 서비스만 (재)시작
-./run.sh android stop       # 서비스 종료
-./run.sh android status     # 상태 확인
-./run.sh android logs [t]   # 로그 (matter/go/otbr/all)
-./run.sh android thread-start   # OTBR + Thread 네트워크
-./run.sh android thread-status  # Thread 상태
-
-# Flutter 개발
-./run.sh flutter-run         # Linux desktop hot reload
-./run.sh flutter-server      # Go 서버 로컬 (Matter 없이)
-
-# 개별 빌드
-./run.sh apk-build           # 릴리즈 APK
-./run.sh apk-go              # Go arm64 크로스컴파일
-./run.sh otbr-build          # OTBR NDK arm64 빌드
-
-# Yocto
-./run.sh shell               # FHS 빌드 환경 진입
-./run.sh bb-cmd <recipe>     # bitbake 실행
-
-# 번들
-./run.sh bundle              # Go+Node.js+matterjs arm64 번들
-```
-
-### 주요 파일
-
-| 경로 | 역할 |
-|------|------|
-| `go/internal/hub/hub.go` | 중앙 코디네이터 (상태, SSE, REST 8 commands, 에이전트) |
-| `go/internal/hub/surface.go` | 시간 기반 A2UI Home Surface 생성 |
-| `go/internal/agent/agent.go` | LLM 에이전트 (Chat + ReactToEvent) |
-| `go/internal/matter/client.go` | matterjs-server WS 클라이언트 (단일 ReadLoop) |
-| `go/internal/config/config.go` | 환경변수 설정 |
-| `go/internal/a2a/executor.go` | A2A 에이전트 실행기 (HomeAgentExecutor) |
-| `flutter/lib/main.dart` | 플랫폼 감지 → ShellNative / ShellWebView |
-| `flutter/lib/shell_webview.dart` | Android/Yocto WebView 셸 |
-| `flutter/lib/shell_native.dart` | Linux desktop Flutter 위젯 |
-| `flutter/lib/ble_relay.dart` | BLE 바이트 중계 (Flutter ↔ matterjs WS) |
-| `flutter/lib/ble_commissioning.dart` | BLE 커미셔닝 UI (Plan B) |
-| `ui/src/app.ts` | Lit 대시보드 (SSE, 테마, A2UI) |
-| `scripts/android-deploy.sh` | Android 보드 배포/실행/Thread 관리 |
-| `scripts/build-otbr.sh` | OTBR NDK arm64 재현 빌드 |
-| `aliases.json` | 디바이스 별칭/방 매핑 |
-| `flake.nix` | Yocto FHS + dev shell (Android SDK 포함) |
-
-### 현재 벽: Android BLE 커미셔닝 (bd-3cw)
-
-**RPi5에서는 matterjs로 BLE 커미셔닝 성공. Android에서만 실패.**
-
-근본 원인 발견 (2026-03-12):
-- **FlutterBluePlus `setNotifyValue(true)` → notify(0x0001) 우선 선택**
-- Matter BTP C2는 indicate(0x0002) 전용
-- CCCD 0x0001 → 디바이스가 indication 미전송 → BTP handshake timeout
-- **수정 완료**: `forceIndications: true` (커밋 a860b5c)
-- **보드 검증 대기**
-
-BLE relay 흐름 + WS 프로토콜 스키마: `office/ws-protocol-schema.md` (git 미추적)
-
-### BLE relay 아키텍처 (Android BLE 커미셔닝)
-
-```
-Flutter APK                    matterjs-server
-(flutter_blue_plus)            (Matter 프로토콜)
-     │                              │
-     │◀── WS :5581 ──────────────▶│
-     │     ble_scan_start/stop      │
-     │     ble_connect/disconnect   │
-     │     ble_write (C1 바이트)    │
-     │     ble_data (C2 바이트)     │
-     │                              │
-     │   Flutter = BLE 바이트 셔틀  │
-     │   matterjs = 프로토콜 전체   │
-     │   (BTP/PASE/WiFi/CASE)       │
-```
-
-noble(Linux HCI)은 Android에서 동작 불가 → Flutter BLE가 대신 BLE 물리 계층 담당.
-프로토콜 로직은 matterjs-server가 전부 처리. Flutter는 바이트를 중계만 함.
 
 ---
 

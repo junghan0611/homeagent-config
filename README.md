@@ -191,20 +191,36 @@ Multi-platform. Same hub, different hardware.
 - [x] **One-command deployment** — `./run.sh android deploy` or `install.sh` for field use
 - [ ] **Yocto homeagent recipe** — SD flash → boot → works (ha-2ua)
 
-### Phase 4: Agent Intelligence ← **current**
+### Phase 4: HA Ecosystem + Flutter-first ← **current**
+
+The platform. matterjs-server as protocol engine, Go as extension layer, Flutter as the universal client.
+
+**Principle**: Linux (RPi5) first → Android second. Never Android-locked.
+
+- [ ] **matterjs-server delegation** — Matter protocol fully delegated, Go removes duplicated logic
+- [ ] **Flutter Linux app** — RPi5 ivi-homescreen native UI (not WebView), matterjs WS direct
+- [ ] **HA protocol compat** — Flutter app speaks OHF WebSocket API to matterjs-server
+- [ ] **HA Kotlin→Dart port** — Core logic (WS subscription, state management) from ha-android
+- [ ] **Go extension API** — Custom REST for clients (aliases, sLLM, A2UI, OTBR integration)
+- [ ] **matterjs dashboard exposure** — :5580 web UI as complementary interface
+- [ ] **Recipe support** — Sample recipe integration (durable-iot-migrate compat)
+- [ ] **Yocto homeagent recipe** — SD flash → boot → works (ha-2ua)
+- [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
+- [x] **REST API 14 endpoints** — CRUD + commission + system + filters
+
+### Phase 5: Agent Intelligence
 
 The mind. AI that understands context.
 
 - [x] **A2A Phase 0+1** — AgentCard + JSON-RPC + Task lifecycle + SSE streaming
 - [x] **sLLM benchmark** — Qwen3-0.6B: baseline 42% → LoRA 88% (action 100%)
 - [x] **GGUF pipeline** — LoRA merge → f16 → Q4_K_M (379MB, ARM 4s/req)
-- [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
 - [ ] sLLM Go integration — llama-server HTTP → agent.go fallback chain (ha-17d)
 - [ ] A2UI native renderer — JSON Surface → Flutter Widget (bd-i6o)
 - [ ] OpenClaw integration — TTS/Telegram/chat delegated (ha-3nc)
 - [ ] EdgeAI Runtime: Hailo + ONNX/TFLite (ha-3lu)
 
-### Phase 5: Production + Scale
+### Phase 6: Production + Scale
 
 The product. Ship it.
 

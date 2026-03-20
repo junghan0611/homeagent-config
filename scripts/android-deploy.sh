@@ -304,10 +304,15 @@ cmd_thread_start() {
 
     local OTBR_STARTED=false
     for _otbr_try in $(seq 1 3); do
-        # UART 버퍼 플러시 (3초) — HAL이 남긴 잔여 spinel 프레임 제거
+        # UART 완전 초기화 — 3단계
+        # (1) UART 라인 리셋 (baudrate + raw mode)
+        adb shell "stty -F $RCP_DEVICE 460800 raw -echo -echoe -echok -echoctl 2>/dev/null" || true
+        # (2) HDLC sync bytes → RCP HDLC 디코더 프레임 경계 동기화
+        adb shell "printf '\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e' > $RCP_DEVICE" || true
+        sleep 1
+        # (3) RX 버퍼 비우기 (5초) — RCP 잔여 패킷 드레인
         adb shell "cat $RCP_DEVICE > /dev/null 2>&1 &
-            sleep 3; kill \$! 2>/dev/null
-            stty -F $RCP_DEVICE raw 2>/dev/null" || true
+            sleep 5; kill \$! 2>/dev/null" || true
 
         adb shell "setsid $REMOTE/otbr/otbr-agent \
             -I $WPAN_IF -B $BACKBONE_IF -d7 -v \

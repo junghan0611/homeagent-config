@@ -1700,9 +1700,13 @@ func TestAPIDashboardRedirect(t *testing.T) {
 		t.Fatalf("expected 307, got %d", resp.StatusCode)
 	}
 
+	// Location should use the request's host IP + matterjs port (5580)
 	loc := resp.Header.Get("Location")
-	if loc != "http://localhost:5580" {
-		t.Errorf("expected redirect to http://localhost:5580, got %q", loc)
+	if !strings.HasSuffix(loc, ":5580") {
+		t.Errorf("expected redirect to :5580, got %q", loc)
+	}
+	if !strings.HasPrefix(loc, "http://127.0.0.1:5580") {
+		t.Errorf("expected redirect to use request host IP, got %q", loc)
 	}
 }
 

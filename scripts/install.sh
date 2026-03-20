@@ -290,11 +290,23 @@ chmod +x $REMOTE/_ha_start.sh"
     adb shell "nohup $REMOTE/_ha_start.sh > /dev/null 2>&1 &" < /dev/null
     sleep 5
 
-    # 6. APK
-    log "APK 시작..."
-    adb shell "am force-stop com.homeagent.app 2>/dev/null" || true
-    sleep 1
-    adb shell "am start -n com.homeagent.app/com.homeagent.homeagent.MainActivity" 2>/dev/null || true
+    # 6. APK — 패키지 매니저 초기화 대기 후 시작
+    log "APK 시작 (패키지 확인 대기 중)..."
+    adb shell '
+APK_PKG="com.homeagent.app"
+APK_ACTIVITY="com.homeagent.homeagent.MainActivity"
+for i in $(seq 1 30); do
+    if pm path $APK_PKG > /dev/null 2>&1; then
+        am force-stop $APK_PKG 2>/dev/null
+        sleep 1
+        am start -n $APK_PKG/$APK_ACTIVITY > /dev/null 2>&1
+        echo "APK started (attempt $i)"
+        break
+    fi
+    echo "pm not ready, waiting... ($i/30)"
+    sleep 2
+done
+'
 
     do_status
     log "=== 시작 완료 ==="

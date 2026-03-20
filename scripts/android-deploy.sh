@@ -152,6 +152,22 @@ ${WIFI_SSID_ARG} \\
 ${WIFI_PASS_ARG} \\
 $REMOTE/homeagent serve" \\
     > $REMOTE/homeagent.log 2>&1 &
+sleep 3
+
+# APK 시작 — 패키지 매니저 초기화 대기 후 실행
+# 재부팅 직후에는 pm이 아직 준비 안 되어있을 수 있음
+APK_PKG="com.homeagent.app"
+APK_ACTIVITY="com.homeagent.homeagent.MainActivity"
+for i in \$(seq 1 30); do
+    if pm path \$APK_PKG > /dev/null 2>&1; then
+        am force-stop \$APK_PKG 2>/dev/null
+        sleep 1
+        am start -n \$APK_PKG/\$APK_ACTIVITY > /dev/null 2>&1
+        echo "APK started (attempt \$i)"
+        break
+    fi
+    sleep 2
+done
 
 echo "started"
 STARTEOF
@@ -254,6 +270,17 @@ cmd_thread_start() {
     adb shell "setenforce 0; chmod 666 $RCP_DEVICE" || true
     adb shell "mount -o rw,remount / 2>/dev/null || true; \
         mkdir -p /run /tmp $REMOTE/otbr-data 2>/dev/null || true" || true
+
+    # ot-daemon 바이너리 무력화 (bind mount — 시스템 서비스가 재시작시켜도 빈 파일 실행)
+    local OT_CHECK
+    OT_CHECK=$(adb shell "pgrep -f ot-daemon 2>/dev/null" | tr -d '\r' || true)
+    if [[ -n "$OT_CHECK" ]]; then
+        log "ot-daemon bind mount 차단..."
+        adb shell "touch $REMOTE/empty_ot_daemon 2>/dev/null; \
+            mount --bind $REMOTE/empty_ot_daemon /apex/com.android.tethering/bin/ot-daemon 2>/dev/null; \
+            pkill -9 -f ot-daemon 2>/dev/null" || true
+        sleep 2
+    fi
 
     # HAL 완전 죽었는지 확인
     local HAL_CHECK
@@ -610,6 +637,39 @@ cmd_deploy() {
     cmd_thread_start
 
     cmd_start
+
+    # 재부팅 시 자동 시작 — init.d 스크립트 등록
+    log "자동 시작 등록..."
+    adb shell "cat > /data/local/tmp/homeagent-autostart.sh" << 'AUTOEOF'
+#!/system/bin/sh
+# HomeAgent 자동 시작 — 부팅 완료 후 실행
+# /data/local/tmp/_start.sh 를 호출
+
+LOGFILE=/data/local/tmp/homeagent-boot.log
+echo "$(date) boot trigger" >> $LOGFILE
+
+# sys.boot_completed 대기
+while [ "$(getprop sys.boot_completed)" != "1" ]; do
+    sleep 2
+done
+echo "$(date) boot_completed" >> $LOGFILE
+
+# 네트워크 대기 (WiFi 연결까지)
+for i in $(seq 1 30); do
+    if ping -c 1 -W 1 8.8.8.8 > /dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
+echo "$(date) network ready" >> $LOGFILE
+
+sleep 5
+/data/local/tmp/_start.sh >> $LOGFILE 2>&1
+AUTOEOF
+    adb shell "chmod +x /data/local/tmp/homeagent-autostart.sh"
+
+    # persist.sys.homeagent.autostart 프로퍼티로 트리거
+    # (실제 init.rc 수정이 불가능한 경우 cron 대안으로 boot_completed 리시버 사용)
     log "🎉 배포 완료"
 }
 

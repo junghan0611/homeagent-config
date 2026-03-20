@@ -624,11 +624,29 @@ func (h *Hub) handleSystem(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDashboardRedirect redirects to matterjs-server dashboard
-// Converts ws://host:port → http://host:port
+// Uses the browser's request host (not cfg localhost) + matterjs port
+// e.g. browser→192.168.0.162:8080/dashboard → redirect→192.168.0.162:5580
 func (h *Hub) handleDashboardRedirect(w http.ResponseWriter, r *http.Request) {
 	wsURL := h.cfg.MatterWSURL // e.g. "ws://localhost:5580"
-	dashURL := strings.Replace(wsURL, "ws://", "http://", 1)
-	dashURL = strings.Replace(dashURL, "wss://", "https://", 1)
+
+	// matterjs 포트 추출
+	matterPort := "5580" // default
+	if idx := strings.LastIndex(wsURL, ":"); idx > 0 {
+		matterPort = wsURL[idx+1:]
+	}
+
+	// 브라우저 요청의 호스트에서 IP 추출 (포트 제거)
+	reqHost := r.Host
+	if colonIdx := strings.LastIndex(reqHost, ":"); colonIdx > 0 {
+		reqHost = reqHost[:colonIdx]
+	}
+
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+
+	dashURL := fmt.Sprintf("%s://%s:%s", scheme, reqHost, matterPort)
 	http.Redirect(w, r, dashURL, http.StatusTemporaryRedirect)
 }
 

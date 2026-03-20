@@ -195,7 +195,7 @@ void main() {
   });
 
   group('DeviceCard 인터랙션', () {
-    testWidgets('on_off_plug 탭 → onCommand 호출', (tester) async {
+    testWidgets('on_off_plug 스위치 → onCommand 호출', (tester) async {
       String? calledCommand;
       int? calledNodeId;
 
@@ -212,52 +212,52 @@ void main() {
         calledCommand = command;
       }));
 
-      await tester.tap(find.byType(InkWell));
+      await tester.tap(find.byType(Switch));
       expect(calledNodeId, 6);
       expect(calledCommand, 'off'); // on→off 토글
     });
 
-    testWidgets('on_off_light 탭 → on/off 토글', (tester) async {
+    testWidgets('on_off_light 스위치 → on/off 토글', (tester) async {
       String? cmd;
       final d = Device.fromJson({
         'node_id': 7, 'name': '조명', 'type': 'on_off_light',
         'available': true, 'state': {'on': false},
       });
       await tester.pumpWidget(_wrap(d, onCommand: (_, c, {value}) => cmd = c));
-      await tester.tap(find.byType(InkWell));
+      await tester.tap(find.byType(Switch));
       expect(cmd, 'on'); // off→on
     });
 
-    testWidgets('dimmable_light 탭 → on/off 토글', (tester) async {
+    testWidgets('dimmable_light 스위치 → on/off 토글', (tester) async {
       String? cmd;
       final d = Device.fromJson({
         'node_id': 3, 'name': '밝기조명', 'type': 'dimmable_light',
         'available': true, 'state': {'on': true, 'level': 50},
       });
       await tester.pumpWidget(_wrap(d, onCommand: (_, c, {value}) => cmd = c));
-      await tester.tap(find.byType(InkWell));
+      await tester.tap(find.byType(Switch));
       expect(cmd, 'off');
     });
 
-    testWidgets('color_temp_light 탭 → on/off 토글', (tester) async {
+    testWidgets('color_temp_light 스위치 → on/off 토글', (tester) async {
       String? cmd;
       final d = Device.fromJson({
         'node_id': 4, 'name': '색온도', 'type': 'color_temp_light',
         'available': true, 'state': {'on': true},
       });
       await tester.pumpWidget(_wrap(d, onCommand: (_, c, {value}) => cmd = c));
-      await tester.tap(find.byType(InkWell));
+      await tester.tap(find.byType(Switch));
       expect(cmd, 'off');
     });
 
-    testWidgets('extended_color_light 탭 → on/off 토글', (tester) async {
+    testWidgets('extended_color_light 스위치 → on/off 토글', (tester) async {
       String? cmd;
       final d = Device.fromJson({
         'node_id': 5, 'name': 'RGB', 'type': 'extended_color_light',
         'available': true, 'state': {'on': false},
       });
       await tester.pumpWidget(_wrap(d, onCommand: (_, c, {value}) => cmd = c));
-      await tester.tap(find.byType(InkWell));
+      await tester.tap(find.byType(Switch));
       expect(cmd, 'on');
     });
 

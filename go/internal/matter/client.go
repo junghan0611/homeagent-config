@@ -400,6 +400,129 @@ func (c *Client) RemoveNode(ctx context.Context, nodeID int) error {
 	return nil
 }
 
+// ReadAttribute reads a device attribute by path (e.g. "1/6/0")
+func (c *Client) ReadAttribute(ctx context.Context, nodeID int, attrPath string) (interface{}, error) {
+	id, ch, err := c.send("read_attribute", map[string]interface{}{
+		"node_id":        nodeID,
+		"attribute_path": attrPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("read_attribute parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("read_attribute error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return resp.Result, nil
+}
+
+// PingNode checks if a node is reachable. Returns per-endpoint results.
+func (c *Client) PingNode(ctx context.Context, nodeID int) (json.RawMessage, error) {
+	id, ch, err := c.send("ping_node", map[string]int{"node_id": nodeID})
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("ping_node parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("ping_node error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	result, err := json.Marshal(resp.Result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// InterviewNode triggers a re-interview of the node (refresh attributes)
+func (c *Client) InterviewNode(ctx context.Context, nodeID int) error {
+	id, ch, err := c.send("interview_node", map[string]int{"node_id": nodeID})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 30*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("interview_node parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("interview_node error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
+// NodeDiagnostics retrieves diagnostic information for a node
+func (c *Client) NodeDiagnostics(ctx context.Context, nodeID int) (json.RawMessage, error) {
+	id, ch, err := c.send("diagnostics", map[string]int{"node_id": nodeID})
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("diagnostics parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("diagnostics error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	result, err := json.Marshal(resp.Result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SetDefaultFabricLabel sets the fabric name shown in matterjs dashboard
+func (c *Client) SetDefaultFabricLabel(ctx context.Context, label string) error {
+	id, ch, err := c.send("set_default_fabric_label", map[string]string{"label": label})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("set_default_fabric_label parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("set_default_fabric_label error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	return nil
+}
+
 // ReadLoop is the single read goroutine. It dispatches:
 //   - command responses → pending waiters
 //   - events → handler

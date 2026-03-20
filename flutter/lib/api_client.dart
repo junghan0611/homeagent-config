@@ -133,6 +133,30 @@ class ApiClient {
     await _delete('/api/devices/$nodeId');
   }
 
+  // ─── 디바이스 상세/진단 ───
+
+  /// 디바이스 속성 읽기 → GET /api/devices/:id/attributes?path=1/6/0
+  Future<dynamic> readAttribute(int nodeId, String path) async {
+    return _get('/api/devices/$nodeId/attributes?path=$path');
+  }
+
+  /// 디바이스 핑 → POST /api/devices/:id/ping
+  Future<Map<String, dynamic>> pingDevice(int nodeId) async {
+    final resp = await _postReturning('/api/devices/$nodeId/ping', {});
+    return resp;
+  }
+
+  /// 디바이스 재인터뷰 → POST /api/devices/:id/interview
+  Future<void> interviewDevice(int nodeId) async {
+    await _post('/api/devices/$nodeId/interview', {});
+  }
+
+  /// 디바이스 진단 → GET /api/devices/:id/diagnostics
+  Future<Map<String, dynamic>> deviceDiagnostics(int nodeId) async {
+    final resp = await _get('/api/devices/$nodeId/diagnostics');
+    return Map<String, dynamic>.from(resp as Map);
+  }
+
   // ─── 커미셔닝 ───
 
   /// WiFi credentials 설정 → POST /api/wifi-credentials
@@ -244,6 +268,18 @@ class ApiClient {
     final response = await request.close();
     await response.drain();
     client.close();
+  }
+
+  Future<Map<String, dynamic>> _postReturning(
+      String path, Map<String, dynamic> body) async {
+    final client = HttpClient();
+    final request = await client.postUrl(Uri.parse('$baseUrl$path'));
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode(body));
+    final response = await request.close();
+    final respBody = await response.transform(utf8.decoder).join();
+    client.close();
+    return Map<String, dynamic>.from(jsonDecode(respBody) as Map);
   }
 
   Future<void> _delete(String path) async {

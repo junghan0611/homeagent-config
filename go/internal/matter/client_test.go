@@ -51,6 +51,21 @@ func mockWSServer(t *testing.T, handler func(conn *websocket.Conn, msg map[strin
 	return srv, wsURL
 }
 
+// testClientWithHandler creates a connected client with mock WS server + running ReadLoop
+func testClientWithHandler(t *testing.T, handler func(conn *websocket.Conn, msg map[string]interface{})) (*Client, *httptest.Server) {
+	t.Helper()
+	srv, wsURL := mockWSServer(t, handler)
+	client := NewClient(wsURL)
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	go client.ReadLoop(ctx)
+	time.Sleep(10 * time.Millisecond)
+	t.Cleanup(func() { client.Close() })
+	return client, srv
+}
+
 func TestSetThreadDataset_Success(t *testing.T) {
 	srv, wsURL := mockWSServer(t, func(conn *websocket.Conn, msg map[string]interface{}) {
 		// Verify command and args
@@ -368,5 +383,129 @@ func TestReadLoop_EventDispatch(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for event")
+	}
+}
+
+// --- ReadAttribute ---
+
+func TestReadAttribute(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "read_attribute" {
+			args, _ := msg["args"].(map[string]interface{})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    args["attribute_path"],
+			})
+		}
+	})
+	defer srv.Close()
+
+	result, err := c.ReadAttribute(context.Background(), 8, "1/6/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// result is json.RawMessage, unmarshal to check
+	raw, ok := result.(json.RawMessage)
+	if !ok {
+		t.Fatalf("expected json.RawMessage, got %T", result)
+	}
+	var val string
+	if err := json.Unmarshal(raw, &val); err != nil {
+		t.Fatal(err)
+	}
+	if val != "1/6/0" {
+		t.Errorf("expected echo of path, got %q", val)
+	}
+}
+
+// --- PingNode ---
+
+func TestPingNode(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "ping_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    map[string]bool{"0": true},
+			})
+		}
+	})
+	defer srv.Close()
+
+	result, err := c.PingNode(context.Background(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) == 0 {
+		t.Error("expected non-empty ping result")
+	}
+}
+
+// --- InterviewNode ---
+
+func TestInterviewNode(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "interview_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    nil,
+			})
+		}
+	})
+	defer srv.Close()
+
+	err := c.InterviewNode(context.Background(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- NodeDiagnostics ---
+
+func TestNodeDiagnostics(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "diagnostics" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    map[string]interface{}{"node_id": 8, "status": "ok"},
+			})
+		}
+	})
+	defer srv.Close()
+
+	result, err := c.NodeDiagnostics(context.Background(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) == 0 {
+		t.Error("expected non-empty diagnostics result")
+	}
+}
+
+// --- SetDefaultFabricLabel ---
+
+func TestSetDefaultFabricLabel(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "set_default_fabric_label" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    nil,
+			})
+		}
+	})
+	defer srv.Close()
+
+	err := c.SetDefaultFabricLabel(context.Background(), "HomeAgent")
+	if err != nil {
+		t.Fatal(err)
 	}
 }

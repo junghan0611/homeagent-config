@@ -1705,3 +1705,162 @@ func TestAPIDashboardRedirect(t *testing.T) {
 		t.Errorf("expected redirect to http://localhost:5580, got %q", loc)
 	}
 }
+
+// --- GET /api/devices/:id/attributes ---
+
+func TestAPIReadAttribute(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "read_attribute" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    true,
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/devices/8/attributes?path=1/6/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["path"] != "1/6/0" {
+		t.Errorf("expected path '1/6/0', got %v", result["path"])
+	}
+	if result["value"] != true {
+		t.Errorf("expected value true, got %v", result["value"])
+	}
+}
+
+func TestAPIReadAttribute_MissingPath(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, _ := http.Get(srv.URL + "/api/devices/8/attributes")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400 for missing path, got %d", resp.StatusCode)
+	}
+}
+
+// --- POST /api/devices/:id/ping ---
+
+func TestAPIPingNode(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "ping_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    map[string]bool{"0": true, "1": true},
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/devices/8/ping", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]bool
+	json.NewDecoder(resp.Body).Decode(&result)
+	if !result["0"] || !result["1"] {
+		t.Errorf("expected endpoints reachable, got %v", result)
+	}
+}
+
+// --- POST /api/devices/:id/interview ---
+
+func TestAPIInterviewNode(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "interview_node" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":    nil,
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/devices/8/interview", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// --- GET /api/devices/:id/diagnostics ---
+
+func TestAPINodeDiagnostics(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "diagnostics" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result": map[string]interface{}{
+					"node_id":   8,
+					"available": true,
+					"endpoints": map[string]interface{}{},
+				},
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/devices/8/diagnostics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["available"] != true {
+		t.Errorf("expected available=true, got %v", result["available"])
+	}
+}

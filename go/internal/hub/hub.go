@@ -183,6 +183,13 @@ func (h *Hub) connectAndListen(ctx context.Context) error {
 		return fmt.Errorf("hub start_listening: %w", err)
 	}
 
+	// 5b. Fabric label 설정 (matterjs 대시보드에 이름 표시, best-effort)
+	if err := h.matter.SetDefaultFabricLabel(ctx, "HomeAgent"); err != nil {
+		log.Printf("[hub] fabric label 설정 실패 (무시): %v", err)
+	} else {
+		log.Printf("[hub] fabric label → HomeAgent")
+	}
+
 	// 6. Wait for read loop to exit (connection lost)
 	log.Printf("[hub] listening for Matter events...")
 	return <-readErr
@@ -676,6 +683,23 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// /api/devices/:id/action 라우팅
+	if len(parts) > 1 {
+		switch parts[1] {
+		case "attributes":
+			h.handleReadAttribute(w, r, nodeID)
+		case "ping":
+			h.handlePingNode(w, r, nodeID)
+		case "interview":
+			h.handleInterviewNode(w, r, nodeID)
+		case "diagnostics":
+			h.handleNodeDiagnostics(w, r, nodeID)
+		default:
+			http.NotFound(w, r)
+		}
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		h.mu.RLock()
@@ -743,6 +767,95 @@ func (h *Hub) handlePatchDevice(w http.ResponseWriter, r *http.Request, nodeID i
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dev)
+}
+
+// handleReadAttribute reads a device attribute by path
+// GET /api/devices/:id/attributes?path=1/6/0
+func (h *Hub) handleReadAttribute(w http.ResponseWriter, r *http.Request, nodeID int) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	attrPath := r.URL.Query().Get("path")
+	if attrPath == "" {
+		http.Error(w, `{"error":"path 파라미터 필수 (예: ?path=1/6/0)"}`, http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.matter.ReadAttribute(r.Context(), nodeID, attrPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"node_id": nodeID,
+		"path":    attrPath,
+		"value":   result,
+	})
+}
+
+// handlePingNode pings a device to check connectivity
+// POST /api/devices/:id/ping
+func (h *Hub) handlePingNode(w http.ResponseWriter, r *http.Request, nodeID int) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	result, err := h.matter.PingNode(r.Context(), nodeID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(result)
+}
+
+// handleInterviewNode triggers re-interview of a device
+// POST /api/devices/:id/interview
+func (h *Hub) handleInterviewNode(w http.ResponseWriter, r *http.Request, nodeID int) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := h.matter.InterviewNode(r.Context(), nodeID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// handleNodeDiagnostics retrieves diagnostic info for a device
+// GET /api/devices/:id/diagnostics
+func (h *Hub) handleNodeDiagnostics(w http.ResponseWriter, r *http.Request, nodeID int) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	result, err := h.matter.NodeDiagnostics(r.Context(), nodeID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(result)
 }
 
 // handleDeleteDevice removes a device from the fabric

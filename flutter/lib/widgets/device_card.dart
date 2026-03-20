@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../screens/device_detail_screen.dart';
 import '../theme.dart';
 
 /// 디바이스 카드 — 3열 그리드용
 /// 타입별 아이콘/색상/제어 분기
+/// 탭 → 상세 화면, 롱프레스 → 삭제, 토글스위치 → on/off
 class DeviceCard extends StatelessWidget {
   final Device device;
+  final String serverUrl;
   final void Function(int nodeId, String command, {dynamic value})? onCommand;
   final void Function(int nodeId)? onDelete;
 
   const DeviceCard({
     super.key,
     required this.device,
+    this.serverUrl = '',
     this.onCommand,
     this.onDelete,
   });
@@ -24,12 +28,20 @@ class DeviceCard extends StatelessWidget {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: device.isSensor || !device.available
+        onTap: serverUrl.isEmpty
             ? null
-            : () => onCommand?.call(
-                  device.nodeId,
-                  device.isOn ? 'off' : 'on',
-                ),
+            : () async {
+                final deleted = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeviceDetailScreen(
+                      serverUrl: serverUrl,
+                      device: device,
+                    ),
+                  ),
+                );
+                if (deleted == true) onDelete?.call(device.nodeId);
+              },
         onLongPress: onDelete == null
             ? null
             : () => _showDeleteDialog(context),
@@ -54,6 +66,18 @@ class DeviceCard extends StatelessWidget {
                         SizedBox(width: 4),
                         Icon(Icons.cloud_off, size: 14, color: AppTheme.errorColor),
                       ],
+                    )
+                  else if (!device.isSensor)
+                    SizedBox(
+                      height: 24,
+                      child: Switch(
+                        value: device.isOn,
+                        onChanged: (v) => onCommand?.call(
+                          device.nodeId,
+                          v ? 'on' : 'off',
+                        ),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
                 ],
               ),

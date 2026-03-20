@@ -248,6 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => DeviceCard(
                       device: _devices[index],
+                      serverUrl: widget.serverUrl,
                       onCommand: _onCommand,
                       onDelete: _onDelete,
                     ),

@@ -6,7 +6,15 @@ import 'package:flutter/foundation.dart';
 
 import 'api_client.dart' show Device;
 
-/// matterjs-server WS 직접 연결 클라이언트
+/// matterjs-server WS 직접 연결 클라이언트 — 예비용 (현재 미사용)
+///
+/// 아키텍처 결정 (2026-03-20):
+/// 앱은 Go REST만 통신한다. matterjs WS 직접 연결은 하지 않는다.
+/// Go 서버가 단일 진입점으로서 상태 관리 + aliases + SSE 변환을 전담.
+///
+/// 이 파일은 향후 "Go 없는 경량 모드" 또는 "디버깅용 직접 연결"을 위해 보존.
+/// 조급함에 이중 경로(APP→Go + APP→matterjs)를 도입할 뻔했으나,
+/// 단일 경로(APP→Go→matterjs)가 구조적으로 올바른 판단.
 ///
 /// Go matter/client.go와 동일한 프로토콜:
 /// - 연결 시 첫 메시지 = ServerInfo (JSON)

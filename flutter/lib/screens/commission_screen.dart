@@ -3,21 +3,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../ble_commissioning.dart';
-import '../matter_client.dart';
 import '../theme.dart';
 
 /// 커미셔닝 화면 — 플랫폼별 분기
 ///
 /// Android: BLE 커미셔닝 (기존 BleCommissioningScreen)
-/// Linux: On-network 커미셔닝 (matterjs WS 직접)
+/// Linux: On-network 커미셔닝 (Go REST 경유 → matterjs)
+///
+/// 아키텍처 결정 (2026-03-20):
+/// APP → Go REST → matterjs (단일 경로). matterjs WS 직접 연결은 하지 않음.
+/// Go 서버가 상태 관리 + aliases + SSE 변환을 전담.
 class CommissionScreen extends StatelessWidget {
   final String serverUrl;
-  final MatterWsClient? matterClient;
 
   const CommissionScreen({
     super.key,
     required this.serverUrl,
-    this.matterClient,
   });
 
   @override
@@ -134,21 +135,16 @@ class CommissionScreen extends StatelessWidget {
                       setDialogState(() => loading = true);
 
                       try {
-                        if (matterClient != null && matterClient!.connected.value) {
-                          // WS 직접 커미셔닝
-                          await matterClient!.commissionWithCode(code, networkOnly: true);
-                        } else {
-                          // Go REST 폴백
-                          final client = HttpClient();
-                          final request = await client.postUrl(
-                            Uri.parse('$serverUrl/api/commission'),
-                          );
-                          request.headers.contentType = ContentType.json;
-                          request.write('{"code":"$code","network_only":true}');
-                          final response = await request.close();
-                          await response.drain();
-                          client.close();
-                        }
+                        // Go REST → matterjs (단일 경로)
+                        final client = HttpClient();
+                        final request = await client.postUrl(
+                          Uri.parse('$serverUrl/api/commission'),
+                        );
+                        request.headers.contentType = ContentType.json;
+                        request.write('{"code":"$code","network_only":true}');
+                        final response = await request.close();
+                        await response.drain();
+                        client.close();
 
                         if (ctx.mounted) {
                           Navigator.pop(ctx);

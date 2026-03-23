@@ -39,6 +39,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- RK3576 Mali Bifrost Vulkan 드라이버 비호환 — 텍스트 렌더링 실패.
+             Impeller 비활성화 → Skia 폴백. Flutter 3.22+ 기본값이 Impeller. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -117,12 +117,12 @@ export HOME=$REMOTE
 cp /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml $REMOTE/WifiConfigStore.xml 2>/dev/null
 chmod 644 $REMOTE/WifiConfigStore.xml 2>/dev/null
 
-# DNS + TLS 인증서 (Android에 /etc/resolv.conf 없음)
-mkdir -p $REMOTE/etc_overlay 2>/dev/null
-cp -a /system/etc/* $REMOTE/etc_overlay/ 2>/dev/null
+# DNS (Android에 /etc/resolv.conf 없음)
+# 주의: /system/etc 전체 overlay 금지 — fonts.xml SELinux context가 바뀌어
+#       Flutter/Skia가 폰트 로드 실패 → 텍스트 미표시
 echo "nameserver 192.168.0.1
-nameserver 8.8.8.8" > $REMOTE/etc_overlay/resolv.conf
-mount --bind $REMOTE/etc_overlay /system/etc 2>/dev/null
+nameserver 8.8.8.8" > $REMOTE/resolv.conf
+mount --bind $REMOTE/resolv.conf /system/etc/resolv.conf 2>/dev/null
 
 # matterjs-server (setsid: init cgroup 방지, --import로 BLE WS bridge 로드 → :5581)
 cd $REMOTE/nodejs-bundle

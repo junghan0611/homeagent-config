@@ -2,7 +2,8 @@
   description = "HomeAgent Config - RPi5 Yocto Build Environment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Flutter 3.38.3 핀 — 3.38.9에서 Impeller opt-out deprecated (RK3576 Mali 비호환)
+    nixpkgs.url = "github:NixOS/nixpkgs/e576e3c9cf9b";
     flake-utils.url = "github:numtide/flake-utils";
   };
 

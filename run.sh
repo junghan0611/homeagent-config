@@ -21,58 +21,40 @@ help() {
     echo ""
     echo "Usage: ./run.sh <command> [args]"
     echo ""
-    echo -e "${GREEN}=== 공통 ===${NC}"
-    echo -e "${GREEN}빌드:${NC}"
+    echo -e "${GREEN}=== 빌드 ===${NC}"
     echo "  go-build        Go arm64 크로스컴파일 (정적 바이너리)"
     echo "  go-dev [args]   Go 로컬 개발 실행"
     echo "  ui-build        Lit 프론트엔드 빌드 (npm run build)"
-    echo "  bundle [opts]   백엔드 번들 (Go+Node.js+matterjs arm64)"
-    echo "                  --skip-go --skip-node --skip-ui --skip-matter"
     echo ""
-    echo -e "${GREEN}Flutter:${NC}"
+    echo -e "${GREEN}=== Flutter ===${NC}"
     echo "  flutter-run       Linux desktop 실행 (hot reload)"
     echo "  flutter-build     Linux desktop 빌드"
     echo "  flutter-exec      빌드된 바이너리 실행"
     echo "  flutter-server    Go 로컬 서버 (Flutter 개발용)"
     echo "  flutter-analyze   코드 분석"
-    echo ""
-    echo -e "${GREEN}이슈/Git:${NC}"
-    echo "  issues          br 이슈 목록"
-    echo "  issue <id>      br 이슈 상세"
-    echo "  diff            변경사항 확인"
-    echo "  commit          커밋 (br sync 포함)"
-    echo ""
-    echo -e "${GREEN}=== Android ===${NC}"
-    echo "  android <cmd>   통합 CLI (scripts/android-deploy.sh)"
-    echo "    deploy          전체 빌드+배포+시작"
-    echo "    start / stop    서비스 시작/종료 (matterjs+Go)"
-    echo "    status / logs   상태/로그 확인"
-    echo "    thread-start    OTBR+Thread 시작"
-    echo "    thread-stop     OTBR+Thread 종료"
-    echo "    thread-status   Thread 상태"
     echo "  apk-build       APK 릴리즈 빌드"
     echo "  apk-go          Go arm64 Android 크로스컴파일"
-    echo "  otbr-build      OTBR NDK arm64 빌드"
     echo ""
-    echo -e "${GREEN}=== RPi5 / Yocto ===${NC}"
-    echo -e "${GREEN}배포:${NC}"
-    echo "  ha-deploy [IP]  전체 배포 (빌드+UI+aliases→RPi5→시작)"
-    echo "  ha-start/stop/status/logs [IP]  RPi5 서비스 관리"
-    echo "  go-deploy [IP]  Go 바이너리 RPi5 배포"
-    echo "  ssh [IP] [cmd]  RPi5 SSH 접속"
+    echo -e "${GREEN}=== 배포 (Docker 기반) ===${NC}"
+    echo "  ha-deploy [IP]  전체 배포 (빌드+Docker+Go→디바이스→시작)"
+    echo "  ha-start  [IP]  Docker 스택 + Go 시작"
+    echo "  ha-stop   [IP]  전체 스택 종료"
+    echo "  ha-status [IP]  컨테이너/서비스 상태"
+    echo "  ha-logs [IP] [target]  로그 (go/matter/otbr/all)"
+    echo "  go-deploy [IP]  Go 바이너리만 배포"
+    echo ""
+    echo -e "${GREEN}=== 디바이스 ===${NC}"
+    echo "  ssh [IP] [cmd]  SSH 접속"
     echo "  setup-key [IP]  SSH 공개키 등록"
     echo "  set-ip <ip>     디바이스 IP 설정"
-    echo "  thread-init [IP] Thread 네트워크 초기화"
     echo ""
-    echo -e "${GREEN}Yocto 빌드 (FHS 환경):${NC}"
-    echo "  shell           FHS 빌드 환경 진입 (nix develop)"
-    echo "  layers          레이어 클론/링크"
-    echo "  bb [target]     bitbake 빌드"
-    echo "  bb-cmd <args>   bitbake 직접 실행"
-    echo "  bb-clean [t]    클린 빌드"
-    echo "  clean           캐시 전체 정리"
-    echo "  image / flash   이미지 관리"
-    echo "  npm-shrinkwrap / npm-build  npm 레시피"
+    echo -e "${GREEN}=== Android (레거시) ===${NC}"
+    echo "  android <cmd>   Android 직접 배포 (scripts/android-deploy.sh)"
+    echo ""
+    echo -e "${GREEN}=== 이슈/Git ===${NC}"
+    echo "  issues          br 이슈 목록"
+    echo "  issue <id>      br 이슈 상세"
+    echo "  diff / commit   변경사항 / 커밋"
     echo ""
 }
 
@@ -570,25 +552,28 @@ cmd_ha_deploy() {
     cmd_ui_build
 
     # 3. 기존 프로세스 정지
-    echo -e "${YELLOW}[STOP]${NC} 기존 homeagent 종료..."
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" '
-        PID=$(ps | grep "[h]omeagent" | awk "{print \$1}")
-        if [ -n "$PID" ]; then
-            kill -9 $PID 2>/dev/null
-            sleep 2
-            rm -f /opt/homeagent/homeagent
-        fi
-    ' || true
+    cmd_ha_stop "$IP" 2>/dev/null || true
 
     # 4. 파일 전송
-    echo -e "${GREEN}[UPLOAD]${NC} 바이너리 + UI + aliases..."
+    echo -e "${GREEN}[UPLOAD]${NC} 바이너리 + UI + aliases + docker-compose..."
     ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "mkdir -p /opt/homeagent/ui"
     scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/go/bin/homeagent" root@"$IP":/opt/homeagent/homeagent
     scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/aliases.json" root@"$IP":/opt/homeagent/aliases.json
     ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "rm -rf /opt/homeagent/ui/*"
     scp -i "$SSH_KEY" $SSH_OPTS -r "$SCRIPT_DIR/ui/dist/"* root@"$IP":/opt/homeagent/ui/
 
-    # 5. 시작
+    # 5. Docker 설정 배포
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/docker-compose.yml" root@"$IP":/opt/homeagent/
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/.env.docker.rpi5" root@"$IP":/opt/homeagent/.env
+
+    # .env에 LLM 키 추가
+    if [[ -f "$HOME/.env.local" ]]; then
+        local _key
+        _key=$(grep -m1 '^export OPENROUTER_API_KEY=' "$HOME/.env.local" 2>/dev/null | sed 's/^export //' || true)
+        [[ -n "$_key" ]] && ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "echo '$_key' >> /opt/homeagent/.env"
+    fi
+
+    # 6. 시작
     cmd_ha_start "$IP"
 
     echo -e "${CYAN}══════════════════════════════════════${NC}"
@@ -596,7 +581,7 @@ cmd_ha_deploy() {
     echo -e "${CYAN}══════════════════════════════════════${NC}"
 }
 
-# 환경변수 로드 + 시작
+# Docker 기반 전체 스택 시작
 cmd_ha_start() {
     local IP=$(get_device_ip "$1")
     if [[ -z "$IP" ]]; then
@@ -604,38 +589,123 @@ cmd_ha_start() {
     fi
     check_ssh_key
 
-    # .env.rpi5에서 환경변수 → env 파일로 전송
-    local ENV_FILE="$SCRIPT_DIR/.env.rpi5"
-    local TMP_ENV="/tmp/homeagent.env"
-    : > "$TMP_ENV"
+    echo -e "${GREEN}[START]${NC} Docker 스택 시작 ($IP)..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'STARTEOF'
+set -e
+export PATH="/opt/docker:$PATH"
+HA_DIR="/opt/homeagent"
 
-    if [[ -f "$ENV_FILE" ]]; then
-        grep -v '^#' "$ENV_FILE" | grep -v '^$' >> "$TMP_ENV"
-    fi
+log()  { echo -e "\033[0;32m[start]\033[0m $*"; }
+warn() { echo -e "\033[0;33m[start]\033[0m $*"; }
 
-    # OPENROUTER_API_KEY는 ~/.env.local에서 가져오기
-    if [[ -f "$HOME/.env.local" ]]; then
-        grep '^export OPENROUTER_API_KEY=' "$HOME/.env.local" | sed 's/^export //' >> "$TMP_ENV"
-    fi
+# --- 1. Docker Engine ---
+if ! docker info > /dev/null 2>&1; then
+    log "containerd 시작..."
+    containerd --root /opt/docker-data/containerd --state /run/containerd > /tmp/containerd.log 2>&1 &
+    sleep 3
+    log "dockerd 시작..."
+    dockerd --data-root /opt/docker-data --userland-proxy-path /opt/docker/docker-proxy --iptables=false > /tmp/dockerd.log 2>&1 &
+    for i in $(seq 1 15); do
+        docker info > /dev/null 2>&1 && break
+        sleep 2
+    done
+    docker info > /dev/null 2>&1 || { echo "Docker 시작 실패"; exit 1; }
+    log "Docker Engine 준비 완료"
+else
+    log "Docker 이미 실행 중"
+fi
 
-    echo -e "${GREEN}[START]${NC} homeagent 시작 ($IP)..."
-    scp -i "$SSH_KEY" $SSH_OPTS "$TMP_ENV" root@"$IP":/opt/homeagent/.env
-    rm -f "$TMP_ENV"
+# --- 2. 컨테이너 (OTBR + python-matter-server) ---
+log "컨테이너 시작..."
+cd "$HA_DIR"
+docker-compose up -d 2>&1
 
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" '
-        cd /opt/homeagent
-        set -a; . ./.env; set +a
-        nohup ./homeagent > /tmp/homeagent.log 2>&1 &
-        sleep 3
-        if ps | grep -q "[h]omeagent"; then
-            echo "OK: homeagent 실행 중"
-            sed -n "1,5p" /tmp/homeagent.log
-        else
-            echo "FAIL: 시작 실패"
-            cat /tmp/homeagent.log
-            exit 1
-        fi
-    '
+# --- 3. Thread Dataset ---
+log "Thread 설정..."
+DATASET_FILE="$HA_DIR/thread-dataset.hex"
+
+# OTBR 준비 대기
+for i in $(seq 1 30); do
+    docker exec otbr ot-ctl state > /dev/null 2>&1 && break
+    sleep 1
+done
+
+STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
+
+if [ "$STATE" = "leader" ] || [ "$STATE" = "router" ]; then
+    log "Thread 이미 활성: $STATE"
+    docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r' > "$DATASET_FILE"
+elif [ -f "$DATASET_FILE" ] && [ -s "$DATASET_FILE" ]; then
+    HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
+    log "Thread dataset 복원..."
+    docker exec otbr ot-ctl dataset set active "$HEX"
+    docker exec otbr ot-ctl dataset commit active
+    docker exec otbr ot-ctl ifconfig up
+    docker exec otbr ot-ctl thread start
+else
+    log "새 Thread 네트워크 생성..."
+    docker exec otbr ot-ctl dataset init new
+    docker exec otbr ot-ctl dataset commit active
+    docker exec otbr ot-ctl ifconfig up
+    docker exec otbr ot-ctl thread start
+fi
+
+# leader 대기
+for i in $(seq 1 20); do
+    STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
+    [ "$STATE" = "leader" ] || [ "$STATE" = "router" ] && break
+    sleep 1
+done
+log "Thread: $STATE"
+
+docker exec otbr ot-ctl srp server enable 2>/dev/null || true
+
+# dataset 백업
+docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r' > "$DATASET_FILE"
+
+# --- 4. Thread Dataset → python-matter-server ---
+log "matter-server 준비 대기..."
+for i in $(seq 1 30); do
+    docker logs matter-server 2>&1 | grep -q "successfully initialized" && break
+    sleep 1
+done
+
+HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
+if [ -n "$HEX" ]; then
+    log "Thread dataset → matter-server 주입..."
+    docker exec matter-server python3 -c "
+import json, asyncio
+from aiohttp import ClientSession
+async def inject():
+    async with ClientSession() as s:
+        async with s.ws_connect('ws://localhost:5580/ws') as ws:
+            await ws.receive()
+            await ws.send_str(json.dumps({'message_id':'t','command':'set_thread_dataset','args':{'dataset':'$HEX'}}))
+            await ws.receive()
+            print('OK')
+asyncio.run(inject())
+" 2>&1
+fi
+
+# --- 5. Go HomeAgent ---
+if pidof homeagent > /dev/null 2>&1; then
+    log "homeagent 이미 실행 중"
+else
+    log "homeagent 시작..."
+    cd "$HA_DIR"
+    [ -f "$HA_DIR/.env" ] && { set -a; . "$HA_DIR/.env"; set +a; }
+
+    HOMEAGENT_HTTP_ADDR="${HOMEAGENT_HTTP_ADDR:-:8080}" \
+    HOMEAGENT_MATTER_WS="${HOMEAGENT_MATTER_WS:-ws://localhost:5580}" \
+    HOMEAGENT_UI_DIR="${HOMEAGENT_UI_DIR:-$HA_DIR/ui}" \
+    HOMEAGENT_ALIASES_FILE="${HOMEAGENT_ALIASES_FILE:-$HA_DIR/aliases.json}" \
+    nohup ./homeagent > /tmp/homeagent.log 2>&1 &
+    sleep 3
+fi
+
+log "=== 완료 ==="
+grep "connected:" /tmp/homeagent.log 2>/dev/null || true
+STARTEOF
 }
 
 cmd_ha_stop() {
@@ -644,19 +714,36 @@ cmd_ha_stop() {
         echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
     fi
     check_ssh_key
-    echo -e "${YELLOW}[STOP]${NC} homeagent 종료 ($IP)..."
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" \
-        'kill $(ps | grep "[h]omeagent" | awk "{print \$1}") 2>/dev/null && echo "stopped" || echo "not running"'
+    echo -e "${YELLOW}[STOP]${NC} 전체 스택 종료 ($IP)..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'STOPEOF'
+export PATH="/opt/docker:$PATH"
+kill $(pidof homeagent) 2>/dev/null && echo "homeagent stopped" || echo "homeagent not running"
+cd /opt/homeagent && docker-compose down 2>/dev/null && echo "containers stopped" || echo "no containers"
+STOPEOF
 }
 
 cmd_ha_logs() {
     local IP=$(get_device_ip "$1")
-    local LINES="${2:-50}"
+    local TARGET="${2:-all}"
     if [[ -z "$IP" ]]; then
         echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
     fi
     check_ssh_key
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "tail -${LINES} /tmp/homeagent.log"
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s "$TARGET" <<'LOGSEOF'
+export PATH="/opt/docker:$PATH"
+TARGET="$1"
+case "$TARGET" in
+    go|homeagent) tail -50 /tmp/homeagent.log ;;
+    matter*)      docker logs --tail 50 matter-server 2>&1 ;;
+    otbr)         docker logs --tail 50 otbr 2>&1 ;;
+    docker*)      tail -30 /tmp/dockerd.log ;;
+    *)
+        echo "=== homeagent ===" && tail -20 /tmp/homeagent.log
+        echo "" && echo "=== matter-server ===" && docker logs --tail 10 matter-server 2>&1
+        echo "" && echo "=== otbr ===" && docker logs --tail 10 otbr 2>&1
+        ;;
+esac
+LOGSEOF
 }
 
 cmd_ha_status() {
@@ -667,37 +754,27 @@ cmd_ha_status() {
     check_ssh_key
     echo -e "${CYAN}[STATUS]${NC} $IP"
     ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'EOF'
+export PATH="/opt/docker:$PATH"
+echo "=== Docker ==="
+docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || echo "  Docker 미실행"
+
+echo ""
 echo "=== 서비스 ==="
-for svc in homeagent matterjs-server otbr-agent; do
-    case $svc in
-        homeagent)
-            if ps | grep -q '[h]omeagent'; then
-                echo "  homeagent: ✅ (PID $(ps | grep '[h]omeagent' | awk '{print $1}'))"
-            else
-                echo "  homeagent: ❌"
-            fi
-            ;;
-        matterjs-server|otbr-agent)
-            state=$(systemctl is-active $svc 2>/dev/null || echo "inactive")
-            [ "$state" = "active" ] && echo "  $svc: ✅" || echo "  $svc: ❌"
-            ;;
-    esac
-done
+pidof homeagent > /dev/null 2>&1 && echo "  homeagent: ✅" || echo "  homeagent: ❌"
 
 echo ""
 echo "=== Thread ==="
-echo -n "  state: "; ot-ctl state 2>/dev/null | head -n1 | tr -d '\r'
-echo -n "  SRP: "; ot-ctl srp server state 2>/dev/null | head -n1 | tr -d '\r'
-echo "  children:"
-ot-ctl child table 2>/dev/null || echo "    (없음)"
+STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "unknown")
+echo "  state: $STATE"
+docker exec otbr ot-ctl srp server state 2>/dev/null | grep -v Done | tr -d '\r' | sed 's/^/  SRP: /'
 
 echo ""
 echo "=== 디바이스 ==="
 wget -qO- http://localhost:8080/api/devices 2>/dev/null || echo "  (API 응답 없음)"
 
 echo ""
-echo "=== 시스템 ==="
-echo -n "  disk: "; df -h / | tail -1 | awk '{print $3"/"$2" ("$5")"}'
+echo "=== 디스크 ==="
+df -h / | tail -1 | awk '{print "  "$3"/"$2" ("$5")"}'
 echo -n "  mem: "; free -m 2>/dev/null | awk '/Mem/{print $3"/"$2"M"}' || echo "(N/A)"
 echo -n "  uptime: "; uptime | sed 's/.*up //' | sed 's/,.*//'
 EOF

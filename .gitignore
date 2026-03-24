@@ -98,3 +98,6 @@ flutter/build/
 flutter/android/build/
 flutter/.dart_tool/
 tmp
+
+# Docker 환경 설정 (비밀 아님)
+!.env.docker.*

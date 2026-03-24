@@ -76,41 +76,71 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
-## matter-server + matter.js 버전 (2026-03-20)
+## Matter 컨트롤러 — 듀얼 백엔드 (2026-03-24)
 
-### 현재 사용 vs 최신
+### 아키텍처
 
-| | RPi5 (Yocto) | Android (번들) | 최신 안정 | 갭 |
-|---|---|---|---|---|
-| **matter-server** | 0.3.5 (2026-02-04) | 0.3.5 (2026-02-04) | **0.5.7** (2026-03-13) | 🔴 2 마이너 |
-| **@matter/main** | 0.16.9-alpha | 0.16.9-alpha | **0.17.0-alpha** (2026-03-12) | 🟡 1 마이너 |
-| **Node.js** | 20.18.2 | 20.18.2 (glibc) | 20.x / 22.x | ✅ 범위 안 |
+```
+Flutter APK → Go REST(:8080) → [matterjs | python-matter-server] WS(:5580) → OTBR → Thread
+                                 ↑ Docker 컨테이너                            ↑ Docker 컨테이너
+```
 
-### matter-server 릴리즈 속도 (6주에 20 릴리즈)
+Go `client.go`는 **코드 변경 없이** 양쪽 백엔드에 연결됨 (WS 프로토콜 완전 호환 검증 완료).
+
+### 현재 사용 버전
+
+| 컴포넌트 | 버전 | 비고 |
+|----------|------|------|
+| **python-matter-server** | 8.1.2 (stable) | CSA 인증, connectedhomeip 기반, Docker 배포 |
+| **home-assistant-chip-core** | 2025.7.0 | arm64 PyPI 휠 (32MB) |
+| **home-assistant-chip-clusters** | 2025.7.0 | 순수 Python |
+| **matterjs-server (matter-server)** | 0.3.5 | matter.js 기반, Yocto systemd / glibc 번들 |
+| **@matter/main** | 0.16.9-alpha | matter.js SDK |
+| **Node.js** | 20.18.2 | matterjs 런타임 |
+
+### Docker 인프라
+
+| 컴포넌트 | 버전 | 이미지 |
+|----------|------|--------|
+| **Docker Engine** | 29.3.0 | static binary (`/opt/docker/`) |
+| **Docker Compose** | v5.1.1 | standalone binary |
+| **OTBR** | latest | `openthread/otbr:latest` (arm64) |
+| **python-matter-server** | 8.1.2 | `ghcr.io/matter-js/python-matter-server:stable` |
+
+### 백엔드 비교
+
+| | python-matter-server (Docker) | matterjs-server (Yocto/번들) |
+|---|---|---|
+| **SDK** | connectedhomeip (C++ Python 바인딩) | matter.js (TypeScript) |
+| **인증** | CSA 공식 인증 ✅ | — |
+| **배포** | `docker-compose up -d` | systemd 또는 glibc 번들 |
+| **BLE** | BlueZ (`--bluetooth-adapter 0`) | BlueZ + noble |
+| **런타임** | Python 3.12 (~50MB) | Node.js 20 (~300MB) |
+| **WS 포트** | `:5580` | `:5580` |
+| **WS 프로토콜** | `{message_id, command, args}` | 동일 |
+| **용도** | 경동 요구사항 충족, Docker 플랫폼 통합 | 기존 Yocto 이미지, HA matter.js 전환 대비 |
+
+### matterjs-server 릴리즈 타임라인
 
 ```
 v0.3.0  2026-01-28   matter.js 0.16 기반
-v0.3.5  2026-02-04   ← 우리가 사용 중
+v0.3.5  2026-02-04   ← 우리 matterjs 버전
 v0.4.0  2026-02-19   대시보드 개선, WS API 확장
 v0.5.0  2026-03-05   OTA, 새 Controller API 시작
 v0.5.7  2026-03-13   ← 최신 안정 (matter.js 0.17-alpha)
 ```
 
-### 업그레이드 판단
-
-- **지금**: 0.3.5로 충분 (기본 커미셔닝+제어 동작 확인됨)
-- **Phase 4**: 0.5.x로 업그레이드 필요 — 새 대시보드 + WS API 개선 + OTA
-- **주의**: 0.5.x부터 @matter/main 0.17 의존 → 새 Controller API (PairedNode→ClientNode)
-- **Node.js**: engines `>=20.19.0 <22.0.0 || >=22.13.0` — 양쪽 다 호환
-
 ### matter.js 릴리즈 타임라인
 
-| matter.js | 날짜 | Matter 스펙 | matter-server |
+| matter.js | 날짜 | Matter 스펙 | matterjs-server |
 |-----------|------|------------|---------------|
 | 0.15 | 2025-06 | 1.4.2 | — |
 | 0.16 | 2026-01 | 1.4.2 | 0.3.x (우리) |
 | **0.17-alpha** | **2026-03** | **1.5.0 준비** | **0.5.x (최신)** |
 | 0.17 (예상) | 2026 Q2-Q3 | 1.5.0 | — |
+
+> HA가 matter.js로 전환 중 — python-matter-server는 maintenance mode.
+> 우리는 양쪽 다 지원하되, 경동 대응은 python-matter-server 우선.
 
 > 상세: [docs/MATTER.md](docs/MATTER.md)
 

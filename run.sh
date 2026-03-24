@@ -624,6 +624,9 @@ docker-compose up -d 2>&1
 log "Thread 설정..."
 DATASET_FILE="$HA_DIR/thread-dataset.hex"
 
+# hex 유효성 체크 함수 (순수 hex 문자열인지)
+is_valid_hex() { echo "$1" | grep -qE '^[0-9a-fA-F]{20,}$'; }
+
 # OTBR 준비 대기
 for i in $(seq 1 30); do
     docker exec otbr ot-ctl state > /dev/null 2>&1 && break
@@ -634,14 +637,31 @@ STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' ||
 
 if [ "$STATE" = "leader" ] || [ "$STATE" = "router" ]; then
     log "Thread 이미 활성: $STATE"
-    docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r' > "$DATASET_FILE"
-elif [ -f "$DATASET_FILE" ] && [ -s "$DATASET_FILE" ]; then
+    _hex=$(docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r')
+    is_valid_hex "$_hex" && echo "$_hex" > "$DATASET_FILE"
+elif [ -f "$DATASET_FILE" ] && is_valid_hex "$(cat "$DATASET_FILE" | tr -d '\r\n')"; then
     HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
-    log "Thread dataset 복원..."
+    log "Thread dataset 복원 시도 (${#HEX}자)..."
     docker exec otbr ot-ctl dataset set active "$HEX"
     docker exec otbr ot-ctl dataset commit active
     docker exec otbr ot-ctl ifconfig up
     docker exec otbr ot-ctl thread start
+    # 복원 후 leader 대기 (최대 20초)
+    _restored=false
+    for i in $(seq 1 20); do
+        STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
+        if [ "$STATE" = "leader" ] || [ "$STATE" = "router" ]; then _restored=true; break; fi
+        sleep 1
+    done
+    if [ "$_restored" != "true" ]; then
+        warn "복원 실패 (detached) → 새 Thread 네트워크 생성"
+        docker exec otbr ot-ctl thread stop 2>/dev/null
+        docker exec otbr ot-ctl ifconfig down 2>/dev/null
+        docker exec otbr ot-ctl dataset init new
+        docker exec otbr ot-ctl dataset commit active
+        docker exec otbr ot-ctl ifconfig up
+        docker exec otbr ot-ctl thread start
+    fi
 else
     log "새 Thread 네트워크 생성..."
     docker exec otbr ot-ctl dataset init new
@@ -660,18 +680,44 @@ log "Thread: $STATE"
 
 docker exec otbr ot-ctl srp server enable 2>/dev/null || true
 
-# dataset 백업
-docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r' > "$DATASET_FILE"
+# dataset 백업 (유효한 hex만 저장)
+_hex=$(docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r')
+if is_valid_hex "$_hex"; then
+    echo "$_hex" > "$DATASET_FILE"
+else
+    warn "dataset 백업 스킵 (아직 없음)"
+fi
+
+# 새 Thread 네트워크 생성 시 matter-data 초기화 (캐시 불일치 방지)
+if [ "$_restored" != "true" ] 2>/dev/null; then
+    log "새 Thread 네트워크 → matter-data 초기화"
+    docker exec matter-server rm -rf /data/chip.json /data/chip_config.ini 2>/dev/null || true
+    docker restart matter-server 2>/dev/null
+    for i in $(seq 1 30); do
+        docker logs matter-server 2>&1 | grep -q "successfully initialized" && break
+        sleep 1
+    done
+fi
 
 # --- 4. Thread Dataset → python-matter-server ---
 log "matter-server 준비 대기..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     docker logs matter-server 2>&1 | grep -q "successfully initialized" && break
     sleep 1
 done
+# WS 포트 열림 대기
+for i in $(seq 1 15); do
+    docker exec matter-server python3 -c "
+import socket; s=socket.socket(); s.settimeout(1)
+try: s.connect(('127.0.0.1',5580)); s.close(); exit(0)
+except: exit(1)
+" 2>/dev/null && break
+    sleep 1
+done
 
-HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
-if [ -n "$HEX" ]; then
+HEX=""
+[ -f "$DATASET_FILE" ] && HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
+if is_valid_hex "$HEX"; then
     log "Thread dataset → matter-server 주입..."
     docker exec matter-server python3 -c "
 import json, asyncio
@@ -685,6 +731,8 @@ async def inject():
             print('OK')
 asyncio.run(inject())
 " 2>&1
+else
+    warn "Thread dataset 주입 스킵 (유효한 hex 없음)"
 fi
 
 # --- 5. Go HomeAgent ---

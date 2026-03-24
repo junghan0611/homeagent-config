@@ -13,7 +13,7 @@ services:
     devices:
       - ${RCP_DEVICE:-/dev/ttyUSB0}:${RCP_DEVICE:-/dev/ttyUSB0}
     volumes:
-      - otbr-data:/data
+      - otbr-data:/var/lib/thread
     environment:
       - INFRA_IF_NAME=${BACKBONE_IF:-eth0}
       - NAT64=0
@@ -25,11 +25,19 @@ services:
     image: ghcr.io/matter-js/python-matter-server:stable
     container_name: matter-server
     network_mode: host
+    privileged: true
     depends_on:
       - otbr
     volumes:
       - matter-data:/data
-    command: ["--storage-path", "/data", "--port", "5580"]
+      - /run/dbus:/run/dbus:ro
+    command:
+      - "--storage-path"
+      - "/data"
+      - "--port"
+      - "5580"
+      - "--bluetooth-adapter"
+      - "${BT_ADAPTER:-0}"
     restart: unless-stopped
 
 volumes:

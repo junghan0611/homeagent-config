@@ -101,3 +101,7 @@ tmp
 
 # Docker 환경 설정 (비밀 아님)
 !.env.docker.*
+
+# CHIP SDK binaries (built from connectedhomeip, 107MB)
+flutter/android/app/libs/*.jar
+flutter/android/app/libs/jniLibs/

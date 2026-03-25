@@ -1,6 +1,5 @@
 package com.homeagent.homeagent
 
-import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.util.Log
 import chip.devicecontroller.ChipDeviceController
@@ -27,6 +26,10 @@ import io.flutter.plugin.common.MethodChannel
  * (openCommissioningWindow) to Dart via "com.homeagent/chip" channel.
  *
  * CHIP SDK Android uses Android BLE HAL directly — no BlueZ needed.
+ *
+ * Network credentials (WiFi/Thread) are stored here and passed to
+ * pairDeviceWithCode as NetworkCredentials object — the CHIP SDK
+ * does NOT have standalone setWiFi/setThread methods on the controller.
  */
 class ChipBridge(
     private val context: Context,
@@ -41,6 +44,9 @@ class ChipBridge(
     private val channel = MethodChannel(messenger, CHANNEL)
     private var controller: ChipDeviceController? = null
     private var platform: AndroidChipPlatform? = null
+
+    // Network credentials stored until pairDeviceWithCode uses them
+    private var networkCredentials: NetworkCredentials? = null
 
     init {
         channel.setMethodCallHandler(this)
@@ -114,7 +120,7 @@ class ChipBridge(
             return
         }
 
-        Log.i(TAG, "pairDeviceWithCode: node=$nodeId code=${code.take(4)}...")
+        Log.i(TAG, "pairDeviceWithCode: node=$nodeId code=${code.take(4)}... creds=${networkCredentials != null}")
 
         ctrl.setCompletionListener(object : ChipDeviceController.CompletionListener {
             override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
@@ -149,12 +155,14 @@ class ChipBridge(
             override fun onICDRegistrationComplete(errorCode: Long, icdNodeId: Long) {}
         })
 
+        // Signature: pairDeviceWithCode(nodeId, code, discoverOnce, useOnlyOnNetworkDiscovery, csrNonce, networkCredentials)
         ctrl.pairDeviceWithCode(
             nodeId,
             code,
-            true,   // discoverOnce
-            false,  // useOnlyOnNetworkDiscovery = false → BLE 활성화
-            null,   // networkCredentials set separately via setThread/WiFi
+            true,                // discoverOnce
+            false,               // useOnlyOnNetworkDiscovery = false → BLE 활성화
+            null,                // csrNonce (optional)
+            networkCredentials,  // WiFi or Thread credentials (set via setWifi/setThread)
         )
     }
 
@@ -164,6 +172,10 @@ class ChipBridge(
      * commission_on_network with the returned PIN.
      *
      * args: { "nodeId": long, "duration": int (seconds), "discriminator": int }
+     *
+     * SDK signature: openPairingWindowWithPINCallback(
+     *   devicePtr: Long, duration: Int, iteration: Long,
+     *   discriminator: Int, setupPinCode: Long?, callback: OpenCommissioningCallback)
      */
     private fun openCommissioningWindow(call: MethodCall, result: MethodChannel.Result) {
         val ctrl = controller
@@ -183,13 +195,12 @@ class ChipBridge(
 
         ctrl.getConnectedDevicePointer(nodeId, object : GetConnectedDeviceCallbackJni.GetConnectedDeviceCallback {
             override fun onDeviceConnected(devicePointer: Long) {
-                // Signature: (devicePtr, duration, iteration, discriminator, setupPinCode, callback)
                 ctrl.openPairingWindowWithPINCallback(
                     devicePointer,
                     duration,
                     pbkdfIterations,
-                    discriminator.toLong(),
-                    setupPinCode,
+                    discriminator,     // int, not long
+                    setupPinCode,      // Long? (nullable)
                     object : OpenCommissioningCallback {
                         override fun onSuccess(setupPinCode: Long, manualPairingCode: String?, qrCode: String?) {
                             Log.i(TAG, "window opened: pin=$setupPinCode")
@@ -215,40 +226,38 @@ class ChipBridge(
     }
 
     /**
-     * Set Thread operational dataset for Thread device commissioning.
+     * Store Thread operational dataset for next commissioning.
+     * Credentials are passed to pairDeviceWithCode, not set on controller directly.
+     *
      * args: { "dataset": String (hex) }
      */
     private fun setThreadDataset(call: MethodCall, result: MethodChannel.Result) {
-        val ctrl = controller
-        if (ctrl == null) {
-            result.error("NOT_INITIALIZED", "Call init() first", null)
-            return
-        }
         val hex = call.argument<String>("dataset")
         if (hex == null) {
             result.error("INVALID_ARGS", "dataset is required", null)
             return
         }
         val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        ctrl.setThreadOperationalDataset(bytes)
-        Log.i(TAG, "Thread dataset set (${bytes.size} bytes)")
+        networkCredentials = NetworkCredentials.forThread(
+            NetworkCredentials.ThreadCredentials(bytes)
+        )
+        Log.i(TAG, "Thread dataset stored (${bytes.size} bytes)")
         result.success(true)
     }
 
     /**
-     * Set WiFi credentials for WiFi device commissioning.
+     * Store WiFi credentials for next commissioning.
+     * Credentials are passed to pairDeviceWithCode, not set on controller directly.
+     *
      * args: { "ssid": String, "password": String }
      */
     private fun setWifiCredentials(call: MethodCall, result: MethodChannel.Result) {
-        val ctrl = controller
-        if (ctrl == null) {
-            result.error("NOT_INITIALIZED", "Call init() first", null)
-            return
-        }
         val ssid = call.argument<String>("ssid") ?: ""
         val password = call.argument<String>("password") ?: ""
-        ctrl.setWiFiCredentials(ssid, password)
-        Log.i(TAG, "WiFi credentials set: ssid=$ssid")
+        networkCredentials = NetworkCredentials.forWiFi(
+            NetworkCredentials.WiFiCredentials(ssid, password)
+        )
+        Log.i(TAG, "WiFi credentials stored: ssid=$ssid")
         result.success(true)
     }
 
@@ -271,6 +280,7 @@ class ChipBridge(
     fun dispose() {
         controller?.close()
         controller = null
+        networkCredentials = null
         channel.setMethodCallHandler(null)
     }
 }

@@ -10,9 +10,11 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
-    // CHIP SDK AAR from libs/
-    repositories {
-        flatDir { dirs("libs") }
+    // CHIP SDK JNI native libs (libCHIPController.so, libc++_shared.so)
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("libs/jniLibs")
+        }
     }
 
     compileOptions {
@@ -43,9 +45,11 @@ android {
 }
 
 dependencies {
-    // CHIP SDK Android AAR — built from connectedhomeip chip-library
-    // Place chip-library-debug.aar in app/libs/
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+    // CHIP SDK Android — JARs + JNI native libs from connectedhomeip build
+    // Built via: kyungdong-rockchip/matter/build-chiptool.sh (android-arm64-chip-tool)
+    // JARs: CHIPController, CHIPClusters, AndroidPlatform, etc.
+    // JNI:  libs/jniLibs/arm64-v8a/libCHIPController.so + libc++_shared.so
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 }
 
 flutter {

@@ -14,15 +14,17 @@ cd android-docker && bash setup-docker.sh
 ### 2. Run on board (adb shell, root)
 
 ```bash
-/data/local/tmp/docker-android.sh start   # Docker Engine
-/data/local/tmp/docker-android.sh load    # Load images (offline)
-/data/local/tmp/docker-android.sh up      # Start matter-server + OTBR
-/data/local/tmp/docker-android.sh status  # Verify
+/data/local/tmp/docker-android.sh all   # 전체 스택 원커맨드
 ```
 
-All at once:
+개별 명령:
 ```bash
-adb shell '/data/local/tmp/docker-android.sh start && /data/local/tmp/docker-android.sh load && /data/local/tmp/docker-android.sh up'
+/data/local/tmp/docker-android.sh start        # Docker Engine
+/data/local/tmp/docker-android.sh load         # Load images (offline)
+/data/local/tmp/docker-android.sh up           # Start matter-server + OTBR
+/data/local/tmp/docker-android.sh thread-init  # Thread 네트워크 자동 생성
+/data/local/tmp/docker-android.sh go-start     # Go 서버 + APK
+/data/local/tmp/docker-android.sh status       # Verify
 ```
 
 ## Prerequisites
@@ -34,6 +36,7 @@ AOSP image with patches:
 | 006 | Docker kernel (PID_NS, USER_NS, IPC_NS, CGROUP_PIDS, CGROUP_DEVICE, SYSVIPC) | ✅ |
 | 007 | `/dev/run` tmpfs + `/dev/cg_devices` (devices cgroup v1) | ✅ |
 | 010 | `/run` tmpfs (containerd/dockerd sockets) | ✅ |
+| **TBD** | **`CONFIG_IPV6_MROUTE=y` + `CONFIG_IP_MROUTE=y`** | **⚠️ OTBR BBR 필수** |
 
 ## Version Matrix
 
@@ -54,8 +57,8 @@ All images loaded offline via `docker load` — no internet pull required.
 android-docker/
 ├── README.md                 # This file
 ├── setup-docker.sh           # PC → board push (one command)
-├── docker-android.sh         # Board-side Docker Engine management
-├── docker-compose.yml        # Android-specific (no dbus, no BLE)
+├── docker-android.sh         # Board-side Docker Engine + Thread management
+├── docker-compose.yml        # Android-specific compose
 ├── .gitignore
 └── images/                   # Binaries + images (git-ignored, manual prep)
     ├── docker-29.3.0.tgz
@@ -71,12 +74,16 @@ android-docker/
 
 | Command | Description |
 |---------|-------------|
+| `all` | **전체 스택 원커맨드** (Docker + 이미지 + 컨테이너 + Thread + Go + APK) |
 | `start` | Start Docker Engine (containerd + dockerd) |
-| `stop` | Stop Docker Engine |
+| `stop` | Stop all (Docker + Go) |
 | `status` | Show processes + containers + images |
 | `load` | Load `/data/local/tmp/*.tar{.gz}` images |
 | `up` | `docker-compose up -d` |
 | `down` | `docker-compose down` |
+| `thread-init` | Thread 네트워크 자동 생성 (dataset 없으면 생성, 있으면 복원) |
+| `go-start` | Go homeagent + APK 시작 |
+| `go-stop` | Go homeagent 종료 |
 | `exec ...` | Docker CLI (e.g., `exec ps`, `exec logs matter-server`) |
 
 ## VFS Storage Driver
@@ -103,6 +110,26 @@ Reclaim ~434MB after load: `rm /data/local/tmp/*.tar.gz`
 | containerd `mkdir /run: read-only` | Android rootfs is dm-verity read-only | AOSP patch 010: `/run` tmpfs |
 | `remount / invalid argument` (chroot) | mount propagation conflicts with rbind | **Abandoned chroot** → native Docker |
 | overlay mount failed | f2fs + overlayfs incompatible | `--storage-driver vfs` |
+| OTBR `platformConfigureTunDevice` | Container missing `/dev/net/tun` | `devices: /dev/tun:/dev/net/tun` (Android TUN 경로 매핑) |
+| OTBR ipset `Kernel error` | Android kernel lacks `xt_set` module | `FIREWALL=0` environment variable |
+| OTBR `InitMulticastRouterSock` crash | `CONFIG_IPV6_MROUTE` not set | **⚠️ 커널 패치 필요** — BBR 없이 `-B` 제거로 우회 시도했으나 여전히 크래시 |
+
+## OTBR Known Issue: Multicast Routing Crash
+
+OTBR 0.3.0의 `otbr-agent`는 Thread leader 도달 ~54초 후 `InitMulticastRouterSock()` 에서
+`setsockopt(MRT6_INIT)` 호출 → `Protocol not available` → `VerifyOrDie` → 강제 종료.
+
+**근본 원인**: Android 커널에 `CONFIG_IPV6_MROUTE=y` 없음.
+
+- `-B` (backbone interface) 제거해도 크래시 — BBR 코드가 컴파일 타임 포함
+- `FIREWALL=0`은 ipset만 우회, multicast routing과 무관
+- **해결**: AOSP 커널에 `CONFIG_IPV6_MROUTE=y` + `CONFIG_IP_MROUTE=y` 추가 (패치 요청 완료)
+
+## Thread 네트워크 영속성
+
+- Docker volume `otbr-data:/var/lib/thread` — dataset 저장
+- `docker-android.sh thread-init` — dataset 있으면 복원, 없으면 새로 생성 (NetworkName: HomeAgent, Channel: 15)
+- 재부팅 후 `docker-android.sh all` 한 번이면 전체 복원
 
 ## Architecture Decision: Native > Chroot
 

@@ -8,6 +8,8 @@
 ## Android python-matter-server 이용 시
 android-docker를 참고하라! 
 
+matterjs-server 와 python-matter-server는 별개야. 섞지마
+
 ## Phase 로드맵 (흔들리지 않는 방향)
 
 | Phase | 이름 | 핵심 | 상태 |

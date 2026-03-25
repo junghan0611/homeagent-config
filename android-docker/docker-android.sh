@@ -179,6 +179,52 @@ cmd_down() {
     $DOCKER_BIN/docker-compose -f $D/docker-compose.yml down
 }
 
+# ─── Thread 네트워크 초기화 ───
+cmd_thread_init() {
+    log "Thread 네트워크 초기화..."
+
+    # OTBR REST 대기 (최대 30초)
+    local state=""
+    for i in $(seq 1 30); do
+        state=$($D/curl -s http://localhost:8081/node/state 2>/dev/null | tr -d '"')
+        [ -n "$state" ] && break
+        sleep 1
+    done
+
+    if [ -z "$state" ]; then
+        log "WARNING: OTBR REST 응답 없음 — Thread 초기화 건너뜀"
+        return 0
+    fi
+
+    log "Thread state: $state"
+
+    if [ "$state" != "disabled" ]; then
+        log "Thread 이미 활성: $state"
+        return 0
+    fi
+
+    # 기존 dataset 확인 (Docker volume에 남아있을 수 있음)
+    local dataset=$($DOCKER_BIN/docker exec otbr ot-ctl dataset active 2>/dev/null)
+    if echo "$dataset" | grep -q "Network Key"; then
+        log "기존 dataset 발견 — 복원"
+    else
+        log "새 dataset 생성..."
+        $DOCKER_BIN/docker exec otbr ot-ctl dataset init new
+        $DOCKER_BIN/docker exec otbr ot-ctl dataset networkname HomeAgent
+        $DOCKER_BIN/docker exec otbr ot-ctl dataset commit active
+    fi
+
+    $DOCKER_BIN/docker exec otbr ot-ctl ifconfig up
+    $DOCKER_BIN/docker exec otbr ot-ctl thread start
+    sleep 3
+
+    state=$($D/curl -s http://localhost:8081/node/state 2>/dev/null | tr -d '"')
+    log "Thread state: $state"
+
+    # dataset 출력
+    $DOCKER_BIN/docker exec otbr ot-ctl dataset active 2>/dev/null | grep -E "Network|Channel|Pan" || true
+}
+
 # ─── Go homeagent + APK 시작 ───
 # _start.sh가 setup-docker.sh(PC)에서 생성되어 보드에 있어야 함
 cmd_go_start() {
@@ -214,7 +260,8 @@ cmd_all() {
     cmd_start       # Docker Engine
     cmd_load        # 이미지 로드
     cmd_up          # 컨테이너 시작
-    sleep 5         # matter-server 초기화 대기
+    sleep 5         # OTBR + matter-server 초기화 대기
+    cmd_thread_init # Thread 네트워크
     cmd_go_start    # Go + APK
     log "=== 전체 스택 기동 완료 ==="
     cmd_status
@@ -233,6 +280,7 @@ case "${1:-help}" in
     load)     cmd_load ;;
     up)       cmd_up ;;
     down)     cmd_down ;;
+    thread-init) cmd_thread_init ;;
     go-start) cmd_go_start ;;
     go-stop)  cmd_go_stop ;;
     all)      cmd_all ;;

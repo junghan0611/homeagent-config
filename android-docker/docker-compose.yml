@@ -14,13 +14,17 @@ services:
     privileged: true
     devices:
       - ${RCP_DEVICE:-/dev/ttyS5}:${RCP_DEVICE:-/dev/ttyS5}
+      - /dev/tun:/dev/net/tun
     volumes:
       - otbr-data:/var/lib/thread
     environment:
       - INFRA_IF_NAME=${BACKBONE_IF:-wlan0}
+      - FIREWALL=0
       - NAT64=0
       - DNS64=0
-    command: --radio-url "spinel+hdlc+uart://${RCP_DEVICE:-/dev/ttyS5}?uart-baudrate=${RCP_BAUDRATE:-460800}" -B ${BACKBONE_IF:-wlan0}
+    # NOTE: -B 제거 — Android 커널에 CONFIG_IPV6_MROUTE 없어서 BBR multicast crash
+    # 커널 패치 후 -B wlan0 복원할 것
+    entrypoint: ["/bin/sh", "-c", "/app/etc/docker/test/docker_entrypoint.sh --radio-url \"spinel+hdlc+uart://${RCP_DEVICE:-/dev/ttyS5}?uart-baudrate=${RCP_BAUDRATE:-460800}\" & sleep 5 && sed -i 's/ -B [^ ]*//' /etc/default/otbr-agent && service otbr-agent restart && wait"]
     restart: unless-stopped
 
   matter-server:

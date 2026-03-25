@@ -78,6 +78,7 @@ class ChipBridge(
 
             val chipPlatform = AndroidChipPlatform(
                 AndroidBleManager(),
+                null,  // NfcCommissioningManager — NFC 미사용
                 PreferencesKeyValueStoreManager(context),
                 PreferencesConfigurationManager(context),
                 NsdManagerServiceResolver(context),
@@ -146,13 +147,15 @@ class ChipBridge(
             override fun onReadCommissioningInfo(
                 vendorId: Int, productId: Int, wifiEndpointId: Int, threadEndpointId: Int
             ) {}
+            override fun onConnectDeviceComplete() {}
             override fun onCommissioningStatusUpdate(nodeId: Long, stage: String?, errorCode: Long) {}
+            override fun onCommissioningStageStart(nodeId: Long, stage: String?) {}
             override fun onNotifyChipConnectionClosed() {}
             override fun onCloseBleComplete() {}
             override fun onOpCSRGenerationComplete(csr: ByteArray?) {}
             override fun onPairingDeleted(errorCode: Long) {}
             override fun onICDRegistrationInfoRequired() {}
-            override fun onICDRegistrationComplete(errorCode: Long, icdNodeId: Long) {}
+            override fun onICDRegistrationComplete(errorCode: Long, icdDeviceInfo: chip.devicecontroller.ICDDeviceInfo?) {}
         })
 
         // Signature: pairDeviceWithCode(nodeId, code, discoverOnce, useOnlyOnNetworkDiscovery, csrNonce, networkCredentials)

@@ -26,9 +26,10 @@ Flutter App (ivi-homescreen / Android APK)
                    ├── Matter WS Client (single ReadLoop)
                    └── Matter Backend (:5580)
                         ├── matterjs-server (current)
-                        ├── python-matter-server (Docker, transitioning)
+                        ├── python-matter-server (Docker) ← current
+                        ├── matterjs-server (legacy)
                         ├── BLE commissioning (WiFi + Thread)
-                        └── OTBR integration (Docker / native)
+                        └── OTBR (Docker container)
 ```
 
 ---
@@ -53,7 +54,7 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
   RPi5 (Yocto Linux)              RK3576 (Android 15)
   ─────────────────              ───────────────────
   ivi-homescreen (Wayland)       Flutter APK (WebView)
-  docker-compose up -d           docker-android.sh (chroot)
+  docker-compose up -d           docker-android.sh (native Docker)
   /dev/ttyUSB0 (ZBDongle-E)     /dev/ttyS5 (ESP32-H2)
   eth0 backbone                  wlan0 backbone
   Hailo-8 NPU (optional)        —
@@ -199,12 +200,12 @@ The platform. Docker-based Matter+OTBR, Go as extension layer, Flutter as the un
 
 **Principle**: Linux (RPi5) first → Android second. Never Android-locked.
 
-- [x] **Docker-based deployment** — RPi5: `docker-compose up -d` 한 줄로 전체 스택
-- [x] **python-matter-server** — HA 공식 Matter 컨트롤러, Go 코드 변경 0줄로 호환
-- [x] **Android Docker Engine** — chroot 방식, static binary, 커널 패치 연동
+- [x] **Docker-based deployment** — RPi5: `docker-compose up -d`, Android: `docker-android.sh start/load/up`
+- [x] **python-matter-server 8.1.2** — HA 공식 Matter 컨트롤러, Go 코드 변경 0줄로 호환
+- [x] **Android native Docker** — chroot 폐기 → 네이티브 실행. AOSP 3개 패치로 완결
+- [x] **Android Docker 컨테이너 실행** — matter-server + OTBR 컨테이너 동작 확인 ✅
 - [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
 - [x] **REST API 12 endpoints** — devices, commission, command, chat, home, events, system, thread
-- [ ] **Android Docker 컨테이너 실행** — 커널 IPC_NS 패치 대기 중
 - [ ] **Flutter Linux app** — RPi5 ivi-homescreen native UI (not WebView), matterjs WS direct
 - [ ] **HA protocol compat** — Flutter app speaks OHF WebSocket API to matterjs-server
 - [ ] **HA Kotlin→Dart port** — Core logic (WS subscription, state management) from ha-android
@@ -260,15 +261,15 @@ The product. Ship it.
                   │ WebSocket (:5580)
 ┌─────────────────┴───────────────────────────┐
 │  Matter Backend (Docker)                    │
-│  ├── python-matter-server (transitioning)   │
-│  └── matterjs-server (current)              │
+│  ├── python-matter-server 8.1.2 (current)   │
+│  └── matterjs-server (legacy)               │
 │  BLE commissioning · Thread · WiFi · Events │
 └─────────────────┬───────────────────────────┘
                   │ Spinel HDLC (UART)
 ┌─────────────────┴───────────────────────────┐
-│  Thread Border Router (Docker / native)     │
+│  Thread Border Router (Docker)               │
 │  wpan0 · SRP Server · Border Routing        │
-│  RPi5: Docker / RK3576: Docker (chroot)     │
+│  RPi5: docker-compose / RK3576: native Docker│
 └─────────────────┬───────────────────────────┘
                   │
               ESP32-H2 / ZBDongle-E (Thread RCP)
@@ -379,13 +380,14 @@ OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 ### Option D: Deploy to Android Board — Docker (RK3576)
 
 ```bash
-# PC에서 원커맨드 설치
-cd android-docker && ./setup-docker.sh
+# PC (one command — push binaries + images + scripts)
+cd android-docker && bash setup-docker.sh
 
-# 보드에서 (adb shell)
-/data/local/tmp/docker-android.sh start   # Docker Engine
-/data/local/tmp/docker-android.sh load    # 이미지 로드
-/data/local/tmp/docker-android.sh up      # matter-server + OTBR
+# Board (adb shell, root)
+/data/local/tmp/docker-android.sh start   # Docker Engine (native, no chroot)
+/data/local/tmp/docker-android.sh load    # Load images (offline, no pull)
+/data/local/tmp/docker-android.sh up      # matter-server + OTBR containers
+/data/local/tmp/docker-android.sh status  # Verify
 ```
 
 ### Option E: Deploy to Android Board — Native (legacy)
@@ -457,10 +459,10 @@ homeagent-config/
 │   ├── lib/matter/        # Pure Dart: BTP, PASE, TLV, Spake2+
 │   └── test/matter/       # 39 unit tests
 ├── ui/                    # Lit frontend (Vite)
-├── android-docker/        # Android Docker 배포 (Phase 4)
-│   ├── docker-android.sh  # Docker Engine 관리 (chroot)
-│   ├── docker-compose.yml # Android 전용 compose
-│   └── setup-docker.sh    # PC→보드 원커맨드 설치
+├── android-docker/        # Android Docker deploy (Phase 4)
+│   ├── docker-android.sh  # Native Docker Engine management
+│   ├── docker-compose.yml # Android-specific compose (no dbus)
+│   └── setup-docker.sh    # PC → board one-command setup
 ├── docker-compose.yml     # RPi5 Docker compose
 ├── scripts/
 │   ├── android-deploy.sh  # Android 네이티브 배포 (legacy)

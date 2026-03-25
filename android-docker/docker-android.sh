@@ -57,8 +57,8 @@ cmd_start() {
     log "network OK"
 
     # 기존 프로세스 정리
-    kill -9 $(pgrep -f containerd) 2>/dev/null || true
-    kill -9 $(pgrep -f dockerd) 2>/dev/null || true
+    pgrep -f containerd | xargs kill -9 2>/dev/null || true
+    pgrep -f dockerd | xargs kill -9 2>/dev/null || true
     sleep 2
 
     # 디렉토리 준비
@@ -179,6 +179,47 @@ cmd_down() {
     $DOCKER_BIN/docker-compose -f $D/docker-compose.yml down
 }
 
+# ─── Go homeagent + APK 시작 ───
+# _start.sh가 setup-docker.sh(PC)에서 생성되어 보드에 있어야 함
+cmd_go_start() {
+    log "Go homeagent + APK 시작..."
+    pgrep -f "homeagent serve" | xargs kill -9 2>/dev/null || true
+    sleep 1
+
+    if [ ! -f "$D/_start.sh" ]; then
+        err "_start.sh 없음. setup-docker.sh를 먼저 실행하세요."
+    fi
+
+    nohup $D/_start.sh > /dev/null 2>&1 &
+    sleep 5
+
+    local go_pid=$(pgrep -f "homeagent serve" || true)
+    if [ -z "$go_pid" ]; then
+        log "homeagent 로그:"
+        tail -10 /run/homeagent.log 2>/dev/null
+        err "homeagent 시작 실패"
+    fi
+    log "homeagent OK (PID $go_pid, :8080)"
+}
+
+# ─── Go homeagent 서버 종료 ───
+cmd_go_stop() {
+    pgrep -f "homeagent serve" | xargs kill -9 2>/dev/null || true
+    umount /system/etc/resolv.conf 2>/dev/null || true
+    log "homeagent 종료"
+}
+
+# ─── 전체 스택 원커맨드 ───
+cmd_all() {
+    cmd_start       # Docker Engine
+    cmd_load        # 이미지 로드
+    cmd_up          # 컨테이너 시작
+    sleep 5         # matter-server 초기화 대기
+    cmd_go_start    # Go + APK
+    log "=== 전체 스택 기동 완료 ==="
+    cmd_status
+}
+
 # ─── docker CLI ───
 cmd_exec() {
     $DOCKER_BIN/docker "$@"
@@ -186,22 +227,28 @@ cmd_exec() {
 
 # ─── Main ───
 case "${1:-help}" in
-    start)   cmd_start ;;
-    stop)    cmd_stop ;;
-    status)  cmd_status ;;
-    load)    cmd_load ;;
-    up)      cmd_up ;;
-    down)    cmd_down ;;
-    exec)    shift; cmd_exec "$@" ;;
+    start)    cmd_start ;;
+    stop)     cmd_stop; cmd_go_stop ;;
+    status)   cmd_status ;;
+    load)     cmd_load ;;
+    up)       cmd_up ;;
+    down)     cmd_down ;;
+    go-start) cmd_go_start ;;
+    go-stop)  cmd_go_stop ;;
+    all)      cmd_all ;;
+    exec)     shift; cmd_exec "$@" ;;
     *)
-        echo "Usage: $0 {start|stop|status|load|up|down|exec} [args]"
+        echo "Usage: $0 {all|start|stop|status|load|up|down|go-start|go-stop|exec}"
         echo ""
-        echo "  start    Docker Engine 시작"
-        echo "  stop     Docker Engine 종료"
-        echo "  status   상태 확인"
-        echo "  load     이미지 로드 (/data/local/tmp/*.tar.gz)"
-        echo "  up       docker-compose up -d"
-        echo "  down     docker-compose down"
-        echo "  exec     docker CLI (예: $0 exec ps)"
+        echo "  all        전체 스택 원커맨드 (Docker + 이미지 + 컨테이너 + Go + APK)"
+        echo "  start      Docker Engine 시작"
+        echo "  stop       전체 종료 (Docker + Go)"
+        echo "  status     상태 확인"
+        echo "  load       이미지 로드"
+        echo "  up         docker-compose up -d"
+        echo "  down       docker-compose down"
+        echo "  go-start   Go + APK 시작"
+        echo "  go-stop    Go 종료"
+        echo "  exec       docker CLI"
         ;;
 esac

@@ -72,7 +72,111 @@ adb push "$SCRIPT_DIR/docker-compose.yml" "$REMOTE/" 2>&1 | tail -1
 adb shell "chmod 755 $REMOTE/docker-android.sh $REMOTE/docker/*"
 log "스크립트 OK"
 
-# ─── 6. 개발 도구 push (있으면) ───
+# ─── 6. Go 바이너리 + UI + aliases push ───
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -f "$PROJECT_DIR/dist/homeagent-android-arm64" ]; then
+    log "Go 바이너리 push..."
+    adb push "$PROJECT_DIR/dist/homeagent-android-arm64" "$REMOTE/homeagent" 2>&1 | tail -1
+    adb shell "chmod 755 $REMOTE/homeagent"
+else
+    log "WARNING: Go 바이너리 없음 ($PROJECT_DIR/dist/homeagent-android-arm64)"
+fi
+
+if [ -d "$PROJECT_DIR/ui/dist" ]; then
+    log "UI push..."
+    adb shell "mkdir -p $REMOTE/ui"
+    (cd "$PROJECT_DIR/ui" && tar czf /tmp/ha-ui-dist.tar.gz dist/)
+    adb push /tmp/ha-ui-dist.tar.gz "$REMOTE/ui/dist.tar.gz" 2>&1 | tail -1
+    adb shell "cd $REMOTE/ui && tar xzf dist.tar.gz && rm dist.tar.gz"
+    rm -f /tmp/ha-ui-dist.tar.gz
+fi
+
+if [ -f "$PROJECT_DIR/aliases.json" ]; then
+    adb push "$PROJECT_DIR/aliases.json" "$REMOTE/" 2>&1 | tail -1
+fi
+log "Go + UI + aliases OK"
+
+# ─── 7. _start.sh 생성 (Go + APK — PC에서 생성, 보드에서 실행) ───
+log "Go 시작 스크립트 생성..."
+
+# LLM API 키 수집 (PC의 ~/.env.local에서)
+_LLM_KEY="" _LLM_ENDPOINT="" _LLM_MODEL=""
+if [ -f "$HOME/.env.local" ]; then
+    for _envname in HOMEAGENT_LLM_API_KEY DEEPSEEK_API_KEY OPENROUTER_API_KEY; do
+        _LLM_KEY=$(grep -m1 "^\(export \)\?${_envname}=" "$HOME/.env.local" 2>/dev/null | sed 's/^export //' | cut -d= -f2- || true)
+        [ -n "$_LLM_KEY" ] && break
+    done
+    _LLM_ENDPOINT=$(grep -m1 "^\(export \)\?HOMEAGENT_LLM_ENDPOINT=" "$HOME/.env.local" 2>/dev/null | sed 's/^export //' | cut -d= -f2- || true)
+    _LLM_MODEL=$(grep -m1 "^\(export \)\?HOMEAGENT_LLM_MODEL=" "$HOME/.env.local" 2>/dev/null | sed 's/^export //' | cut -d= -f2- || true)
+fi
+_LLM_ENDPOINT="${_LLM_ENDPOINT:-https://api.deepseek.com/v1}"
+_LLM_MODEL="${_LLM_MODEL:-deepseek-chat}"
+
+adb shell "cat > $REMOTE/_start.sh" << STARTEOF
+#!/system/bin/sh
+export HOME=$REMOTE
+
+# WiFi 설정 복사 (SELinux 우회)
+cp /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml $REMOTE/WifiConfigStore.xml 2>/dev/null
+chmod 644 $REMOTE/WifiConfigStore.xml 2>/dev/null
+
+# DNS
+echo "nameserver 192.168.0.1
+nameserver 8.8.8.8" > $REMOTE/resolv.conf
+mount --bind $REMOTE/resolv.conf /system/etc/resolv.conf 2>/dev/null
+
+# Go homeagent
+setsid sh -c "SSL_CERT_DIR=/system/etc/security/cacerts \\
+HOMEAGENT_HTTP_ADDR=:8080 \\
+HOMEAGENT_MATTER_WS=ws://localhost:5580 \\
+HOMEAGENT_UI_DIR=$REMOTE/ui/dist \\
+HOMEAGENT_ALIASES_FILE=$REMOTE/aliases.json \\
+HOMEAGENT_OTBR_REST=http://localhost:8081 \\
+HOMEAGENT_LLM_ENDPOINT=$_LLM_ENDPOINT \\
+HOMEAGENT_LLM_MODEL=$_LLM_MODEL \\
+${_LLM_KEY:+HOMEAGENT_LLM_API_KEY=$_LLM_KEY} \\
+$REMOTE/homeagent serve" \\
+    > /run/homeagent.log 2>&1 &
+sleep 3
+
+# APK
+APK_PKG="com.homeagent.app"
+APK_ACTIVITY="com.homeagent.homeagent.MainActivity"
+for i in \$(seq 1 10); do
+    if pm path \$APK_PKG > /dev/null 2>&1; then
+        am force-stop \$APK_PKG 2>/dev/null
+        sleep 1
+        am start -n \$APK_PKG/\$APK_ACTIVITY > /dev/null 2>&1
+        echo "APK started"
+        break
+    fi
+    sleep 2
+done
+echo "started"
+STARTEOF
+adb shell "chmod 755 $REMOTE/_start.sh"
+log "_start.sh OK"
+
+# ─── 8. LLM API 키 (.env) push ───
+if [ -f "$HOME/.env.local" ]; then
+    # .env.local에서 LLM 관련 키만 추출
+    grep -E "^(export )?(HOMEAGENT_LLM_|DEEPSEEK_|OPENROUTER_)" "$HOME/.env.local" 2>/dev/null \
+        | sed 's/^export //' > /tmp/ha-env-tmp
+    if [ -s /tmp/ha-env-tmp ]; then
+        adb push /tmp/ha-env-tmp "$REMOTE/.env" 2>&1 | tail -1
+        log "LLM .env push OK"
+    fi
+    rm -f /tmp/ha-env-tmp
+fi
+
+# ─── 8. APK install (있으면) ───
+APK_PATH="$PROJECT_DIR/flutter/build/app/outputs/flutter-apk/app-release.apk"
+if [ -f "$APK_PATH" ]; then
+    log "APK install..."
+    adb install -r "$APK_PATH" 2>&1 | tail -1
+fi
+
+# ─── 9. 개발 도구 push (있으면) ───
 if [ -f "$SCRIPT_DIR/images/tools/curl" ]; then
     log "개발 도구 push..."
     adb push "$SCRIPT_DIR/images/tools/curl" "$REMOTE/curl" 2>&1 | tail -1
@@ -88,10 +192,12 @@ log "보드 파일 구조:"
 adb shell "ls -la $REMOTE/docker/ | head -15"
 log ""
 log "사용법 (adb shell에서):"
-log "  1. /data/local/tmp/docker-android.sh start   # Docker Engine 시작"
-log "  2. /data/local/tmp/docker-android.sh load    # 이미지 로드"
-log "  3. /data/local/tmp/docker-android.sh up      # 서비스 시작"
-log "  4. /data/local/tmp/docker-android.sh status   # 상태 확인"
+log "  /data/local/tmp/docker-android.sh all     # 전체 스택 원커맨드"
 log ""
-log "전부 한 번에:"
-log "  adb shell '/data/local/tmp/docker-android.sh start && /data/local/tmp/docker-android.sh load && /data/local/tmp/docker-android.sh up'"
+log "개별 명령:"
+log "  docker-android.sh start      # Docker Engine"
+log "  docker-android.sh load       # 이미지 로드"
+log "  docker-android.sh up         # 컨테이너 시작"
+log "  docker-android.sh go-start   # Go 서버"
+log "  docker-android.sh apk        # APK 시작"
+log "  docker-android.sh status     # 상태 확인"

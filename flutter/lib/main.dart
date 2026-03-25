@@ -9,7 +9,7 @@ import 'ble_commissioning.dart';
 import 'theme.dart';
 
 /// --dart-define=NATIVE_UI=true → Android에서도 네이티브 UI 사용
-const _forceNative = bool.fromEnvironment('NATIVE_UI', defaultValue: false);
+const _forceNative = bool.fromEnvironment('NATIVE_UI', defaultValue: true);
 
 void main() {
   runApp(const HomeAgentApp());

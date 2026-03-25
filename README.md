@@ -138,7 +138,7 @@ Verified: physical power cycle → Thread leader + 3 devices reconnected in ~80 
 - 🧵 **Thread Border Router** — OTBR on both Yocto and Android (NDK cross-build)
 - 🏗️ **Reproducible Build** — Yocto image (RPi5) or NDK bundle (RK3576)
 - 🔒 **Privacy First** — No cloud dependency, all processing on-device
-- 📱 **Cross-platform** — Flutter WebView shell (Yocto + Android), same codebase
+- 📱 **Cross-platform** — Flutter native UI (Android) + WebView shell (Yocto), same codebase
 - 🖥️ **TUI Dashboard** — Terminal interface for fast feature validation (bubbletea)
 - 🌐 **Web UI** — Lit WebComponents, works on any browser
 

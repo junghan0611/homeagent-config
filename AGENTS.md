@@ -18,15 +18,26 @@
 
 ### Phase 4 원칙
 
-1. **matterjs-server = Matter 프로토콜 엔진** — Matter 로직은 건드리지 않음, HA 호환 유지
+1. **Docker = Matter+OTBR 배포** — python-matter-server + OTBR Docker 컨테이너. 네이티브 실행 (chroot 폐기)
 2. **Go 서버 = 확장 레이어** — 커스텀 REST, aliases, sLLM, A2UI, 클라이언트별 API
-3. **Flutter = 유니버셜 클라이언트** — Linux(RPi5) 먼저 → Android 지원. Android 종속 금지
+3. **Flutter = 유니버셜 클라이언트, 네이티브 UI 기본** — Android는 반드시 네이티브 UI (NavShell). WebView는 RPi5 전용. Android 종속 금지
 4. **HA Kotlin→Dart** — ha-android 핵심 로직을 Flutter로 포팅, 오픈소스 기여 경로
 
-### 아키텍처 결정 (2026-03-20 확정, 흔들리지 않음)
+### Flutter UI 규칙 (흔들리지 않음)
+
+| 플랫폼 | UI 모드 | 이유 |
+|--------|---------|------|
+| **Android** | `NavShell` (네이티브) | WebView 품질 떨어짐. 기본값 `NATIVE_UI=true` |
+| **Linux Desktop** | `NavShell` (네이티브) | 개발용 hot reload |
+| **Yocto RPi5** | `ShellWebView` | ivi-homescreen Wayland, Lit UI |
+
+> WebView APK는 쓰지 않는다. `NATIVE_UI` 기본값은 `true`.
+
+### 아키텍처 결정 (2026-03-25 업데이트)
 
 ```
-APP → Go Server (:8080) → matterjs-server (:5580) → Matter 디바이스
+APP → Go Server (:8080) → python-matter-server (:5580) → OTBR → Matter 디바이스
+                            ↑ Docker container              ↑ Docker container
 ```
 
 - **앱은 Go 서버만 안다** (단일 진입점, 이중 경로 금지)

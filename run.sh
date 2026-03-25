@@ -1069,7 +1069,7 @@ case "${1:-help}" in
         SERVER_HOST="${2:-192.168.0.105}"
         echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드 (server: ${SERVER_HOST})..."
         nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
-            cd ${SCRIPT_DIR}/flutter && flutter build apk --release --dart-define=SERVER_HOST=${SERVER_HOST}
+            cd ${SCRIPT_DIR}/flutter && flutter build apk --release --dart-define=SERVER_HOST=${SERVER_HOST} --dart-define=NATIVE_UI=true
         "
         APK="${SCRIPT_DIR}/flutter/build/app/outputs/flutter-apk/app-release.apk"
         if [[ -f "$APK" ]]; then

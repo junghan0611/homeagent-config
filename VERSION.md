@@ -305,9 +305,9 @@ v0.5.7  2026-03-13   ← 최신 안정 (matter.js 0.17-alpha)
 
 | 플랫폼 | UI 모드 | 렌더링 |
 |---|---|---|
-| **Linux Desktop** (개발) | `ShellNative` | Flutter 네이티브 위젯, Go API 직접 호출 |
-| **Android** (APK 배포) | `ShellWebView` | WebView → A2UI + Lit UI |
-| **Yocto RPi5** (ivi-homescreen) | `ShellWebView` | WebView → A2UI + Lit UI |
+| **Linux Desktop** (개발) | `NavShell` (네이티브) | Flutter 네이티브 위젯, Go API 직접 호출 |
+| **Android** (APK 배포) | `NavShell` (네이티브) | Flutter 네이티브 위젯 — 기본값. WebView 쓰지 않음 |
+| **Yocto RPi5** (ivi-homescreen) | `ShellWebView` | WebView → Lit UI (RPi5 전용) |
 
 **왜 Linux에서 WebView 안 쓰는가:**
 - `webview_flutter`는 Linux 미지원 (Android/iOS/Web만 공식)

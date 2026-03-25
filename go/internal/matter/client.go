@@ -501,6 +501,46 @@ func (c *Client) NodeDiagnostics(ctx context.Context, nodeID int) (json.RawMessa
 	return result, nil
 }
 
+// CommissioningParameters holds the result of opening a commissioning window.
+type CommissioningParameters struct {
+	SetupPinCode    int    `json:"setup_pin_code"`
+	SetupManualCode string `json:"setup_manual_code"`
+	SetupQRCode     string `json:"setup_qr_code"`
+}
+
+// OpenCommissioningWindow opens a commissioning window on an already-commissioned node.
+// Used for multi-admin: Flutter CHIP SDK commissions via BLE first, then opens a window
+// so python-matter-server can commission the same device on its own fabric via IP.
+func (c *Client) OpenCommissioningWindow(ctx context.Context, nodeID int) (*CommissioningParameters, error) {
+	args := map[string]interface{}{
+		"node_id": nodeID,
+	}
+	id, ch, err := c.send("open_commissioning_window", args)
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("open_commissioning_window parse resp: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("open_commissioning_window error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var params CommissioningParameters
+	if err := json.Unmarshal(resp.Result, &params); err != nil {
+		return nil, fmt.Errorf("open_commissioning_window parse: %w", err)
+	}
+	log.Printf("[matter] opened commissioning window for node %d (pin=%d)", nodeID, params.SetupPinCode)
+	return &params, nil
+}
+
 // SetDefaultFabricLabel sets the fabric name shown in matterjs dashboard
 func (c *Client) SetDefaultFabricLabel(ctx context.Context, label string) error {
 	id, ch, err := c.send("set_default_fabric_label", map[string]string{"label": label})

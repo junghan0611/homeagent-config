@@ -554,6 +554,7 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices/", h.handleDeviceByID) // /api/devices/:node_id
 	mux.HandleFunc("/api/commission", h.handleCommission)
 	mux.HandleFunc("/api/commission-on-network", h.handleCommissionOnNetwork)
+	mux.HandleFunc("/api/open-commissioning-window", h.handleOpenCommissioningWindow)
 	mux.HandleFunc("/api/wifi-credentials", h.handleWifiCredentials)
 	mux.HandleFunc("/api/wifi-info", h.handleWifiInfo)
 	mux.HandleFunc("/api/devices/command", h.handleDeviceCommand)
@@ -1128,6 +1129,44 @@ func (h *Hub) handleCommissionOnNetwork(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "commissioning_on_network"})
+}
+
+// handleOpenCommissioningWindow handles POST /api/open-commissioning-window
+// Opens a commissioning window on an already-commissioned node for multi-admin.
+// Flutter CHIP SDK commissions via BLE first, then calls this so python-matter-server
+// can add the device to its own fabric via IP.
+func (h *Hub) handleOpenCommissioningWindow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		NodeID int `json:"node_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.NodeID == 0 {
+		http.Error(w, `{"error":"node_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[hub] open-commissioning-window requested: node=%d", req.NodeID)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	params, err := h.matter.OpenCommissioningWindow(ctx, req.NodeID)
+	if err != nil {
+		log.Printf("[hub] open-commissioning-window failed: %v", err)
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(params)
 }
 
 func (h *Hub) deviceInfos() []agent.DeviceInfo {

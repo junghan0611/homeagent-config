@@ -130,7 +130,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
           '(60~120초 소요)');
 
       final nodeId = DateTime.now().millisecondsSinceEpoch % 100000 + 1;
-      final commResult = await _chip.pairDeviceWithCode(nodeId, info.pairingCode);
+      final commResult = await _chip.pairDevice(nodeId, info.pairingCode);
 
       if (!commResult.success) {
         throw Exception('BLE 커미셔닝 실패');

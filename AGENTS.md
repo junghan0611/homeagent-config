@@ -5,6 +5,9 @@
 
 ---
 
+## Android python-matter-server 이용 시
+android-docker를 참고하라! 
+
 ## Phase 로드맵 (흔들리지 않는 방향)
 
 | Phase | 이름 | 핵심 | 상태 |

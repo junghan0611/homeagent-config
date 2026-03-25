@@ -1066,7 +1066,7 @@ case "${1:-help}" in
         nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter analyze"
         ;;
     apk-build)
-        SERVER_HOST="${2:-192.168.0.105}"
+        SERVER_HOST="${2:-localhost}"
         echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드 (server: ${SERVER_HOST})..."
         nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
             cd ${SCRIPT_DIR}/flutter && flutter build apk --release --dart-define=SERVER_HOST=${SERVER_HOST} --dart-define=NATIVE_UI=true

@@ -3,10 +3,10 @@
 /// Dart side of the ChipBridge — calls into CHIP SDK AAR via platform channel.
 /// Used for BLE commissioning on Android (no BlueZ needed).
 ///
-/// Multi-admin flow:
+/// CHIPTool pattern (pairDeviceThroughBLE):
 ///   1. init()
 ///   2. setThreadDataset() or setWifiCredentials()
-///   3. pairDeviceWithCode() — BLE commission into CHIP fabric
+///   3. pairDevice() — BLE scan → GATT connect → pairDeviceThroughBLE
 ///   4. openCommissioningWindow() — get PIN for python-matter-server
 ///   5. python-matter-server commission_on_network(pin) via Go API
 ///   6. unpairDevice() — remove from CHIP fabric (optional)
@@ -40,11 +40,12 @@ class ChipController {
     });
   }
 
-  /// BLE commission a device. Returns nodeId on success.
-  /// CHIP SDK handles BLE scan → BTP → PASE → network join → complete.
-  Future<CommissionResult> pairDeviceWithCode(int nodeId, String code) async {
+  /// BLE commission a device (CHIPTool pattern).
+  /// App scans BLE → GATT connect → pairDeviceThroughBLE.
+  /// Setup code is parsed for discriminator + PIN automatically.
+  Future<CommissionResult> pairDevice(int nodeId, String code) async {
     final result = await _channel.invokeMapMethod<String, dynamic>(
-      'pairDeviceWithCode',
+      'pairDevice',
       {'nodeId': nodeId, 'code': code},
     );
     return CommissionResult(

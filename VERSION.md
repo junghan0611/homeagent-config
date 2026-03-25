@@ -100,12 +100,24 @@ Go `client.go`는 **코드 변경 없이** 양쪽 백엔드에 연결됨 (WS 프
 
 ### Docker 인프라
 
-| 컴포넌트 | 버전 | 이미지 |
-|----------|------|--------|
-| **Docker Engine** | 29.3.0 | static binary (`/opt/docker/`) |
-| **Docker Compose** | v5.1.1 | standalone binary |
-| **OTBR** | latest | `openthread/otbr:latest` (arm64) |
-| **python-matter-server** | 8.1.2 | `ghcr.io/matter-js/python-matter-server:stable` |
+| 컴포넌트 | 버전 | 이미지/파일 | 비고 |
+|----------|------|------------|------|
+| **Docker Engine** | 29.3.0 | `docker-29.3.0.tgz` (static arm64) | containerd v2.2.1 + runc 1.3.4 포함 |
+| **Docker Compose** | v5.1.1 | `docker-compose-linux-aarch64` (static) | |
+| **python-matter-server** | 8.1.2 | `matter-server-8.1.2-arm64.tar.gz` | CSA 인증, connectedhomeip 2025.7.0 |
+| **OTBR** | 0.3.0-987e44c | `otbr-0.3.0-arm64.tar.gz` | otbr-agent 0.3.0, Ubuntu 18.04 base |
+
+### 플랫폼별 Docker 실행 방식
+
+| | RPi5 (Yocto) | RK3576 (Android 15) |
+|---|---|---|
+| **Docker 방식** | 직접 실행 | 네이티브 실행 (chroot 폐기) |
+| **소켓** | `/var/run/docker.sock` | `/run/docker.sock` (AOSP 010 패치) |
+| **스토리지** | overlay2 | vfs (f2fs + SELinux 호환) |
+| **cgroup** | v2 (표준) | v1 devices (`/dev/cg_devices` → `/sys/fs/cgroup/devices` bind) |
+| **proc** | 표준 | `remount,hidepid=0` 필요 |
+| **compose** | `docker-compose up -d` | `DOCKER_HOST=unix:///run/docker.sock docker-compose up -d` |
+| **AOSP 패치** | — | 006(커널) + 007(/dev/run, cgroup) + 010(/run tmpfs) |
 
 ### 백엔드 비교
 

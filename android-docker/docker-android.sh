@@ -73,6 +73,13 @@ setup_rootfs() {
         log "WARNING: $DOCKER_BIN 디렉토리 없음. 바이너리가 이미 rootfs에 있어야 합니다."
     fi
 
+    # ★ runc를 표준 PATH 경로에 복사 — containerd-shim이 chroot 상속 안 함
+    # shim이 fork될 때 $PATH에서 runc를 찾으므로 /usr/bin, /sbin에 있어야 함
+    mkdir -p $R/usr/bin $R/sbin
+    cp $R/opt/docker/runc $R/usr/bin/runc 2>/dev/null || true
+    cp $R/opt/docker/runc $R/sbin/runc 2>/dev/null || true
+    cp $R/opt/docker/containerd-shim-runc-v2 $R/usr/bin/containerd-shim-runc-v2 2>/dev/null || true
+
     # DNS + hosts
     echo -e "nameserver 8.8.8.8\nnameserver 168.126.63.1" > $R/etc/resolv.conf
     echo "127.0.0.1 localhost" > $R/etc/hosts
@@ -87,6 +94,10 @@ setup_rootfs() {
   "features": {"buildkit": false}
 }
 EOF
+
+    # docker-compose.yml → chroot 안으로 복사
+    mkdir -p $R/opt/compose
+    cp $D/docker-compose.yml $R/opt/compose/ 2>/dev/null || true
 
     log "rootfs 준비 완료"
 }
@@ -108,7 +119,10 @@ cmd_start() {
     setup_rootfs
 
     # ─── containerd (chroot, static binary 직접 실행) ───
+    # ★ PATH 필수 — containerd가 shim을 fork할 때 이 PATH를 상속
+    #   shim이 runc를 $PATH에서 찾음 (chroot 상속 안 함)
     log "containerd 시작..."
+    PATH=/opt/docker:/usr/bin:/usr/local/bin:/sbin:/bin \
     chroot $R /opt/docker/containerd \
         --root /opt/docker-data/containerd \
         --state /run/containerd \
@@ -124,8 +138,7 @@ cmd_start() {
 
     # ─── dockerd (chroot, static binary 직접 실행) ───
     log "dockerd 시작..."
-    # PATH — BuildKit이 runc를 exec.LookPath로 찾음 (환경변수는 chroot 밖에서 설정)
-    PATH=/opt/docker:$PATH \
+    PATH=/opt/docker:/usr/bin:/usr/local/bin:/sbin:/bin \
     TMPDIR=/tmp \
     SSL_CERT_DIR=/etc/ssl/certs \
     DOCKER_BUILDKIT=0 \
@@ -210,7 +223,7 @@ cmd_load() {
         log "로드: $tarfile"
         case "$tarfile" in
             *.tar.gz) gunzip -c "$tarfile" | chroot $R /opt/docker/docker load ;;
-            *.tar)    chroot $R /opt/docker/docker load -i "$tarfile" ;;
+            *.tar)    cat "$tarfile" | chroot $R /opt/docker/docker load ;;
         esac
         loaded=$((loaded + 1))
     done
@@ -221,6 +234,22 @@ cmd_load() {
         log "$loaded 개 이미지 로드 완료"
         chroot $R /opt/docker/docker images
     fi
+}
+
+# ─── docker-compose up ───
+cmd_up() {
+    log "docker-compose up -d..."
+    chroot $R /opt/docker/docker-compose \
+        -f /opt/compose/docker-compose.yml \
+        up -d
+}
+
+# ─── docker-compose down ───
+cmd_down() {
+    log "docker-compose down..."
+    chroot $R /opt/docker/docker-compose \
+        -f /opt/compose/docker-compose.yml \
+        down
 }
 
 # ─── chroot 안에서 docker CLI 실행 ───
@@ -234,14 +263,18 @@ case "${1:-help}" in
     stop)    cmd_stop ;;
     status)  cmd_status ;;
     load)    cmd_load ;;
+    up)      cmd_up ;;
+    down)    cmd_down ;;
     exec)    shift; cmd_exec "$@" ;;
     *)
-        echo "Usage: $0 {start|stop|status|load|exec} [args]"
+        echo "Usage: $0 {start|stop|status|load|up|down|exec} [args]"
         echo ""
         echo "  start    Docker Engine 시작 (chroot)"
         echo "  stop     Docker Engine 종료 + unmount"
         echo "  status   상태 확인 (프로세스 + 컨테이너)"
         echo "  load     /data/local/tmp/*.tar{.gz} 이미지 로드"
+        echo "  up       docker-compose up -d (서비스 시작)"
+        echo "  down     docker-compose down (서비스 종료)"
         echo "  exec     chroot 안에서 docker CLI (예: $0 exec ps)"
         ;;
 esac

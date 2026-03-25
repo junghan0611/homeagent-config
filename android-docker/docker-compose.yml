@@ -1,11 +1,10 @@
-# Android RK3576 전용 Docker Compose
-# chroot 안에서 실행: docker-android.sh exec compose -f /opt/compose/docker-compose.yml up -d
+# Android RK3576 Docker Compose — 네이티브 (chroot 없음)
+# DOCKER_HOST=unix:///run/docker.sock docker-compose -f /data/local/tmp/docker-compose.yml up -d
 #
-# RPi5 공유 compose와 다른 점:
-#   - /run/dbus 마운트 없음 (Android에 dbus 없음)
-#   - BLE 비활성 (bluetooth-adapter -1, Flutter BLE relay 사용)
-#   - RCP 디바이스: /dev/ttyS5 (UART5)
-#   - 네트워크: wlan0
+# 이미지 버전 (오프라인 tar.gz로 로드, 인터넷 pull 안 함):
+#   python-matter-server: 8.1.2 (ghcr.io/matter-js/python-matter-server:stable)
+#   otbr: 0.3.0-987e44c (openthread/otbr:latest)
+#   Docker Engine: 29.3.0, Docker Compose: v5.1.1
 
 services:
   otbr:
@@ -33,13 +32,11 @@ services:
       - otbr
     volumes:
       - matter-data:/data
-      # dbus 없음 — Android에 BlueZ 없음, Flutter BLE relay 사용
     command:
       - "--storage-path"
       - "/data"
       - "--port"
       - "5580"
-      # BLE 비활성 — adapter -1 → python-matter-server가 BLE 스킵
     restart: unless-stopped
 
 volumes:

@@ -34,8 +34,8 @@ adb devices | grep -q "device$" || err "adb 디바이스 없음. USB 연결 확�
 for f in \
     "$SCRIPT_DIR/images/docker-29.3.0.tgz" \
     "$SCRIPT_DIR/images/docker-compose-linux-aarch64" \
-    "$SCRIPT_DIR/images/matter-server-arm64.tar.gz" \
-    "$SCRIPT_DIR/images/otbr-arm64.tar.gz" \
+    "$SCRIPT_DIR/images/matter-server-8.1.2-arm64.tar.gz" \
+    "$SCRIPT_DIR/images/otbr-0.3.0-arm64.tar.gz" \
     "$SCRIPT_DIR/docker-android.sh" \
     "$SCRIPT_DIR/docker-compose.yml"; do
     [ -f "$f" ] || err "파일 없음: $f"
@@ -61,15 +61,15 @@ log "Docker Compose OK"
 
 # ─── 4. Docker 이미지 push ───
 log "Docker 이미지 push (시간 소요)..."
-adb push "$SCRIPT_DIR/images/matter-server-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
-adb push "$SCRIPT_DIR/images/otbr-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
+adb push "$SCRIPT_DIR/images/matter-server-8.1.2-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
+adb push "$SCRIPT_DIR/images/otbr-0.3.0-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
 log "Docker 이미지 OK"
 
 # ─── 5. 스크립트 + compose push ───
 log "스크립트 push..."
 adb push "$SCRIPT_DIR/docker-android.sh" "$REMOTE/" 2>&1 | tail -1
 adb push "$SCRIPT_DIR/docker-compose.yml" "$REMOTE/" 2>&1 | tail -1
-adb shell "chmod 755 $REMOTE/docker-android.sh"
+adb shell "chmod 755 $REMOTE/docker-android.sh $REMOTE/docker/*"
 log "스크립트 OK"
 
 # ─── 6. 개발 도구 push (있으면) ───

@@ -1,15 +1,14 @@
-/// Matter BLE 커미셔닝 화면 — Plan B
+/// Matter BLE 커미셔닝 화면 — CHIP SDK AAR 경로
 ///
-/// BLE 스캔 UI + BLE relay를 통한 matterjs 커미셔닝.
-/// 프로토콜(BTP/PASE/WiFi/CASE)은 matterjs-server가 전부 처리.
-/// Flutter는 BLE 바이트를 WS로 중계만 한다.
+/// CHIP SDK Android AAR이 Android BLE HAL을 직접 사용해 커미셔닝.
+/// BLE relay(matterjs WS) 불필요 — CHIP SDK가 전부 처리.
 ///
-/// 흐름:
-/// 1. BLE relay 시작 (matterjs-server :5581 연결)
-/// 2. 사용자가 WiFi credentials 입력
-/// 3. Go 서버에 commission 요청 (network_only=false)
-/// 4. matterjs가 BLE scan/connect/BTP/PASE/WiFi/CASE 전부 수행
-/// 5. Flutter는 BLE 바이트 relay만 담당
+/// Multi-admin 흐름:
+/// 1. CHIP SDK로 BLE 커미셔닝 (디바이스를 CHIP fabric에 추가)
+/// 2. openCommissioningWindow → setupPinCode 획득
+/// 3. Go 서버에 handoff 요청 → python-matter-server commission_on_network(pin)
+/// 4. python-matter-server fabric에 추가 완료 (SSE로 확인)
+/// 5. CHIP fabric에서 제거
 library;
 
 import 'dart:async';
@@ -18,46 +17,56 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-import 'ble_relay.dart';
+import 'chip_controller.dart';
 
 /// BLE 커미셔닝 화면
-class BleCommissioningScreen extends StatefulWidget {
+class ChipCommissioningScreen extends StatefulWidget {
   final String serverUrl;
-  const BleCommissioningScreen({super.key, required this.serverUrl});
+  const ChipCommissioningScreen({super.key, required this.serverUrl});
 
   @override
-  State<BleCommissioningScreen> createState() => _BleCommissioningScreenState();
+  State<ChipCommissioningScreen> createState() => _ChipCommissioningScreenState();
 }
 
-class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
+class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
   String _status = '초기화 중...';
   bool _commissioning = false;
-  bool _relayConnected = false;
-  BleRelay? _relay;
+  bool _chipReady = false;
+  final ChipController _chip = ChipController();
+  int? _lastCommissionedNodeId;
 
   @override
   void initState() {
     super.initState();
-    _startRelay();
+    _initChip();
   }
 
-  @override
-  void dispose() {
-    _relay?.disconnect();
-    super.dispose();
+  /// CHIP SDK 초기화
+  Future<void> _initChip() async {
+    setState(() => _status = 'CHIP SDK 초기화 중...');
+
+    if (!await _checkBlePermissions()) return;
+
+    try {
+      await _chip.init();
+      await _loadThreadDataset();
+      setState(() {
+        _status = '✅ 준비 완료 — 디바이스를 추가할 수 있습니다';
+        _chipReady = true;
+      });
+    } catch (e) {
+      setState(() => _status = '❌ CHIP SDK 초기화 실패\n$e');
+    }
   }
 
   /// BLE 권한 확인 (Android 12+)
   Future<bool> _checkBlePermissions() async {
     if (!Platform.isAndroid) return true;
-    // FlutterBluePlus가 내부적으로 권한 체크/요청 수행
-    // turnOn()이 BLE가 꺼져있을 때 시스템 다이얼로그를 띄움
     final adapterState = await FlutterBluePlus.adapterState.first;
     if (adapterState != BluetoothAdapterState.on) {
       setState(() => _status = '⚠️ 블루투스가 꺼져있습니다');
       try {
         await FlutterBluePlus.turnOn();
-        // 켜질 때까지 최대 5초 대기
         await FlutterBluePlus.adapterState
             .where((s) => s == BluetoothAdapterState.on)
             .first
@@ -71,78 +80,75 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     return true;
   }
 
-  /// BLE relay 시작 — matterjs-server의 BLE WS에 연결
-  Future<void> _startRelay() async {
-    setState(() {
-      _status = 'BLE 권한 확인 중...';
-      _relayConnected = false;
-    });
-
-    // 1. BLE 권한 확인
-    if (!await _checkBlePermissions()) return;
-
-    // serverUrl에서 호스트 추출 → BLE WS 포트로 연결
-    final serverUri = Uri.parse(widget.serverUrl);
-    final bleWsUrl = 'ws://${serverUri.host}:5581';
-
-    // 2. 이전 relay 정리 (2회 연속 커미셔닝 대응)
-    await _relay?.disconnect();
-
-    _relay = BleRelay(
-      wsUrl: bleWsUrl,
-      onStatus: (status) {
-        if (mounted) setState(() => _status = status);
-      },
-    );
-
+  /// Go 서버에서 Thread dataset 가져와서 CHIP SDK에 설정
+  Future<void> _loadThreadDataset() async {
     try {
-      await _relay!.connect();
-      setState(() {
-        _status = '✅ BLE relay 연결됨 — 커미셔닝 준비 완료';
-        _relayConnected = true;
-      });
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+      final request = await client.getUrl(
+        Uri.parse('${widget.serverUrl}/api/thread-dataset'),
+      );
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(const SystemEncoding().decoder).join();
+        final data = jsonDecode(body);
+        final dataset = data['dataset'] as String?;
+        if (dataset != null && dataset.isNotEmpty) {
+          await _chip.setThreadDataset(dataset);
+        }
+      }
     } catch (e) {
-      setState(() {
-        _status = '❌ BLE relay 연결 실패\n$e';
-        _relayConnected = false;
-      });
+      debugPrint('[CHIP] Thread dataset load failed (non-fatal): $e');
     }
   }
 
-  /// 커미셔닝 시작 — WiFi + pairing code 입력 → Go 서버 요청
+  /// 커미셔닝 시작
   Future<void> _startCommissioning() async {
-    // BLE relay가 연결되어 있지 않으면 재연결 시도
-    if (!_relayConnected) {
-      await _startRelay();
-      if (!_relayConnected) return;
+    if (!_chipReady) {
+      await _initChip();
+      if (!_chipReady) return;
     }
 
-    // 1. WiFi + Pairing code 입력
     final info = await _showCommissionDialog();
     if (info == null) return;
 
     setState(() {
       _commissioning = true;
-      _status = info.isThread ? '🔄 Thread 커미셔닝 준비 중...' : '🔄 WiFi 정보 설정 중...';
+      _status = '🔄 커미셔닝 준비 중...';
     });
 
     try {
-      // 2. WiFi credentials — Thread일 때는 스킵
+      // 1. WiFi credentials 설정 (Thread일 때는 스킵)
       if (!info.isThread) {
-        await _setWifiCredentials(info.ssid, info.password);
+        setState(() => _status = '🔄 WiFi 정보 설정 중...');
+        await _chip.setWifiCredentials(info.ssid, info.password);
+        await _setServerWifiCredentials(info.ssid, info.password);
       }
-      setState(() => _status = '🔄 커미셔닝 요청 중...');
 
-      // 3. Commission 요청 (network_only=false → matterjs가 BLE 커미셔닝)
-      await _requestCommission(info.pairingCode);
+      // 2. CHIP SDK BLE 커미셔닝
+      setState(() => _status = '⏳ BLE 커미셔닝 진행 중...\n'
+          'BLE 스캔 → BTP → PASE → ${info.isThread ? "Thread" : "WiFi"} 설정\n'
+          '(60~120초 소요)');
 
-      final networkType = info.isThread ? 'Thread' : 'WiFi';
-      setState(() => _status = '⏳ 커미셔닝 진행 중...\n'
-          'BLE 스캔 → BTP 핸드셰이크 → PASE 인증 → $networkType 설정\n'
-          '(60~120초 소요, 디바이스가 페어링 모드인지 확인)');
+      final nodeId = DateTime.now().millisecondsSinceEpoch % 100000 + 1;
+      final commResult = await _chip.pairDeviceWithCode(nodeId, info.pairingCode);
 
-      // SSE로 커미셔닝 결과 추적
-      _listenCommissionResult(info.pairingCode, info.isThread ? 'Thread' : info.ssid);
+      if (!commResult.success) {
+        throw Exception('BLE 커미셔닝 실패');
+      }
+      _lastCommissionedNodeId = commResult.nodeId;
+
+      // 3. Multi-admin: openCommissioningWindow
+      setState(() => _status = '🔄 서버 핸드오프 준비 중...');
+      final window = await _chip.openCommissioningWindow(commResult.nodeId);
+
+      // 4. Go 서버에 핸드오프 요청 (비동기 — 202 즉시 반환, SSE로 추적)
+      await _requestHandoff(window.setupPinCode);
+
+      setState(() => _status = '⏳ 서버에서 디바이스 등록 중...\n(60~120초 소요)');
+
+      // 5. SSE로 결과 추적
+      final networkType = info.isThread ? 'Thread' : 'WiFi (${info.ssid})';
+      _listenHandoffResult(networkType);
     } catch (e) {
       setState(() {
         _commissioning = false;
@@ -151,8 +157,8 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     }
   }
 
-  /// SSE로 커미셔닝 결과 추적
-  void _listenCommissionResult(String code, String ssid) {
+  /// SSE로 handoff 결과 추적
+  void _listenHandoffResult(String networkType) {
     final client = HttpClient();
     final sseUri = Uri.parse('${widget.serverUrl}/api/events');
 
@@ -162,38 +168,74 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       response
           .transform(const SystemEncoding().decoder)
           .listen((chunk) {
-        // SSE 파싱: "data: {...}\n\n"
         for (final line in chunk.split('\n')) {
           if (!line.startsWith('data: ')) continue;
           final data = line.substring(6);
-          if (data.contains('device_added') || data.contains('commission_result')) {
+          if (data.contains('device_added') || data.contains('node_added')) {
             if (mounted) {
               setState(() {
-                _status = '✅ 커미셔닝 성공! 디바이스가 추가되었습니다.';
+                _status = '✅ 커미셔닝 완료!';
                 _commissioning = false;
               });
-              _showResultDialog('✅ 커미셔닝 완료', '디바이스가 네트워크에 추가되었습니다.\nWiFi: $ssid\n\n뒤로 돌아가면 대시보드에서 확인할 수 있습니다.');
+              _showResultDialog('✅ 커미셔닝 완료',
+                  '디바이스가 $networkType 네트워크에 추가되었습니다.\n\n'
+                  '뒤로 돌아가면 대시보드에서 확인할 수 있습니다.');
+              // CHIP fabric에서 제거 (python-matter-server가 관리)
+              _cleanupChipFabric();
             }
           } else if (data.contains('commission_error')) {
             if (mounted) {
               setState(() {
-                _status = '❌ 커미셔닝 실패 — 재시도하려면 아래 버튼을 누르세요';
+                _status = '❌ 서버 핸드오프 실패 — 재시도하세요';
                 _commissioning = false;
               });
-              _showResultDialog('❌ 커미셔닝 실패',
-                  '확인 사항:\n'
-                  '• 디바이스가 페어링 모드인지\n'
-                  '• Pairing Code가 맞는지\n'
-                  '• WiFi SSID/비밀번호가 맞는지\n'
-                  '• 디바이스가 BLE 범위 내에 있는지\n\n'
-                  'Code: $code');
             }
           }
         }
       });
     }).catchError((e) {
-      print('[COMM] SSE connection failed: $e');
+      debugPrint('[COMM] SSE connection failed: $e');
     });
+  }
+
+  /// CHIP fabric에서 디바이스 제거 (python-matter-server가 이제 관리)
+  Future<void> _cleanupChipFabric() async {
+    final nodeId = _lastCommissionedNodeId;
+    if (nodeId == null) return;
+    try {
+      await _chip.unpairDevice(nodeId);
+    } catch (_) {
+      // 제거 실패해도 큰 문제 아님
+    }
+    _lastCommissionedNodeId = null;
+  }
+
+  /// Go 서버에 multi-admin 핸드오프 요청 (비동기 — 202 반환)
+  Future<void> _requestHandoff(int setupPinCode) async {
+    final client = HttpClient();
+    final request = await client.postUrl(
+      Uri.parse('${widget.serverUrl}/api/commission-on-network'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({'setup_pin_code': setupPinCode}));
+    final response = await request.close();
+    await response.drain();
+
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception('핸드오프 요청 실패: HTTP ${response.statusCode}');
+    }
+  }
+
+  /// Go 서버에 WiFi credentials 설정 (python-matter-server용)
+  Future<void> _setServerWifiCredentials(String ssid, String password) async {
+    final client = HttpClient();
+    final request = await client.postUrl(
+      Uri.parse('${widget.serverUrl}/api/wifi-credentials'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({'ssid': ssid, 'password': password}));
+    final response = await request.close();
+    await response.drain();
   }
 
   void _showResultDialog(String title, String content) {
@@ -227,7 +269,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-        // WiFi SSID+PW 자동 로드 (1회만)
         if (!ssidLoaded) {
           ssidLoaded = true;
           () async {
@@ -255,7 +296,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Thread/WiFi 선택
               Row(
                 children: [
                   Expanded(
@@ -282,7 +322,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              // WiFi 모드일 때만 SSID/PW 입력
               if (!isThread) ...[
                 if (wifiAutoDetected) ...[
                   const SizedBox(height: 8),
@@ -304,9 +343,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: pwController,
-                  decoration: const InputDecoration(
-                    labelText: 'WiFi 비밀번호',
-                  ),
+                  decoration: const InputDecoration(labelText: 'WiFi 비밀번호'),
                   obscureText: true,
                 ),
               ] else ...[
@@ -316,7 +353,6 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                   style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey),
                 ),
               ],
-              // Pairing Code — 항상 표시
               const SizedBox(height: 12),
               TextField(
                 controller: codeController,
@@ -335,8 +371,7 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              final code =
-                  codeController.text.replaceAll(' ', '').replaceAll('-', '');
+              final code = codeController.text.replaceAll(' ', '').replaceAll('-', '');
               final needsWifi = !isThread;
               if (code.isNotEmpty && (!needsWifi || ssidController.text.isNotEmpty)) {
                 Navigator.pop(ctx, (
@@ -355,54 +390,12 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
     );
   }
 
-  /// Go 서버에 WiFi credentials 설정
-  Future<void> _setWifiCredentials(String ssid, String password) async {
-    setState(() => _status = 'WiFi credentials 설정 중...');
-    final client = HttpClient();
-    final request = await client.postUrl(
-      Uri.parse('${widget.serverUrl}/api/wifi-credentials'),
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({
-      'ssid': ssid,
-      'password': password,
-    }));
-    final response = await request.close();
-    await response.drain();
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('WiFi credentials 설정 실패: HTTP ${response.statusCode}');
-    }
-  }
-
-  /// Go 서버에 commission 요청 (network_only=false)
-  Future<void> _requestCommission(String code) async {
-    setState(() => _status = 'Commission 요청 중...');
-    final client = HttpClient();
-    final request = await client.postUrl(
-      Uri.parse('${widget.serverUrl}/api/commission'),
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({
-      'code': code,
-      'network_only': false, // B안: matterjs가 BLE 커미셔닝 수행
-    }));
-    final response = await request.close();
-    await response.drain();
-
-    if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception('Commission 요청 실패: HTTP ${response.statusCode}');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Matter 디바이스 페어링'),
-      ),
+      appBar: AppBar(title: const Text('Matter 디바이스 페어링')),
       body: Column(
         children: [
-          // 상태 바
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -412,30 +405,22 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
             child: Row(
               children: [
                 if (_commissioning) ...[
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                   const SizedBox(width: 12),
                 ],
-                Expanded(
-                  child: Text(_status, style: const TextStyle(fontSize: 14)),
-                ),
+                Expanded(child: Text(_status, style: const TextStyle(fontSize: 14))),
               ],
             ),
           ),
-
-          // 안내
           Expanded(
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _relayConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                    _chipReady ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
                     size: 64,
-                    color: _relayConnected
+                    color: _chipReady
                         ? Theme.of(context).colorScheme.primary
                         : Theme.of(context).colorScheme.error,
                   ),
@@ -445,19 +430,17 @@ class _BleCommissioningScreenState extends State<BleCommissioningScreen> {
                     child: Text(
                       'Matter 디바이스를 페어링 모드로 설정한 후\n'
                       '아래 버튼을 눌러 커미셔닝을 시작하세요.\n\n'
-                      'BLE 스캔 → BTP 핸드셰이크 → PASE 인증 →\n'
-                      'WiFi 전달 → on-network 커미셔닝까지\n'
-                      '자동으로 진행됩니다.',
+                      'CHIP SDK가 BLE로 직접 커미셔닝한 뒤\n'
+                      '서버에 자동으로 핸드오프합니다.',
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  // BLE relay 재연결 버튼 (연결 실패 시)
-                  if (!_relayConnected && !_commissioning) ...[
+                  if (!_chipReady && !_commissioning) ...[
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
-                      onPressed: _startRelay,
+                      onPressed: _initChip,
                       icon: const Icon(Icons.refresh),
-                      label: const Text('BLE relay 재연결'),
+                      label: const Text('재초기화'),
                     ),
                   ],
                 ],

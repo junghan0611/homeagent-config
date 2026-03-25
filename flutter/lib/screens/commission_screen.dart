@@ -3,15 +3,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../ble_commissioning.dart';
+import '../chip_commissioning.dart';
 import '../theme.dart';
 
-/// 커미셔닝 화면 — 플랫폼별 분기
+/// 커미셔닝 화면 — 플랫폼별 + 백엔드별 분기
 ///
-/// Android: BLE 커미셔닝 (기존 BleCommissioningScreen)
-/// Linux: On-network 커미셔닝 (Go REST 경유 → matterjs)
+/// Android + CHIP SDK AAR: ChipCommissioningScreen (BLE → multi-admin handoff)
+/// Android + matterjs:     BleCommissioningScreen (BLE WS relay)
+/// Linux:                  On-network 커미셔닝 (Go REST)
 ///
 /// 아키텍처 결정 (2026-03-20):
-/// APP → Go REST → matterjs (단일 경로). matterjs WS 직접 연결은 하지 않음.
+/// APP → Go REST → matter-server (단일 경로). WS 직접 연결은 하지 않음.
 /// Go 서버가 상태 관리 + aliases + SSE 변환을 전담.
 class CommissionScreen extends StatelessWidget {
   final String serverUrl;
@@ -50,11 +52,27 @@ class CommissionScreen extends StatelessWidget {
 
             if (Platform.isAndroid) ...[
               // Android: BLE 커미셔닝
+              // CHIP SDK AAR 경로 (python-matter-server + multi-admin)
               FilledButton.icon(
                 icon: const Icon(Icons.bluetooth_searching, size: 24),
                 label: const Text('BLE 디바이스 페어링', style: TextStyle(fontSize: 16)),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChipCommissioningScreen(serverUrl: serverUrl),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // matterjs WS relay 경로 (matterjs-server 백엔드)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.bluetooth, size: 24),
+                label: const Text('BLE 페어링 (matterjs)', style: TextStyle(fontSize: 14)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: () => Navigator.push(
                   context,

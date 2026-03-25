@@ -1,0 +1,47 @@
+# Android RK3576 전용 Docker Compose
+# chroot 안에서 실행: docker-android.sh exec compose -f /opt/compose/docker-compose.yml up -d
+#
+# RPi5 공유 compose와 다른 점:
+#   - /run/dbus 마운트 없음 (Android에 dbus 없음)
+#   - BLE 비활성 (bluetooth-adapter -1, Flutter BLE relay 사용)
+#   - RCP 디바이스: /dev/ttyS5 (UART5)
+#   - 네트워크: wlan0
+
+services:
+  otbr:
+    image: openthread/otbr:latest
+    container_name: otbr
+    network_mode: host
+    privileged: true
+    devices:
+      - ${RCP_DEVICE:-/dev/ttyS5}:${RCP_DEVICE:-/dev/ttyS5}
+    volumes:
+      - otbr-data:/var/lib/thread
+    environment:
+      - INFRA_IF_NAME=${BACKBONE_IF:-wlan0}
+      - NAT64=0
+      - DNS64=0
+    command: --radio-url "spinel+hdlc+uart://${RCP_DEVICE:-/dev/ttyS5}?uart-baudrate=${RCP_BAUDRATE:-460800}" -B ${BACKBONE_IF:-wlan0}
+    restart: unless-stopped
+
+  matter-server:
+    image: ghcr.io/matter-js/python-matter-server:stable
+    container_name: matter-server
+    network_mode: host
+    privileged: true
+    depends_on:
+      - otbr
+    volumes:
+      - matter-data:/data
+      # dbus 없음 — Android에 BlueZ 없음, Flutter BLE relay 사용
+    command:
+      - "--storage-path"
+      - "/data"
+      - "--port"
+      - "5580"
+      # BLE 비활성 — adapter -1 → python-matter-server가 BLE 스킵
+    restart: unless-stopped
+
+volumes:
+  otbr-data:
+  matter-data:

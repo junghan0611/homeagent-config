@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'backend_process.dart';
 import 'shell_webview.dart';
 import 'widgets/nav_shell.dart';
-import 'ble_commissioning.dart';
+// ble_commissioning.dart — RPi5 Yocto WebView + matterjs 전용, Android 네이티브에서 미사용
 import 'theme.dart';
 
 /// --dart-define=NATIVE_UI=true → Android에서도 네이티브 UI 사용
@@ -220,27 +220,8 @@ class _HomeAgentShellState extends State<HomeAgentShell> with WidgetsBindingObse
     // 서버 준비 완료 — 플랫폼별 UI
     if (_serverReady) {
       if (_useWebView) {
-        return Stack(
-          children: [
-            ShellWebView(serverUrl: _serverUrl),
-            // BLE 페어링 FAB
-            if (Platform.isAndroid)
-              Positioned(
-                right: 16,
-                bottom: 80,
-                child: FloatingActionButton(
-                  mini: true,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => BleCommissioningScreen(serverUrl: _serverUrl),
-                    ),
-                  ),
-                  child: const Icon(Icons.bluetooth_searching, size: 20),
-                ),
-              ),
-          ],
-        );
+        // RPi5 Yocto: WebView 전용 (BLE FAB 불필요 — matterjs WS relay는 WebView 내부에서 처리)
+        return ShellWebView(serverUrl: _serverUrl);
       } else {
         return NavShell(serverUrl: _serverUrl);
       }

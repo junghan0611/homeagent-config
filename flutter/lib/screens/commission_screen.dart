@@ -2,15 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../ble_commissioning.dart';
 import '../chip_commissioning.dart';
 import '../theme.dart';
 
-/// 커미셔닝 화면 — 플랫폼별 + 백엔드별 분기
+/// 커미셔닝 화면 — 플랫폼별 분기
 ///
-/// Android + CHIP SDK AAR: ChipCommissioningScreen (BLE → multi-admin handoff)
-/// Android + matterjs:     BleCommissioningScreen (BLE WS relay)
-/// Linux:                  On-network 커미셔닝 (Go REST)
+/// Android: ChipCommissioningScreen (BLE → CHIP SDK → multi-admin handoff)
+/// 모든 플랫폼: On-network 커미셔닝 (Go REST → matter-server)
 ///
 /// 아키텍처 결정 (2026-03-20):
 /// APP → Go REST → matter-server (단일 경로). WS 직접 연결은 하지 않음.

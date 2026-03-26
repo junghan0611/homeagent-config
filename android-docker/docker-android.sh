@@ -367,9 +367,13 @@ cmd_all() {
 # 감시 루프로 프로세스를 유지하고, homeagent 죽으면 재시작.
 cmd_boot() {
     cmd_all
+    # 전체 스택 감시 — 죽은 프로세스 자동 재시작
     while true; do
         sleep 30
         pgrep -f "homeagent serve" > /dev/null || { log "homeagent 죽음 — 재시작"; cmd_go_start; }
+        pgrep -f otbr-agent > /dev/null        || { log "otbr-agent 죽음 — 재시작"; cmd_otbr_start; }
+        DOCKER_HOST=unix:///run/docker.sock $DOCKER_BIN/docker ps --filter name=matter-server --filter status=running -q 2>/dev/null | grep -q . \
+            || { log "matter-server 죽음 — 재시작"; cmd_up; }
     done
 }
 

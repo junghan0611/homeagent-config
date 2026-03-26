@@ -303,12 +303,8 @@ cmd_otbr_start() {
 
     $OTBR_DIR/ot-ctl srp server enable 2>/dev/null || true
 
-    # IPv6 라우트 (mesh-local prefix → wpan0)
-    local MESH_PREFIX=$($OTBR_DIR/ot-ctl dataset active 2>/dev/null | grep "Mesh Local Prefix" | awk '{print $NF}')
-    if [ -n "$MESH_PREFIX" ]; then
-        ip -6 route replace ${MESH_PREFIX} dev $WPAN_IF 2>/dev/null || true
-        log "라우트: ${MESH_PREFIX} → $WPAN_IF"
-    fi
+    # IPv6 라우팅은 Go homeagent가 시작 시 자동 설정 (ensureThreadRouting)
+    # Android 정책 라우팅에서 wpan0 테이블을 ip -6 rule로 연결
 
     # dataset 출력
     $OTBR_DIR/ot-ctl dataset active 2>/dev/null | grep -E "Network|Channel|Pan" || true
@@ -359,10 +355,9 @@ cmd_go_stop() {
 cmd_all() {
     cmd_start       # Docker Engine
     cmd_load        # 이미지 로드
-    cmd_up          # matter-server 시작
-    cmd_otbr_start  # 네이티브 OTBR + Thread
-    sleep 5         # matter-server 초기화 대기
-    cmd_go_start    # Go + APK
+    cmd_otbr_start  # OTBR + Thread 먼저 (wpan0 + 라우팅 준비)
+    cmd_go_start    # Go (ensureThreadRouting → IPv6 rule 설정)
+    cmd_up          # matter-server 마지막 (Thread 라우팅 준비된 상태에서 시작)
     log "=== 전체 스택 기동 완료 ==="
     cmd_status
 }

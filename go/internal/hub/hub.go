@@ -36,6 +36,101 @@ func getOTBRDataset(otCtlPath string) (string, error) {
 	return dataset, nil
 }
 
+// ensureThreadRouting sets up IPv6 routing policy rules for Thread prefixes.
+//
+// Android's routing policy has no "lookup main" rule and ends with
+// "from all unreachable", so wpan0 routes in the kernel table are invisible.
+// This function detects the wpan0 routing table number and adds ip -6 rules
+// so that python-matter-server (and any host process) can reach Thread devices.
+//
+// Safe to call multiple times — deletes existing rules before adding.
+// No-op on non-Android (if wpan0 table detection fails).
+func ensureThreadRouting(otCtlPath string) {
+	// 1. Get mesh-local prefix from dataset
+	meshPrefix := otCtlFirstLine(otCtlPath, "dataset", "active")
+	if meshPrefix != "" {
+		// Parse "Mesh Local Prefix" from multi-line output
+		out, err := exec.Command(otCtlPath, "dataset", "active").Output()
+		if err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.Contains(line, "Mesh Local Prefix") {
+					parts := strings.Fields(line)
+					if len(parts) > 0 {
+						meshPrefix = strings.TrimSpace(parts[len(parts)-1])
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Get OMR prefix from br omrprefix
+	omrPrefix := ""
+	if out, err := exec.Command(otCtlPath, "br", "omrprefix").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.ReplaceAll(line, "\r", "")
+			if strings.Contains(line, "Local:") {
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					omrPrefix = strings.TrimSpace(parts[len(parts)-1])
+				}
+			}
+		}
+	}
+
+	if meshPrefix == "" && omrPrefix == "" {
+		return
+	}
+
+	// 3. Find wpan0 kernel routing table number
+	wpanTable := ""
+	if out, err := exec.Command("ip", "-6", "route", "show", "table", "all", "dev", "wpan0", "proto", "kernel").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if idx := strings.Index(line, "table "); idx >= 0 {
+				fields := strings.Fields(line[idx:])
+				if len(fields) >= 2 {
+					wpanTable = fields[1]
+					break
+				}
+			}
+		}
+	}
+
+	if wpanTable == "" {
+		log.Printf("[hub] Thread routing: wpan0 table not found (non-Android?), skipping")
+		return
+	}
+
+	// 4. Add ip -6 rules for each prefix
+	for _, prefix := range []string{meshPrefix, omrPrefix} {
+		if prefix == "" {
+			continue
+		}
+		// Remove existing rule (ignore errors)
+		exec.Command("ip", "-6", "rule", "del", "to", prefix, "lookup", wpanTable).Run()
+		// Add rule at priority 9000 (before Android's 32000 unreachable catch-all)
+		if err := exec.Command("ip", "-6", "rule", "add", "to", prefix, "lookup", wpanTable, "prio", "9000").Run(); err != nil {
+			log.Printf("[hub] Thread routing: failed to add rule for %s: %v", prefix, err)
+		} else {
+			log.Printf("[hub] Thread routing: %s → table %s", prefix, wpanTable)
+		}
+	}
+}
+
+// otCtlFirstLine runs ot-ctl and returns the first non-empty, non-"Done" line
+func otCtlFirstLine(otCtlPath string, args ...string) string {
+	out, err := exec.Command(otCtlPath, args...).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(strings.ReplaceAll(line, "\r", ""))
+		if line != "" && line != "Done" {
+			return line
+		}
+	}
+	return ""
+}
+
 // DeviceState represents current state of a device
 type DeviceState struct {
 	NodeID    int                    `json:"node_id"`
@@ -110,6 +205,11 @@ func New(cfg *config.Config) *Hub {
 
 // Run starts the hub: connect to Matter, subscribe, serve HTTP
 func (h *Hub) Run(ctx context.Context) error {
+	// Ensure IPv6 routing for Thread devices (before any Matter connection)
+	if h.cfg.OtCtlPath != "" {
+		ensureThreadRouting(h.cfg.OtCtlPath)
+	}
+
 	// Start event broadcaster
 	go h.eventBroadcaster(ctx)
 

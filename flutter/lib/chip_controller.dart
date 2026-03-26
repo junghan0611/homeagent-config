@@ -12,10 +12,18 @@
 ///   6. unpairDevice() — remove from CHIP fabric (optional)
 library;
 
+import 'dart:async' show TimeoutException;
+
 import 'package:flutter/services.dart';
 
 class ChipController {
   static const _channel = MethodChannel('com.homeagent/chip');
+
+  /// BLE 커미셔닝 타임아웃 (BLE scan + GATT + PASE + credential setup)
+  static const _pairTimeout = Duration(seconds: 120);
+
+  /// openCommissioningWindow 타임아웃 (CASE 연결 + window open)
+  static const _windowTimeout = Duration(seconds: 30);
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
@@ -29,11 +37,13 @@ class ChipController {
 
   /// Set Thread operational dataset (hex string from OTBR).
   Future<void> setThreadDataset(String datasetHex) async {
+    assert(datasetHex.isNotEmpty, 'Thread dataset hex must not be empty');
     await _channel.invokeMethod('setThreadDataset', {'dataset': datasetHex});
   }
 
   /// Set WiFi credentials for WiFi device commissioning.
   Future<void> setWifiCredentials(String ssid, String password) async {
+    assert(ssid.isNotEmpty, 'WiFi SSID must not be empty');
     await _channel.invokeMethod('setWifiCredentials', {
       'ssid': ssid,
       'password': password,
@@ -43,19 +53,39 @@ class ChipController {
   /// BLE commission a device (CHIPTool pattern).
   /// App scans BLE → GATT connect → pairDeviceThroughBLE.
   /// Setup code is parsed for discriminator + PIN automatically.
+  ///
+  /// INV-2: nodeId > 0 (CHIP SDK 요구)
   Future<CommissionResult> pairDevice(int nodeId, String code) async {
+    if (nodeId <= 0) {
+      throw ArgumentError('nodeId must be > 0, got $nodeId');
+    }
+    if (code.isEmpty) {
+      throw ArgumentError('pairing code must not be empty');
+    }
+
     final result = await _channel.invokeMapMethod<String, dynamic>(
       'pairDevice',
       {'nodeId': nodeId, 'code': code},
-    );
+    ).timeout(_pairTimeout);
+
+    final resultNodeId = (result?['nodeId'] as num?)?.toInt();
+    if (resultNodeId == null || resultNodeId <= 0) {
+      throw PlatformException(
+        code: 'INVALID_RESULT',
+        message: 'pairDevice returned invalid nodeId: $resultNodeId',
+      );
+    }
+
     return CommissionResult(
-      nodeId: (result?['nodeId'] as num?)?.toInt() ?? nodeId,
+      nodeId: resultNodeId,
       success: result?['success'] == true,
     );
   }
 
   /// Open commissioning window for multi-admin handoff.
   /// Returns setupPinCode that python-matter-server needs for commission_on_network.
+  ///
+  /// INV-1: setupPinCode ∈ [1, 99999998] (Matter spec)
   Future<CommissioningWindow> openCommissioningWindow(
     int nodeId, {
     int duration = 300,
@@ -64,9 +94,18 @@ class ChipController {
     final result = await _channel.invokeMapMethod<String, dynamic>(
       'openCommissioningWindow',
       {'nodeId': nodeId, 'duration': duration, 'discriminator': discriminator},
-    );
+    ).timeout(_windowTimeout);
+
+    final pin = (result?['setupPinCode'] as num?)?.toInt();
+    if (pin == null || pin <= 0 || pin > 99999998) {
+      throw PlatformException(
+        code: 'INVALID_PIN',
+        message: 'setupPinCode invalid: $pin (expected 1..99999998)',
+      );
+    }
+
     return CommissioningWindow(
-      setupPinCode: (result?['setupPinCode'] as num?)?.toInt() ?? 0,
+      setupPinCode: pin,
       manualPairingCode: result?['manualPairingCode'] as String? ?? '',
       qrCode: result?['qrCode'] as String? ?? '',
     );
@@ -94,3 +133,5 @@ class CommissioningWindow {
     required this.qrCode,
   });
 }
+
+

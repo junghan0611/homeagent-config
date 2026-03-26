@@ -32,10 +32,20 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
   String _status = '초기화 중...';
   bool _commissioning = false;
   bool _chipReady = false;
+  bool _threadDatasetLoaded = false;
   final ChipController _chip = ChipController();
   int? _lastCommissionedNodeId;
   StreamSubscription<String>? _sseSubscription;
   HttpClient? _sseClient;
+
+  /// nodeId 생성 — CHIP SDK fabric 전용.
+  /// 이 nodeId는 CHIP SDK 커미셔닝용이며, python-matter-server의
+  /// nodeId(_get_next_node_id, 순차 증가)와 완전 별개.
+  /// 핸드오프 후 unpairDevice()로 제거되므로 수명이 짧다.
+  static int _nextNodeId() {
+    final now = DateTime.now();
+    return (now.microsecondsSinceEpoch & 0xFFFFF) + 1;
+  }
 
   @override
   void initState() {
@@ -95,9 +105,9 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     String? datasetHex;
 
     // 1차: Go 서버 /api/thread/dataset
+    final client1 = HttpClient()..connectionTimeout = const Duration(seconds: 3);
     try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-      final request = await client.getUrl(
+      final request = await client1.getUrl(
         Uri.parse('${widget.serverUrl}/api/thread/dataset'),
       );
       final response = await request.close();
@@ -108,37 +118,41 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
       }
     } catch (e) {
       debugPrint('[CHIP] Go server thread dataset failed: $e');
+    } finally {
+      client1.close();
     }
 
-    // 2차 폴백: OTBR REST 직접 (같은 호스트 :8081)
+    // 2차 폴백: OTBR REST에서 TLV hex 직접 가져오기
     if (datasetHex == null || datasetHex.isEmpty) {
+      final client2 = HttpClient()..connectionTimeout = const Duration(seconds: 3);
       try {
-        // serverUrl에서 호스트 추출 (예: http://192.168.0.162:8080 → 192.168.0.162)
         final serverUri = Uri.parse(widget.serverUrl);
+        // OTBR REST /node/dataset/active/tlvs → 바이너리 TLV (hex 변환 필요)
         final otbrUrl = 'http://${serverUri.host}:8081/node/dataset/active';
-        final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-        final request = await client.getUrl(Uri.parse(otbrUrl));
+        final request = await client2.getUrl(Uri.parse(otbrUrl));
         final response = await request.close();
         if (response.statusCode == 200) {
           final body = await response.transform(const SystemEncoding().decoder).join();
           final data = jsonDecode(body);
-          // OTBR REST는 JSON 반환 — networkKey를 포함한 전체 dataset
-          // CHIP SDK에는 TLV hex가 필요하므로, Go 서버 없이는 ot-ctl 필요
-          // networkKey가 있으면 dataset이 존재한다는 의미
           if (data['networkKey'] != null) {
-            debugPrint('[CHIP] OTBR has active dataset (networkKey present)');
-            // TLV hex는 Go 서버/ot-ctl에서만 가능하므로 여기서는 표시만
-            // → _startCommissioning에서 Thread 선택 시 Go 서버에서 가져옴
+            debugPrint('[CHIP] OTBR has active dataset — but TLV hex only from Go server');
+            // OTBR REST는 JSON(개별 필드) 반환, CHIP SDK는 TLV hex 필요
+            // Go 서버가 필수 — OTBR JSON→TLV 변환 불가
           }
         }
       } catch (e) {
         debugPrint('[CHIP] OTBR REST fallback failed: $e');
+      } finally {
+        client2.close();
       }
     }
 
     if (datasetHex != null && datasetHex.isNotEmpty) {
       await _chip.setThreadDataset(datasetHex);
+      _threadDatasetLoaded = true;
       debugPrint('[CHIP] Thread dataset loaded (${datasetHex.length} chars)');
+    } else {
+      debugPrint('[CHIP] WARNING: Thread dataset not loaded — Thread 커미셔닝 불가');
     }
   }
 
@@ -158,19 +172,28 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     });
 
     try {
-      // 1. WiFi credentials 설정 (Thread일 때는 스킵)
+      // 1. INV-3: Thread dataset 검증
+      if (info.isThread && !_threadDatasetLoaded) {
+        // Thread dataset 재시도
+        await _loadThreadDataset();
+        if (!_threadDatasetLoaded) {
+          throw Exception('Thread dataset 없음 — Go 서버(/api/thread/dataset)와 OTBR 확인 필요');
+        }
+      }
+
+      // 2. WiFi credentials 설정 (Thread일 때는 스킵)
       if (!info.isThread) {
         setState(() => _status = '🔄 WiFi 정보 설정 중...');
         await _chip.setWifiCredentials(info.ssid, info.password);
         await _setServerWifiCredentials(info.ssid, info.password);
       }
 
-      // 2. CHIP SDK BLE 커미셔닝
+      // 3. CHIP SDK BLE 커미셔닝
       setState(() => _status = '⏳ BLE 커미셔닝 진행 중...\n'
           'BLE 스캔 → BTP → PASE → ${info.isThread ? "Thread" : "WiFi"} 설정\n'
           '(60~120초 소요)');
 
-      final nodeId = DateTime.now().millisecondsSinceEpoch % 100000 + 1;
+      final nodeId = _nextNodeId();
       final commResult = await _chip.pairDevice(nodeId, info.pairingCode);
 
       if (!commResult.success) {
@@ -216,8 +239,20 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
           .listen((chunk) {
         for (final line in chunk.split('\n')) {
           if (!line.startsWith('data: ')) continue;
-          final data = line.substring(6);
-          if (data.contains('device_added') || data.contains('node_added')) {
+          final raw = line.substring(6).trim();
+          if (raw.isEmpty) continue;
+
+          // JSON decode — string contains 대신 구조적 파싱
+          Map<String, dynamic>? json;
+          try {
+            json = jsonDecode(raw) as Map<String, dynamic>?;
+          } catch (_) {
+            continue; // 파싱 실패 → 무시
+          }
+          if (json == null) continue;
+
+          final type = json['type'] as String? ?? '';
+          if (type == 'device_added' || type == 'node_added') {
             if (mounted) {
               _cleanupSse();
               setState(() {
@@ -227,14 +262,14 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
               _showResultDialog('✅ 커미셔닝 완료',
                   '디바이스가 $networkType 네트워크에 추가되었습니다.\n\n'
                   '뒤로 돌아가면 대시보드에서 확인할 수 있습니다.');
-              // CHIP fabric에서 제거 (python-matter-server가 관리)
               _cleanupChipFabric();
             }
-          } else if (data.contains('commission_error')) {
+          } else if (type == 'commission_error') {
+            final errMsg = json['value'] as String? ?? '알 수 없는 에러';
             if (mounted) {
               _cleanupSse();
               setState(() {
-                _status = '❌ 서버 핸드오프 실패 — 재시도하세요';
+                _status = '❌ 서버 핸드오프 실패: $errMsg';
                 _commissioning = false;
               });
             }
@@ -268,30 +303,38 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
 
   /// Go 서버에 multi-admin 핸드오프 요청 (비동기 — 202 반환)
   Future<void> _requestHandoff(int setupPinCode) async {
-    final client = HttpClient();
-    final request = await client.postUrl(
-      Uri.parse('${widget.serverUrl}/api/commission-on-network'),
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'pin_code': setupPinCode}));
-    final response = await request.close();
-    await response.drain();
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.postUrl(
+        Uri.parse('${widget.serverUrl}/api/commission-on-network'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({'pin_code': setupPinCode}));
+      final response = await request.close();
+      await response.drain();
 
-    if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception('핸드오프 요청 실패: HTTP ${response.statusCode}');
+      if (response.statusCode != 200 && response.statusCode != 202) {
+        throw Exception('핸드오프 요청 실패: HTTP ${response.statusCode}');
+      }
+    } finally {
+      client.close();
     }
   }
 
   /// Go 서버에 WiFi credentials 설정 (python-matter-server용)
   Future<void> _setServerWifiCredentials(String ssid, String password) async {
-    final client = HttpClient();
-    final request = await client.postUrl(
-      Uri.parse('${widget.serverUrl}/api/wifi-credentials'),
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'ssid': ssid, 'password': password}));
-    final response = await request.close();
-    await response.drain();
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.postUrl(
+        Uri.parse('${widget.serverUrl}/api/wifi-credentials'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({'ssid': ssid, 'password': password}));
+      final response = await request.close();
+      await response.drain();
+    } finally {
+      client.close();
+    }
   }
 
   void _showResultDialog(String title, String content) {

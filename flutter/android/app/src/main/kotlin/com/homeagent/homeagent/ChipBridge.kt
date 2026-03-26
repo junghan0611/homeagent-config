@@ -421,10 +421,12 @@ class ChipBridge(
                 ctrl.openPairingWindowWithPINCallback(
                     devicePointer, duration, pbkdfIterations, discriminator, setupPinCode,
                     object : OpenCommissioningCallback {
-                        override fun onSuccess(pin: Long, manualCode: String?, qrCode: String?) {
-                            Log.i(TAG, "window opened: pin=$pin")
+                        override fun onSuccess(deviceId: Long, manualCode: String?, qrCode: String?) {
+                            // onSuccess 첫 파라미터는 deviceId, PIN이 아님!
+                            // setupPinCode는 openPairingWindowWithPINCallback에 넘긴 값 사용
+                            Log.i(TAG, "window opened: deviceId=$deviceId setupPinCode=$setupPinCode manual=$manualCode")
                             result.success(mapOf(
-                                "setupPinCode" to pin,
+                                "setupPinCode" to setupPinCode,
                                 "manualPairingCode" to (manualCode ?: ""),
                                 "qrCode" to (qrCode ?: ""),
                             ))

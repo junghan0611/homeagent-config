@@ -24,6 +24,8 @@ services:
       - "/data"
       - "--port"
       - "5580"
+      - "--primary-interface"
+      - "wlan0"
     restart: unless-stopped
 
 volumes:

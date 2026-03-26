@@ -196,68 +196,26 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
       final nodeId = _nextNodeId();
       final networkType = info.isThread ? 'Thread' : 'WiFi (${info.ssid})';
 
-      if (!info.isThread) {
-        // WiFi 디바이스: CHIP SDK BLE + python-matter-server 병렬 실행
-        // CHIP SDK의 NsdManager mDNS는 Android에서 타이밍 문제 (connectedhomeip#31133)
-        // python-matter-server의 자체 mDNS가 디바이스를 먼저 찾도록 병렬로 시작
-        //
-        // 타이밍:
-        //   T+0s   CHIP SDK: BLE → PASE → WiFi credential 전달
-        //   T+0s   python-matter-server: commission_with_code 대기 시작 (자체 mDNS)
-        //   T+20s  디바이스 WiFi 연결 → python-matter-server 발견 → CASE → 성공
-        //   T+30s  CHIP SDK: error=50 (이미 상관없음, python-matter-server가 완료)
-        setState(() => _status = '⏳ WiFi 커미셔닝 진행 중...\n'
-            'BLE로 WiFi 설정 전달 + 서버가 디바이스 검색 중\n'
-            '(60~120초 소요)');
+      // WiFi/Thread 공통: CHIP SDK BLE → openCommissioningWindow → 핸드오프
+      // python-matter-server에 --primary-interface wlan0 설정으로 mDNS 동작
+      setState(() => _status = '⏳ BLE 커미셔닝 진행 중...\n'
+          'BLE 스캔 → BTP → PASE → ${info.isThread ? "Thread" : "WiFi"} 설정\n'
+          '(60~120초 소요)');
 
-        // SSE 먼저 연결
-        _listenHandoffResult(networkType);
-
-        // python-matter-server에 WiFi credentials + commission 동시 요청 (비동기)
-        await _setServerWifiCredentials(info.ssid, info.password);
-        _wifiCommissionFallback(info.pairingCode, networkType); // await 안 함 — 병렬
-
-        // CHIP SDK BLE commissioning (WiFi credential 전달이 핵심)
-        // error=50(mDNS timeout)은 예상됨 — python-matter-server가 대신 처리
-        try {
-          final commResult = await _chip.pairDevice(nodeId, info.pairingCode);
-          if (commResult.success) {
-            _lastCommissionedNodeId = commResult.nodeId;
-            debugPrint('[CHIP] WiFi BLE commissioning succeeded (unexpected but good)');
-            // CHIP SDK가 성공하면 multi-admin 핸드오프도 시도
-            try {
-              final window = await _chip.openCommissioningWindow(commResult.nodeId);
-              await _requestHandoff(window.setupPinCode);
-            } catch (e) {
-              debugPrint('[CHIP] handoff after BLE success failed: $e (python-matter-server fallback active)');
-            }
-          }
-        } on PlatformException catch (e) {
-          debugPrint('[CHIP] WiFi BLE commissioning failed: ${e.code} ${e.message} (python-matter-server fallback active)');
-          // python-matter-server가 병렬로 처리 중 — 여기서는 무시
-        }
-
-        setState(() => _status = '⏳ 서버에서 WiFi 디바이스 검색 중...\n(60~120초 소요)');
-      } else {
-        // Thread 디바이스: 기존 흐름 (CHIP SDK → openCommissioningWindow → 핸드오프)
-        setState(() => _status = '⏳ BLE 커미셔닝 진행 중...\n'
-            'BLE 스캔 → BTP → PASE → Thread 설정\n'
-            '(60~120초 소요)');
-
-        final commResult = await _chip.pairDevice(nodeId, info.pairingCode);
-        if (!commResult.success) {
-          throw Exception('BLE 커미셔닝 실패');
-        }
-        _lastCommissionedNodeId = commResult.nodeId;
-
-        setState(() => _status = '🔄 서버 핸드오프 준비 중...');
-        final window = await _chip.openCommissioningWindow(commResult.nodeId);
-
-        _listenHandoffResult(networkType);
-        await _requestHandoff(window.setupPinCode);
-
-        setState(() => _status = '⏳ 서버에서 디바이스 등록 중...\n(60~120초 소요)');
+      final commResult = await _chip.pairDevice(nodeId, info.pairingCode);
+      if (!commResult.success) {
+        throw Exception('BLE 커미셔닝 실패');
       }
+      _lastCommissionedNodeId = commResult.nodeId;
+
+      // Multi-admin: openCommissioningWindow → 핸드오프
+      setState(() => _status = '🔄 서버 핸드오프 준비 중...');
+      final window = await _chip.openCommissioningWindow(commResult.nodeId);
+
+      _listenHandoffResult(networkType);
+      await _requestHandoff(window.setupPinCode);
+
+      setState(() => _status = '⏳ 서버에서 디바이스 등록 중...\n(60~120초 소요)');
     } catch (e) {
       setState(() {
         _commissioning = false;

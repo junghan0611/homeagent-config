@@ -993,6 +993,8 @@ func TestAttrMap_SSEMapping(t *testing.T) {
 		"1/6/0": "on", "1/69/0": "contact", "1/8/0": "level",
 		"1/768/0": "hue", "1/768/1": "saturation", "1/768/7": "color_temp",
 		"1/1026/0": "temperature", "1/1029/0": "humidity",
+		"1/1030/0": "occupancy", "1/1024/0": "illuminance",
+		"1/1027/0": "pressure", "1/257/0": "lock_state",
 	}
 	for path, key := range expected {
 		if attrMap[path] != key {

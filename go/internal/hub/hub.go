@@ -399,6 +399,10 @@ var attrMap = map[string]string{
 	"1/768/7":  "color_temp",  // ColorControl — ColorTemperatureMireds (153-500)
 	"1/1026/0": "temperature", // TemperatureMeasurement — MeasuredValue (0.01°C)
 	"1/1029/0": "humidity",    // RelativeHumidityMeasurement — MeasuredValue (0.01%)
+	"1/1030/0": "occupancy",   // OccupancySensing — Occupancy (bitmap, bit0 = occupied)
+	"1/1024/0": "illuminance", // IlluminanceMeasurement — MeasuredValue
+	"1/1027/0": "pressure",    // PressureMeasurement — MeasuredValue (0.1 kPa)
+	"1/257/0":  "lock_state",  // DoorLock — LockState (1=Locked, 2=Unlocked)
 }
 
 func (h *Hub) addNode(n matter.Node) *DeviceState {
@@ -444,6 +448,27 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 						ds.Type = "temperature_sensor"
 					case 775:
 						ds.Type = "humidity_sensor"
+					case 263:
+						ds.Type = "occupancy_sensor"
+					case 262:
+						ds.Type = "light_sensor"
+					case 267:
+						ds.Type = "dimmable_plug"
+					case 773:
+						ds.Type = "pressure_sensor"
+					case 10:
+						ds.Type = "door_lock"
+					// P1
+					case 514:
+						ds.Type = "window_covering"
+					case 769:
+						ds.Type = "thermostat"
+					case 43:
+						ds.Type = "fan"
+					case 118:
+						ds.Type = "smoke_co_alarm"
+					case 15:
+						ds.Type = "generic_switch"
 					default:
 						ds.Type = fmt.Sprintf("device_%d", int(typeID))
 					}

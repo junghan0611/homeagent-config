@@ -113,6 +113,17 @@ class DeviceCard extends StatelessWidget {
                     color: AppTheme.blue,
                   ),
                 ),
+              ] else if (device.type == 'occupancy_sensor') ...[
+                const Spacer(),
+                Icon(
+                  (device.state['occupancy'] == 1 || device.state['occupancy'] == true)
+                      ? Icons.directions_walk
+                      : Icons.motion_photos_off,
+                  size: 28,
+                  color: (device.state['occupancy'] == 1 || device.state['occupancy'] == true)
+                      ? AppTheme.orange
+                      : Colors.grey,
+                ),
               ] else ...[
                 const Spacer(),
               ],
@@ -152,6 +163,26 @@ class DeviceCard extends StatelessWidget {
         return Icons.thermostat;
       case 'humidity_sensor':
         return Icons.water_drop;
+      case 'occupancy_sensor':
+        return Icons.directions_walk;
+      case 'light_sensor':
+        return Icons.wb_sunny;
+      case 'dimmable_plug':
+        return Icons.power;
+      case 'pressure_sensor':
+        return Icons.compress;
+      case 'door_lock':
+        return Icons.lock;
+      case 'window_covering':
+        return Icons.blinds;
+      case 'thermostat':
+        return Icons.device_thermostat;
+      case 'fan':
+        return Icons.air;
+      case 'smoke_co_alarm':
+        return Icons.detector_smoke;
+      case 'generic_switch':
+        return Icons.smart_button;
       case 'on_off_light':
       case 'dimmable_light':
       case 'color_temp_light':

@@ -146,9 +146,13 @@ class ChipBridge(
             return
         }
 
-        val nodeId = call.argument<Number>("nodeId")?.toLong() ?: 1L
+        val nodeId = call.argument<Number>("nodeId")?.toLong()
+        if (nodeId == null || nodeId <= 0) {
+            result.error("INVALID_ARGS", "nodeId required (> 0)", null)
+            return
+        }
         val code = call.argument<String>("code")
-        if (code == null) {
+        if (code.isNullOrEmpty()) {
             result.error("INVALID_ARGS", "code is required", null)
             return
         }
@@ -257,34 +261,47 @@ class ChipBridge(
     ) {
         Log.i(TAG, "GATT connecting to ${device.address}")
 
-        // Attestation delegate — auto-continue on failure (test devices lack PAA certs)
-        ctrl.setDeviceAttestationDelegate(600) { devicePtr, attestationInfo, errorCode ->
+        // #9: networkCredentials null 경고
+        if (networkCredentials == null) {
+            Log.w(TAG, "networkCredentials is null — commissioning may fail for Thread/WiFi devices")
+        }
+
+        // #8: Attestation 타임아웃을 Dart 타임아웃(120s)에 맞춤
+        ctrl.setDeviceAttestationDelegate(120) { devicePtr, attestationInfo, errorCode ->
             Log.w(TAG, "Attestation result: errorCode=$errorCode — auto-continuing")
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 ctrl.continueCommissioning(devicePtr, true)
             }
         }
 
+        // #1: result 이중 호출 방지 — MethodChannel result는 한 번만 사용 가능
+        var resultSent = false
+        fun sendSuccess(data: Map<String, Any>) {
+            if (!resultSent) { resultSent = true; result.success(data) }
+        }
+        fun sendError(code: String, message: String) {
+            if (!resultSent) { resultSent = true; cleanupBle(); result.error(code, message, null) }
+        }
+
         ctrl.setCompletionListener(object : ChipDeviceController.CompletionListener {
             override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
                 Log.i(TAG, "commissioning complete: node=$nodeId error=$errorCode")
-                // BLE 정리 — 커미셔닝 후 BLE 불필요 (CASE/IP로 전환됨)
                 cleanupBle()
                 if (errorCode == 0L) {
-                    result.success(mapOf("nodeId" to nodeId, "success" to true))
+                    sendSuccess(mapOf("nodeId" to nodeId, "success" to true))
                 } else {
-                    result.error("COMMISSION_FAILED", "errorCode=$errorCode", null)
+                    sendError("COMMISSION_FAILED", "errorCode=$errorCode")
                 }
             }
             override fun onPairingComplete(errorCode: Long) {
                 Log.i(TAG, "pairing complete: error=$errorCode")
                 if (errorCode != 0L) {
-                    result.error("PAIRING_FAILED", "errorCode=$errorCode", null)
+                    sendError("PAIRING_FAILED", "errorCode=$errorCode")
                 }
             }
             override fun onError(error: Throwable?) {
                 Log.e(TAG, "commission error", error)
-                result.error("COMMISSION_ERROR", error?.message, null)
+                sendError("COMMISSION_ERROR", error?.message ?: "unknown error")
             }
             override fun onConnectDeviceComplete() { Log.d(TAG, "onConnectDeviceComplete") }
             override fun onStatusUpdate(status: Int) { Log.d(TAG, "status: $status") }
@@ -316,16 +333,31 @@ class ChipBridge(
                 Log.i(TAG, "GATT onConnectionStateChange: status=$status newState=$newState")
 
                 // status=133 (GATT_ERROR) — Android BLE 일시적 에러, 재시도
-                if (status == 133 && gattRetryCount < maxGattRetries) {
-                    gattRetryCount++
-                    Log.w(TAG, "GATT status=133, retry $gattRetryCount/$maxGattRetries after 1s")
-                    gatt?.close()
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        val newGatt = device.connectGatt(context, false, this)
-                        bleGatt = newGatt
-                        bleConnectionId = platform.bleManager.addConnection(newGatt)
-                        Log.i(TAG, "GATT retry connect, connId=$bleConnectionId")
-                    }, 1000L)
+                if (status == 133) {
+                    if (gattRetryCount < maxGattRetries) {
+                        gattRetryCount++
+                        Log.w(TAG, "GATT status=133, retry $gattRetryCount/$maxGattRetries after 1s")
+                        // #4: GATT 재시도 시 이전 연결 BleManager에서도 제거
+                        gatt?.close()
+                        try { platform.bleManager.removeConnection(bleConnectionId) } catch (_: Exception) {}
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            val newGatt = device.connectGatt(context, false, this)
+                            bleGatt = newGatt
+                            bleConnectionId = platform.bleManager.addConnection(newGatt)
+                            Log.i(TAG, "GATT retry connect, connId=$bleConnectionId")
+                        }, 1000L)
+                    } else {
+                        Log.e(TAG, "GATT status=133, $maxGattRetries retries exhausted")
+                        sendError("GATT_RETRY_EXHAUSTED",
+                            "GATT connection failed after $maxGattRetries retries (status=133)")
+                    }
+                    return
+                }
+
+                // #5: GATT 실패 (non-133, non-0) — disconnected 시 명시적 에러 반환
+                if (newState == BluetoothProfile.STATE_DISCONNECTED && status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.e(TAG, "GATT disconnected with error: status=$status")
+                    sendError("GATT_FAILED", "GATT connection failed: status=$status")
                     return
                 }
 
@@ -399,9 +431,9 @@ class ChipBridge(
     }
 
     override fun onNotifyChipConnectionClosed(connId: Int) {
-        bleGatt?.close()
-        bleConnectionId = 0
         Log.d(TAG, "onNotifyChipConnectionClosed: $connId")
+        // cleanupBle()로 통일 — GATT close + BleManager removeConnection 포함
+        cleanupBle()
     }
 
     // ── Open Commissioning Window (multi-admin) ───────────
@@ -413,7 +445,11 @@ class ChipBridge(
             return
         }
 
-        val nodeId = call.argument<Number>("nodeId")?.toLong() ?: 1L
+        val nodeId = call.argument<Number>("nodeId")?.toLong()
+        if (nodeId == null || nodeId <= 0) {
+            result.error("INVALID_ARGS", "nodeId required (> 0)", null)
+            return
+        }
         val duration = call.argument<Number>("duration")?.toInt() ?: 300
         val discriminator = call.argument<Number>("discriminator")?.toInt() ?: 3840
         val setupPinCode = 10000L + (System.currentTimeMillis() % 89999)
@@ -452,15 +488,24 @@ class ChipBridge(
 
     private fun setThreadDataset(call: MethodCall, result: MethodChannel.Result) {
         val hex = call.argument<String>("dataset")
-        if (hex == null) { result.error("INVALID_ARGS", "dataset required", null); return }
-        val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        if (hex.isNullOrEmpty()) { result.error("INVALID_ARGS", "dataset required", null); return }
+        // #2: hex 파싱 방어 — 홀수 길이, 비hex 문자 체크
+        if (hex.length % 2 != 0) { result.error("INVALID_ARGS", "dataset hex must be even length, got ${hex.length}", null); return }
+        val bytes = try {
+            hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        } catch (e: NumberFormatException) {
+            result.error("INVALID_ARGS", "dataset contains non-hex characters: ${e.message}", null)
+            return
+        }
         networkCredentials = NetworkCredentials.forThread(NetworkCredentials.ThreadCredentials(bytes))
         Log.i(TAG, "Thread dataset stored (${bytes.size} bytes)")
         result.success(true)
     }
 
     private fun setWifiCredentials(call: MethodCall, result: MethodChannel.Result) {
-        val ssid = call.argument<String>("ssid") ?: ""
+        // #6: 빈 ssid 방어
+        val ssid = call.argument<String>("ssid")
+        if (ssid.isNullOrEmpty()) { result.error("INVALID_ARGS", "ssid required", null); return }
         val password = call.argument<String>("password") ?: ""
         networkCredentials = NetworkCredentials.forWiFi(NetworkCredentials.WiFiCredentials(ssid, password))
         Log.i(TAG, "WiFi credentials stored: ssid=$ssid")
@@ -469,10 +514,18 @@ class ChipBridge(
 
     private fun unpairDevice(call: MethodCall, result: MethodChannel.Result) {
         val ctrl = controller ?: run { result.error("NOT_INITIALIZED", "init first", null); return }
-        val nodeId = call.argument<Number>("nodeId")?.toLong() ?: 1L
-        ctrl.unpairDevice(nodeId)
-        Log.i(TAG, "unpaired node $nodeId")
-        result.success(true)
+        // #3: nodeId 기본값 1 제거 — null이면 에러
+        val nodeId = call.argument<Number>("nodeId")?.toLong()
+        if (nodeId == null || nodeId <= 0) { result.error("INVALID_ARGS", "nodeId required (> 0)", null); return }
+        // #7: unpairDevice 예외 처리
+        try {
+            ctrl.unpairDevice(nodeId)
+            Log.i(TAG, "unpaired node $nodeId")
+            result.success(true)
+        } catch (e: Exception) {
+            Log.w(TAG, "unpairDevice($nodeId) failed: ${e.message}")
+            result.error("UNPAIR_FAILED", e.message, null)
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────

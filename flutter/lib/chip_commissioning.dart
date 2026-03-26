@@ -37,6 +37,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
   int? _lastCommissionedNodeId;
   StreamSubscription<String>? _sseSubscription;
   HttpClient? _sseClient;
+  Timer? _handoffTimer;
 
   /// nodeId 생성 — CHIP SDK fabric 전용.
   /// 이 nodeId는 CHIP SDK 커미셔닝용이며, python-matter-server의
@@ -55,6 +56,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
 
   @override
   void dispose() {
+    _handoffTimer?.cancel();
     _sseSubscription?.cancel();
     _sseClient?.close(force: true);
     super.dispose();
@@ -91,7 +93,8 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
             .first
             .timeout(const Duration(seconds: 5));
         return true;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[CHIP] BLE turnOn failed: $e');
         setState(() => _status = '❌ 블루투스를 켜야 커미셔닝이 가능합니다.\n설정에서 블루투스를 활성화하세요.');
         return false;
       }
@@ -227,6 +230,19 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     _sseSubscription?.cancel();
     _sseClient?.close(force: true);
 
+    // 핸드오프 타임아웃 (150초 — BLE 커미셔닝 120초 + 여유 30초)
+    _handoffTimer?.cancel();
+    _handoffTimer = Timer(const Duration(seconds: 150), () {
+      if (_commissioning && mounted) {
+        debugPrint('[COMM] handoff timeout — 150s elapsed without device_added');
+        _cleanupSse();
+        setState(() {
+          _status = '⏰ 핸드오프 타임아웃 (150초)\n서버 상태를 확인하세요';
+          _commissioning = false;
+        });
+      }
+    });
+
     final client = HttpClient();
     _sseClient = client;
     final sseUri = Uri.parse('${widget.serverUrl}/api/events');
@@ -246,8 +262,10 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
           Map<String, dynamic>? json;
           try {
             json = jsonDecode(raw) as Map<String, dynamic>?;
-          } catch (_) {
-            continue; // 파싱 실패 → 무시
+          } catch (e) {
+            // SSE 청크 분할 시 파싱 실패 가능 — 다음 라인에서 복구됨
+            debugPrint('[COMM] SSE JSON parse skip: $e');
+            continue;
           }
           if (json == null) continue;
 
@@ -281,8 +299,10 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     });
   }
 
-  /// SSE 연결 정리
+  /// SSE 연결 + 핸드오프 타이머 정리
   void _cleanupSse() {
+    _handoffTimer?.cancel();
+    _handoffTimer = null;
     _sseSubscription?.cancel();
     _sseSubscription = null;
     _sseClient?.close(force: true);
@@ -295,8 +315,10 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     if (nodeId == null) return;
     try {
       await _chip.unpairDevice(nodeId);
-    } catch (_) {
-      // 제거 실패해도 큰 문제 아님
+      debugPrint('[CHIP] unpaired node $nodeId from CHIP fabric');
+    } catch (e) {
+      // fabric 제거 실패 시 다음 커미셔닝에서 multi-admin 윈도우 충돌 가능
+      debugPrint('[CHIP] WARNING: unpairDevice($nodeId) failed: $e');
     }
     _lastCommissionedNodeId = null;
   }
@@ -332,6 +354,9 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
       request.write(jsonEncode({'ssid': ssid, 'password': password}));
       final response = await request.close();
       await response.drain();
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception('WiFi credentials 설정 실패: HTTP ${response.statusCode}');
+      }
     } finally {
       client.close();
     }
@@ -386,7 +411,9 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
                 }
                 wifiAutoDetected = data['auto'] == true;
               });
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('[CHIP] wifi-info fetch failed: $e');
+            }
           }();
         }
         return AlertDialog(

@@ -37,13 +37,17 @@ class ChipController {
 
   /// Set Thread operational dataset (hex string from OTBR).
   Future<void> setThreadDataset(String datasetHex) async {
-    assert(datasetHex.isNotEmpty, 'Thread dataset hex must not be empty');
+    if (datasetHex.isEmpty) {
+      throw ArgumentError('Thread dataset hex must not be empty');
+    }
     await _channel.invokeMethod('setThreadDataset', {'dataset': datasetHex});
   }
 
   /// Set WiFi credentials for WiFi device commissioning.
   Future<void> setWifiCredentials(String ssid, String password) async {
-    assert(ssid.isNotEmpty, 'WiFi SSID must not be empty');
+    if (ssid.isEmpty) {
+      throw ArgumentError('WiFi SSID must not be empty');
+    }
     await _channel.invokeMethod('setWifiCredentials', {
       'ssid': ssid,
       'password': password,

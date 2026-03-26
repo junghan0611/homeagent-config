@@ -6,9 +6,11 @@
 ---
 
 ## Android python-matter-server 이용 시
-android-docker를 참고하라! 
+android-docker/README.md 참조. Docker(python-matter-server) + Native(OTBR BBR=ON) 하이브리드.
+CHIP SDK AAR로 BLE 커미셔닝 후 python-matter-server에 multi-admin handoff.
 
-matterjs-server 와 python-matter-server는 별개야. 섞지마
+matterjs-server와 python-matter-server는 별개. 섞지 마라.
+scripts/ 폴더는 matterjs-server(오픈소스) 전용.
 
 ## Phase 로드맵 (흔들리지 않는 방향)
 

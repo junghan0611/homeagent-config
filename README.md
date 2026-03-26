@@ -25,11 +25,10 @@ Flutter App (ivi-homescreen / Android APK)
                    ├── TUI (bubbletea terminal dashboard)
                    ├── Matter WS Client (single ReadLoop)
                    └── Matter Backend (:5580)
-                        ├── matterjs-server (current)
                         ├── python-matter-server (Docker) ← current
-                        ├── matterjs-server (legacy)
-                        ├── BLE commissioning (WiFi + Thread)
-                        └── OTBR (Docker container)
+                        ├── matterjs-server (legacy/open-source)
+                        ├── BLE commissioning (CHIP SDK AAR)
+                        └── OTBR (native build, BBR=ON)
 ```
 
 ---
@@ -203,7 +202,10 @@ The platform. Docker-based Matter+OTBR, Go as extension layer, Flutter as the un
 - [x] **Docker-based deployment** — RPi5: `docker-compose up -d`, Android: `docker-android.sh start/load/up`
 - [x] **python-matter-server 8.1.2** — HA 공식 Matter 컨트롤러, Go 코드 변경 0줄로 호환
 - [x] **Android native Docker** — chroot 폐기 → 네이티브 실행. AOSP 3개 패치로 완결
-- [x] **Android Docker 컨테이너 실행** — matter-server + OTBR 컨테이너 동작 확인 ✅
+- [x] **Android Docker 컨테이너 실행** — matter-server Docker + OTBR 네이티브 하이브리드 구성 ✅
+- [x] **CHIP SDK AAR BLE commissioning** — Thread + WiFi, multi-admin handoff to python-matter-server ✅
+- [x] **OTBR BBR=ON + AOSP 011 패치** — MRT6 충돌 해결, mDNS/SRP proxy 동작 ✅
+- [x] **Thread 도어센서 커미셔닝** — BLE→PASE→Thread→CASE→CommissionComplete→handoff ✅
 - [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
 - [x] **REST API 12 endpoints** — devices, commission, command, chat, home, events, system, thread
 - [ ] **Flutter Linux app** — RPi5 ivi-homescreen native UI (not WebView), matterjs WS direct
@@ -331,10 +333,10 @@ HomeAgent is not a rule engine. It's an **agent with context, principles, and ju
 ```
 RPi5 (Yocto) / RK3576 (Android) — HomeAgent Hub
 ├── Docker   containerd + dockerd (static binary, both platforms)
-│   ├── python-matter-server (Matter protocol engine, Docker container)
-│   └── otbr-agent (Thread Border Router, Docker container)
+│   └── python-matter-server (Matter protocol engine, Docker container)
+├── Native   OTBR (Thread Border Router, NDK cross-build, BBR=ON)
 ├── Go       HomeAgent (controller, AI, state machine, A2A, Swagger UI)
-├── Dart     Flutter Native UI / WebView Shell + BLE commissioning
+├── Dart     Flutter Native UI / WebView Shell + CHIP SDK AAR BLE commissioning
 ├── C/C++    llama.cpp (sLLM on-device inference)
 └── (none)   Python — not used on the hub (training only on GPU cluster)
 
@@ -377,18 +379,25 @@ OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 ./run.sh bundle            # Full bundle (Go+Node+matterjs+UI)
 ```
 
-### Option D: Deploy to Android Board — Docker (RK3576)
+### Option D: Deploy to Android Board — Docker + Native OTBR (RK3576)
 
 ```bash
-# PC (one command — push binaries + images + scripts)
+# PC (one command — push Docker + OTBR + Go + APK)
 cd android-docker && bash setup-docker.sh
 
-# Board (adb shell, root)
-/data/local/tmp/docker-android.sh start   # Docker Engine (native, no chroot)
-/data/local/tmp/docker-android.sh load    # Load images (offline, no pull)
-/data/local/tmp/docker-android.sh up      # matter-server + OTBR containers
-/data/local/tmp/docker-android.sh status  # Verify
+# Board (one command — Docker + matter-server + OTBR + Thread + Go + APK)
+/data/local/tmp/docker-android.sh all
+
+# Or step by step:
+/data/local/tmp/docker-android.sh start      # Docker Engine
+/data/local/tmp/docker-android.sh load       # Load matter-server image
+/data/local/tmp/docker-android.sh up         # Start matter-server container
+/data/local/tmp/docker-android.sh otbr-start # Native OTBR + Thread network
+/data/local/tmp/docker-android.sh go-start   # Go server + APK
+/data/local/tmp/docker-android.sh status     # Verify
 ```
+
+> See [android-docker/README.md](android-docker/README.md) for architecture details and AOSP patches.
 
 ### Option E: Deploy to Android Board — Native (legacy)
 

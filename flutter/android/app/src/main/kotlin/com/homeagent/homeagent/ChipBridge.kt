@@ -537,13 +537,21 @@ class ChipBridge(
      */
     private fun cleanupBle() {
         bleGatt?.let { gatt ->
-            Log.i(TAG, "cleanupBle: disconnect + close GATT, remove from BleManager connId=$bleConnectionId")
+            val connId = bleConnectionId
+            Log.i(TAG, "cleanupBle: disconnect + close GATT + notify SDK, connId=$connId")
             gatt.disconnect()
             gatt.close()
             try {
-                chipPlatform?.bleManager?.removeConnection(bleConnectionId)
+                chipPlatform?.bleManager?.removeConnection(connId)
             } catch (e: Exception) {
-                Log.w(TAG, "cleanupBle: removeConnection failed (non-critical): ${e.message}")
+                Log.w(TAG, "cleanupBle: removeConnection failed: ${e.message}")
+            }
+            // SDK 내부 BLE 상태 해제 — 이것 없으면 "Bluetooth connection already in use"
+            try {
+                controller?.onCloseBleComplete(connId)
+                controller?.onNotifyChipConnectionClosed(connId)
+            } catch (e: Exception) {
+                Log.w(TAG, "cleanupBle: SDK BLE notify failed: ${e.message}")
             }
             bleGatt = null
             bleConnectionId = 0

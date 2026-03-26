@@ -124,6 +124,109 @@ await _channel.invokeMethod('pairDevice', args);  // 타임아웃 없음
 
 ---
 
+### K-4: MethodChannel result는 한 번만 — 가드 변수 필수
+
+**위반 패턴**:
+```kotlin
+override fun onPairingComplete(errorCode: Long) {
+    if (errorCode != 0L) result.error(...)  // 1번째 호출
+}
+override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
+    result.error(...)  // 2번째 호출 → IllegalStateException crash
+}
+```
+
+**문제**: CHIP SDK `CompletionListener`는 `onPairingComplete` → `onCommissioningComplete` → `onError` 순서로 여러 콜백을 호출할 수 있다. MethodChannel `result`는 한 번만 사용 가능 — 두 번 호출하면 **앱 크래시**.
+
+**규칙**: `var resultSent = false` 가드로 첫 번째 호출만 허용.
+```kotlin
+var resultSent = false
+fun sendOnce(block: () -> Unit) {
+    if (!resultSent) { resultSent = true; block() }
+}
+```
+
+---
+
+### K-5: SDK 콜백 입력 — Kotlin에서도 검증 (Dart assert는 release에서 무시)
+
+**위반 패턴**:
+```kotlin
+val ssid = call.argument<String>("ssid") ?: ""     // 빈 문자열 허용
+val nodeId = call.argument<Number>("nodeId")?.toLong() ?: 1L  // 기본값 1
+val bytes = hex.chunked(2).map { it.toInt(16).toByte() }     // 비hex → crash
+```
+
+**문제**: Dart `assert(ssid.isNotEmpty)`는 release APK에서 컴파일러가 제거. Kotlin이 마지막 방어선.
+
+**규칙**:
+- 필수 파라미터 null/빈값 → `result.error("INVALID_ARGS", ...)` + return
+- `?: 기본값` 금지 (특히 nodeId ?: 1L — 다른 디바이스를 조작)
+- 문자열 파싱은 try-catch 래핑
+
+---
+
+### K-6: GATT onConnectionStateChange — 실패 시 result.error 보장
+
+**위반 패턴**: `status != 0 && status != 133` (예: 8=timeout, 19=disconnect) 일 때 `wrappedCallback`에 전달만 하고 끝. SDK가 `CompletionListener` 콜백을 호출하지 않으면 `result`가 반환 안 됨 → Flutter 120초 타임아웃까지 무한 대기.
+
+**규칙**: `newState == STATE_DISCONNECTED && status != GATT_SUCCESS` 일 때, SDK 콜백을 기다리지 말고 **직접** `result.error("GATT_FAILED", "status=$status")` 호출 (K-4 가드와 함께 사용).
+
+---
+
+### K-7: BleManager removeConnection — GATT close하는 모든 곳에서 호출
+
+**위반 패턴**:
+```kotlin
+// GATT 133 재시도
+gatt?.close()                                    // OS 레벨 닫음
+// ← removeConnection(bleConnectionId) 빠짐!     // BleManager에 좀비 남음
+val newGatt = device.connectGatt(...)
+bleConnectionId = platform.bleManager.addConnection(newGatt)  // 새 연결 추가
+
+// onNotifyChipConnectionClosed
+bleGatt?.close()                                 // OS 레벨 닫음
+// ← removeConnection(connId) 빠짐!              // BleManager에 좀비 남음
+```
+
+**규칙**: `gatt.close()` 호출 시 반드시 `bleManager.removeConnection(connId)` 동반. `cleanupBle()`를 유일한 GATT 정리 경로로 통일하고, GATT 133 재시도와 `onNotifyChipConnectionClosed`에서도 동일 패턴 적용.
+
+---
+
+### K-8: SDK 타임아웃 정합 — Kotlin과 Dart가 같은 값
+
+**위반 패턴**:
+```kotlin
+ctrl.setDeviceAttestationDelegate(600) { ... }  // 600초
+```
+```dart
+static const _pairTimeout = Duration(seconds: 120);  // 120초
+```
+
+**문제**: Dart가 120초에 타임아웃으로 돌아가도 SDK attestation이 600초까지 백그라운드 실행 → BLE 리소스 점유 → 다음 pairDevice 충돌.
+
+**규칙**: `DeviceAttestationDelegate` 타임아웃 = Dart `_pairTimeout` 이하. Dart 타임아웃 발동 시 SDK도 정리되어야 함.
+
+---
+
+## 테스트 사각지대 — 왜 Kotlin 버그를 못 잡는가
+
+```
+Dart 테스트 ←── mock ──→ MethodChannel ←→ Kotlin (ChipBridge.kt)
+    ✅ 12개                  경계            ❌ 0개
+```
+
+**Mock Wall**: Dart 테스트는 MethodChannel을 mock하여 Kotlin 레이어를 "항상 정상 반환"으로 치환. K-1~K-8의 모든 버그는 mock 뒤에 숨어 있어 Dart 테스트로 발견 불가.
+
+**Kotlin unit test 불가**: CHIP SDK AAR은 네이티브 라이브러리(`libCHIPController.so`), `BluetoothGatt`는 Android OS 객체 — JUnit 단독으로 mock 불가.
+
+**대응 전략**: 테스트가 커버 못 하면 **코드가 스스로를 검증**해야 한다.
+- K-4 (result 가드), K-5 (입력 검증), K-6 (GATT 실패 처리)는 **방어 코드로 내장**
+- 크래시/무한대기를 "에러 메시지 + 정상 종료"로 전환
+- 로그(`Log.w`)로 이상 상태 기록 → `adb logcat`에서 사후 분석 가능
+
+---
+
 ## Go (서버)
 
 ### G-1: goroutine에서 상태 변경 시 — 이벤트 발행 잊지 마라

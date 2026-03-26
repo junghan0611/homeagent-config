@@ -46,35 +46,16 @@ func getOTBRDataset(otCtlPath string) (string, error) {
 // Safe to call multiple times — deletes existing rules before adding.
 // No-op on non-Android (if wpan0 table detection fails).
 func ensureThreadRouting(otCtlPath string) {
-	// 1. Get mesh-local prefix from dataset
-	meshPrefix := otCtlFirstLine(otCtlPath, "dataset", "active")
-	if meshPrefix != "" {
-		// Parse "Mesh Local Prefix" from multi-line output
-		out, err := exec.Command(otCtlPath, "dataset", "active").Output()
-		if err == nil {
-			for _, line := range strings.Split(string(out), "\n") {
-				if strings.Contains(line, "Mesh Local Prefix") {
-					parts := strings.Fields(line)
-					if len(parts) > 0 {
-						meshPrefix = strings.TrimSpace(parts[len(parts)-1])
-					}
-				}
-			}
-		}
+	// 1. Get mesh-local prefix from "dataset active" (multi-line output)
+	meshPrefix := ""
+	if out, err := exec.Command(otCtlPath, "dataset", "active").Output(); err == nil {
+		meshPrefix = otCtlParseLine(string(out), "Mesh Local Prefix")
 	}
 
-	// 2. Get OMR prefix from br omrprefix
+	// 2. Get OMR prefix from "br omrprefix"
 	omrPrefix := ""
 	if out, err := exec.Command(otCtlPath, "br", "omrprefix").Output(); err == nil {
-		for _, line := range strings.Split(string(out), "\n") {
-			line = strings.ReplaceAll(line, "\r", "")
-			if strings.Contains(line, "Local:") {
-				parts := strings.Fields(line)
-				if len(parts) >= 2 {
-					omrPrefix = strings.TrimSpace(parts[len(parts)-1])
-				}
-			}
-		}
+		omrPrefix = otCtlParseLine(string(out), "Local:")
 	}
 
 	if meshPrefix == "" && omrPrefix == "" {
@@ -116,16 +97,15 @@ func ensureThreadRouting(otCtlPath string) {
 	}
 }
 
-// otCtlFirstLine runs ot-ctl and returns the first non-empty, non-"Done" line
-func otCtlFirstLine(otCtlPath string, args ...string) string {
-	out, err := exec.Command(otCtlPath, args...).Output()
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(strings.ReplaceAll(line, "\r", ""))
-		if line != "" && line != "Done" {
-			return line
+// otCtlParseLine finds a line containing keyword and returns the last field
+func otCtlParseLine(output, keyword string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.ReplaceAll(line, "\r", "")
+		if strings.Contains(line, keyword) {
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				return strings.TrimSpace(parts[len(parts)-1])
+			}
 		}
 	}
 	return ""

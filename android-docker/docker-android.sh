@@ -360,10 +360,13 @@ cmd_all() {
     cmd_up          # matter-server 마지막 (Thread 라우팅 준비된 상태에서 시작)
     log "=== 전체 스택 기동 완료 ==="
     cmd_status
+}
 
-    # init 서비스로 실행 시 — 프로세스 유지 (cgroup 보호)
-    # init oneshot이 종료되면 자식 프로세스도 kill됨
-    # 수동 실행(adb shell)이면 Ctrl-C로 빠져나올 수 있음
+# ─── 부팅 자동시작 (init.rc → 이 커맨드 호출) ───
+# init oneshot이 종료되면 cgroup 안의 자식 프로세스도 kill됨.
+# 감시 루프로 프로세스를 유지하고, homeagent 죽으면 재시작.
+cmd_boot() {
+    cmd_all
     while true; do
         sleep 30
         pgrep -f "homeagent serve" > /dev/null || { log "homeagent 죽음 — 재시작"; cmd_go_start; }
@@ -388,6 +391,7 @@ case "${1:-help}" in
     go-start)    cmd_go_start ;;
     go-stop)     cmd_go_stop ;;
     all)         cmd_all ;;
+    boot)        cmd_boot ;;
     exec)     shift; cmd_exec "$@" ;;
     *)
         echo "Usage: $0 {all|start|stop|status|load|up|down|otbr-start|otbr-stop|go-start|go-stop|exec}"

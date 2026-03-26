@@ -10,7 +10,7 @@
 #       images/docker-29.3.0.tgz
 #       images/docker-compose-linux-aarch64
 #       images/matter-server-arm64.tar.gz
-#       images/otbr-arm64.tar.gz
+#   (OTBR은 네이티브 빌드 — dist/otbr-arm64/ 필요, Docker 이미지 불필요)
 #
 # 결과:
 #   보드에서 docker-android.sh {start|load|up} 순서로 실행하면
@@ -225,8 +225,9 @@ if [ "$need_reboot" = "yes" ]; then
     adb remount 2>/dev/null || true
 fi
 
+# 주의: disable-verity + reboot은 개발용. 프로덕션은 AOSP 이미지에 직접 포함할 것.
 adb shell "cat > /system/etc/init/homeagent.rc << 'INITEOF'
-service homeagent_start /system/bin/sh /data/local/tmp/docker-android.sh all
+service homeagent_start /system/bin/sh /data/local/tmp/docker-android.sh boot
     class late_start
     user root
     group root shell

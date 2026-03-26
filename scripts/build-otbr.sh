@@ -27,6 +27,17 @@ BUILD_DIR="$OTBR_SRC/build-android"
 OUT_DIR="$PROJECT_DIR/dist/otbr-arm64"
 PATCH_DIR="$PROJECT_DIR/patches/ot-br-posix"
 
+# ─── BBR 빌드 옵션 ────────────────────────────────────────
+# OTBR_BBR=on  → python-matter-server 구성 (CHIP SDK Operational Discovery에 mDNS 프록시 필요)
+# OTBR_BBR=off → matterjs 구성 (matterjs가 wpan0 직접 접근, BBR 불필요)
+# 기본값: off (안전)
+OTBR_BBR="${OTBR_BBR:-off}"
+case "$OTBR_BBR" in
+    on|ON)   OTBR_BBR_CMAKE="ON";  echo "[otbr-build] BBR=ON (python-matter-server 구성)" ;;
+    off|OFF) OTBR_BBR_CMAKE="OFF"; echo "[otbr-build] BBR=OFF (matterjs 구성, 기본값)" ;;
+    *) echo "ERROR: OTBR_BBR must be 'on' or 'off'" >&2; exit 1 ;;
+esac
+
 # ─── 검증 ──────────────────────────────────────────────────
 if [ -z "${ANDROID_HOME:-}" ]; then
     echo "ERROR: ANDROID_HOME not set. Run inside nix devShell:"
@@ -97,8 +108,10 @@ fi
 #   OPENTHREAD_CONFIG_ANDROID_NDK_ENABLE=1  → cutils/properties.h 대신 sys/system_properties.h 사용
 #   OT_ANDROID_NDK=ON                       → -lutil 링크 제외 (Android에 없음)
 #   OTBR_MDNS=openthread                    → dns_sd.h (mDNSResponder) 불필요, OT core mDNS 사용
-#   OTBR_BACKBONE_ROUTER=OFF                → ON 시 MRT6_INIT setsockopt → Android 커널 CONFIG_IPV6_MROUTE 없어 crash
-#                                              RPi5(Yocto)는 ON이라 자동 IPv6 라우팅. Android는 수동 라우트(cmd_thread_start)
+#   OTBR_BACKBONE_ROUTER=$OTBR_BBR_CMAKE    → OTBR_BBR 환경변수로 제어 (on/off)
+#                                              ON: python-matter-server 구성 (BBR + mDNS proxy → Operational Discovery)
+#                                              OFF: matterjs 구성 (BBR 불필요, 수동 라우트)
+#                                              ON 사용 시 AOSP 011 패치 필수 (MRT6 소켓 충돌 방지)
 #   OTBR_SRP_ADVERTISING_PROXY=OFF          → MDNS=openthread 시 OT core proxy(OT_SRP_ADV_PROXY 자동ON)와 CMake 충돌
 #   OTBR_DNSSD_DISCOVERY_PROXY=OFF          → MDNS=openthread 시 OT core proxy(OT_DISCOVERY_PROXY 자동ON)와 CMake 충돌
 #   ※ MDNS=openthread이면 OT core가 SRP Advertising + DNS-SD Discovery proxy를 내장 수행
@@ -120,7 +133,7 @@ cmake -B "$BUILD_DIR" \
   -DOTBR_REST=ON \
   -DOTBR_WEB=OFF \
   -DOTBR_MDNS=openthread \
-  -DOTBR_BACKBONE_ROUTER=OFF \
+  -DOTBR_BACKBONE_ROUTER=$OTBR_BBR_CMAKE \
   -DOTBR_SRP_ADVERTISING_PROXY=OFF \
   -DOTBR_DNSSD_DISCOVERY_PROXY=OFF \
   -DOTBR_BORDER_ROUTING=ON \

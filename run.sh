@@ -1101,6 +1101,10 @@ case "${1:-help}" in
         "${SCRIPT_DIR}/scripts/android-deploy.sh" "${@:-help}"
         ;;
     otbr-build)
+        # OTBR_BBR=on  → python-matter-server 구성 (BBR + mDNS proxy)
+        # OTBR_BBR=off → matterjs 구성 (기본값)
+        # 사용: ./run.sh otbr-build          (BBR OFF, matterjs)
+        #       OTBR_BBR=on ./run.sh otbr-build  (BBR ON, python-matter-server)
         exec nix develop .#dev --impure --command bash "${SCRIPT_DIR}/scripts/build-otbr.sh"
         ;;
     bundle)

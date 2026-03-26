@@ -226,7 +226,7 @@ cmd_otbr_start() {
         sleep 1
 
         setsid $OTBR_DIR/otbr-agent \
-            -I $WPAN_IF -d7 -v \
+            -I $WPAN_IF -B wlan0 -d7 -v \
             --vendor-name HomeAgent --model-name OTBR \
             --data-path $OTBR_DATA \
             --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \

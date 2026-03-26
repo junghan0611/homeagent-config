@@ -172,6 +172,15 @@ class ChipBridge(
 
         Log.i(TAG, "pairDevice: node=$nodeId disc=$discriminator pin=${setupPinCode} short=$isShortDiscriminator creds=${networkCredentials != null}")
 
+        // 1.5. 이전 BLE 연결 정리 (재시도 시 "Bluetooth connection already in use" 방지)
+        bleGatt?.let { gatt ->
+            Log.i(TAG, "Closing previous GATT connection")
+            gatt.disconnect()
+            gatt.close()
+            bleGatt = null
+        }
+        bleConnectionId++
+
         // 2. BLE scan for Matter device
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {

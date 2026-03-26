@@ -249,7 +249,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
       Uri.parse('${widget.serverUrl}/api/commission-on-network'),
     );
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'setup_pin_code': setupPinCode}));
+    request.write(jsonEncode({'pin_code': setupPinCode}));
     final response = await request.close();
     await response.drain();
 

@@ -27,7 +27,8 @@ func getOTBRDataset(otCtlPath string) (string, error) {
 		return "", fmt.Errorf("ot-ctl: %w", err)
 	}
 	dataset := strings.TrimSpace(string(out))
-	// ot-ctl outputs "hex\nDone" — take the first line
+	// ot-ctl outputs "hex\r\nDone\r\n" on Android — take first line, strip \r
+	dataset = strings.ReplaceAll(dataset, "\r", "")
 	lines := strings.Split(dataset, "\n")
 	if len(lines) > 0 {
 		dataset = strings.TrimSpace(lines[0])

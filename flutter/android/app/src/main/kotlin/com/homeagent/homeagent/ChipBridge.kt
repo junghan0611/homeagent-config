@@ -12,6 +12,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.ParcelUuid
 import android.util.Log
 import chip.devicecontroller.AttestationInfo
@@ -80,6 +81,16 @@ class ChipBridge(
 
     private var networkCredentials: NetworkCredentials? = null
 
+    // WiFi MulticastLock — mDNS(Operational Discovery)에 필수
+    // Android는 배터리 절약을 위해 WiFi multicast를 기본 드롭
+    // 이것 없으면 WiFi 디바이스 커미셔닝 시 mDNS discovery 타임아웃
+    private val multicastLock: WifiManager.MulticastLock by lazy {
+        val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wm.createMulticastLock("matter-mdns").apply {
+            setReferenceCounted(false)  // acquire/release 횟수 무관 — 한 번 걸면 유지
+        }
+    }
+
     init {
         channel.setMethodCallHandler(this)
     }
@@ -122,6 +133,12 @@ class ChipBridge(
                 ControllerParams.newBuilder().setControllerVendorId(0xFFF1).build()
             )
             controller = ctrl
+
+            // WiFi MulticastLock 획득 — mDNS discovery에 필수
+            if (!multicastLock.isHeld) {
+                multicastLock.acquire()
+                Log.i(TAG, "WiFi MulticastLock acquired (mDNS enabled)")
+            }
 
             Log.i(TAG, "CHIP SDK initialized")
             result.success(true)
@@ -572,6 +589,10 @@ class ChipBridge(
 
     fun dispose() {
         cleanupBle()
+        if (multicastLock.isHeld) {
+            multicastLock.release()
+            Log.i(TAG, "WiFi MulticastLock released")
+        }
         controller?.close()
         controller = null
         networkCredentials = null

@@ -186,6 +186,14 @@ APK_PATH="$PROJECT_DIR/flutter/build/app/outputs/flutter-apk/app-release.apk"
 if [ -f "$APK_PATH" ]; then
     log "APK install..."
     adb install -r "$APK_PATH" 2>&1 | tail -1
+
+    # APK BLE 권한 자동 부여
+    log "APK BLE 권한 부여..."
+    adb shell 'pm grant com.homeagent.app android.permission.BLUETOOTH_SCAN' 2>/dev/null || true
+    adb shell 'pm grant com.homeagent.app android.permission.BLUETOOTH_CONNECT' 2>/dev/null || true
+    adb shell 'pm grant com.homeagent.app android.permission.ACCESS_FINE_LOCATION' 2>/dev/null || true
+    adb shell 'pm grant com.homeagent.app android.permission.ACCESS_COARSE_LOCATION' 2>/dev/null || true
+    adb shell 'pm grant com.homeagent.app android.permission.BLUETOOTH_ADVERTISE' 2>/dev/null || true
 fi
 
 # ─── 9. 개발 도구 push (있으면) ───

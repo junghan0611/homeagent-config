@@ -66,21 +66,7 @@ class CommissionScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              // matterjs WS relay 경로 (matterjs-server 백엔드)
-              OutlinedButton.icon(
-                icon: const Icon(Icons.bluetooth, size: 24),
-                label: const Text('BLE 페어링 (matterjs)', style: TextStyle(fontSize: 14)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => BleCommissioningScreen(serverUrl: serverUrl),
-                  ),
-                ),
-              ),
+
             ],
 
             // 모든 플랫폼: On-network 커미셔닝 (setup code)

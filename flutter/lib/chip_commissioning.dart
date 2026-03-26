@@ -34,11 +34,20 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
   bool _chipReady = false;
   final ChipController _chip = ChipController();
   int? _lastCommissionedNodeId;
+  StreamSubscription<String>? _sseSubscription;
+  HttpClient? _sseClient;
 
   @override
   void initState() {
     super.initState();
     _initChip();
+  }
+
+  @override
+  void dispose() {
+    _sseSubscription?.cancel();
+    _sseClient?.close(force: true);
+    super.dispose();
   }
 
   /// CHIP SDK 초기화
@@ -173,14 +182,14 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
       setState(() => _status = '🔄 서버 핸드오프 준비 중...');
       final window = await _chip.openCommissioningWindow(commResult.nodeId);
 
-      // 4. Go 서버에 핸드오프 요청 (비동기 — 202 즉시 반환, SSE로 추적)
+      // 4. SSE 먼저 연결 (핸드오프 결과를 놓치지 않기 위해)
+      final networkType = info.isThread ? 'Thread' : 'WiFi (${info.ssid})';
+      _listenHandoffResult(networkType);
+
+      // 5. Go 서버에 핸드오프 요청 (비동기 — 202 즉시 반환)
       await _requestHandoff(window.setupPinCode);
 
       setState(() => _status = '⏳ 서버에서 디바이스 등록 중...\n(60~120초 소요)');
-
-      // 5. SSE로 결과 추적
-      final networkType = info.isThread ? 'Thread' : 'WiFi (${info.ssid})';
-      _listenHandoffResult(networkType);
     } catch (e) {
       setState(() {
         _commissioning = false;
@@ -191,13 +200,18 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
 
   /// SSE로 handoff 결과 추적
   void _listenHandoffResult(String networkType) {
+    // 이전 SSE 연결 정리
+    _sseSubscription?.cancel();
+    _sseClient?.close(force: true);
+
     final client = HttpClient();
+    _sseClient = client;
     final sseUri = Uri.parse('${widget.serverUrl}/api/events');
 
     client.getUrl(sseUri).then((request) {
       return request.close();
     }).then((response) {
-      response
+      _sseSubscription = response
           .transform(const SystemEncoding().decoder)
           .listen((chunk) {
         for (final line in chunk.split('\n')) {
@@ -205,6 +219,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
           final data = line.substring(6);
           if (data.contains('device_added') || data.contains('node_added')) {
             if (mounted) {
+              _cleanupSse();
               setState(() {
                 _status = '✅ 커미셔닝 완료!';
                 _commissioning = false;
@@ -217,6 +232,7 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
             }
           } else if (data.contains('commission_error')) {
             if (mounted) {
+              _cleanupSse();
               setState(() {
                 _status = '❌ 서버 핸드오프 실패 — 재시도하세요';
                 _commissioning = false;
@@ -228,6 +244,14 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     }).catchError((e) {
       debugPrint('[COMM] SSE connection failed: $e');
     });
+  }
+
+  /// SSE 연결 정리
+  void _cleanupSse() {
+    _sseSubscription?.cancel();
+    _sseSubscription = null;
+    _sseClient?.close(force: true);
+    _sseClient = null;
   }
 
   /// CHIP fabric에서 디바이스 제거 (python-matter-server가 이제 관리)

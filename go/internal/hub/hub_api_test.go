@@ -1868,3 +1868,188 @@ func TestAPINodeDiagnostics(t *testing.T) {
 		t.Errorf("expected available=true, got %v", result["available"])
 	}
 }
+
+// --- commission-on-network: device_added SSE emission ---
+
+func TestCommissionOnNetwork_EmitsDeviceAdded(t *testing.T) {
+	// Mock matter server that responds to commission_on_network
+	h, srv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "commission_on_network" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result": map[string]interface{}{
+					"node_id":   42,
+					"available": true,
+					"attributes": map[string]interface{}{
+						"1/29/0": []interface{}{map[string]interface{}{"0": float64(266)}},
+						"1/6/0":  false,
+					},
+				},
+			})
+		}
+	})
+	defer srv.Close()
+	defer h.matter.Close()
+
+	mux := testMux(h)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// POST commission-on-network
+	resp, err := http.Post(ts.URL+"/api/commission-on-network", "application/json",
+		strings.NewReader(`{"pin_code":12345678}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+
+	// Wait for goroutine to complete and emit device_added
+	var found bool
+	for i := 0; i < 20; i++ {
+		select {
+		case evt := <-h.eventCh:
+			if evt.Type == "device_added" && evt.DeviceID == 42 {
+				found = true
+			}
+		default:
+		}
+		if found {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if !found {
+		t.Error("expected device_added event for node 42 after commission-on-network")
+	}
+
+	// Verify device was registered
+	h.mu.RLock()
+	ds, ok := h.devices[42]
+	h.mu.RUnlock()
+	if !ok {
+		t.Fatal("node 42 should be registered")
+	}
+	if ds.Type != "on_off_plug" {
+		t.Errorf("expected type on_off_plug, got %q", ds.Type)
+	}
+}
+
+func TestCommissionOnNetwork_DuplicateAddNode_Idempotent(t *testing.T) {
+	// Simulate: node_added WS event arrives BEFORE commission response
+	// Both paths call addNode → should not crash, device_added emitted at least once
+	h := testHub(t)
+
+	node := matter.Node{
+		NodeID:    50,
+		Available: true,
+		Attributes: map[string]interface{}{
+			"1/29/0": []interface{}{map[string]interface{}{"0": float64(21)}},
+			"1/69/0": true,
+		},
+	}
+
+	// First addNode (simulates handleMatterEvent node_added)
+	ds1 := h.addNode(node)
+	h.eventCh <- Event{Type: "device_added", DeviceID: 50, Value: ds1}
+
+	// Second addNode (simulates commission goroutine)
+	ds2 := h.addNode(node)
+	h.eventCh <- Event{Type: "device_added", DeviceID: 50, Value: ds2}
+
+	// Should have 2 events in channel (idempotent — Flutter handles duplicates)
+	evtCount := 0
+	for i := 0; i < 3; i++ {
+		select {
+		case evt := <-h.eventCh:
+			if evt.Type == "device_added" && evt.DeviceID == 50 {
+				evtCount++
+			}
+		default:
+		}
+	}
+	if evtCount != 2 {
+		t.Errorf("expected 2 device_added events (idempotent), got %d", evtCount)
+	}
+
+	// Device should exist and be consistent
+	h.mu.RLock()
+	ds, ok := h.devices[50]
+	h.mu.RUnlock()
+	if !ok {
+		t.Fatal("node 50 should exist")
+	}
+	if ds.Type != "contact_sensor" {
+		t.Errorf("expected contact_sensor, got %q", ds.Type)
+	}
+}
+
+func TestCommissionOnNetwork_ConcurrentBlocked(t *testing.T) {
+	// Verify atomic guard blocks concurrent commission-on-network
+	h, srv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "commission_on_network" {
+			// Slow response — simulate real commissioning delay
+			time.Sleep(500 * time.Millisecond)
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result": map[string]interface{}{
+					"node_id":    60,
+					"available":  true,
+					"attributes": map[string]interface{}{},
+				},
+			})
+		}
+	})
+	defer srv.Close()
+	defer h.matter.Close()
+
+	mux := testMux(h)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// First request (accepted)
+	resp1, _ := http.Post(ts.URL+"/api/commission-on-network", "application/json",
+		strings.NewReader(`{"pin_code":11111111}`))
+	resp1.Body.Close()
+	if resp1.StatusCode != http.StatusAccepted {
+		t.Fatalf("first request: expected 202, got %d", resp1.StatusCode)
+	}
+
+	// Give goroutine time to start and acquire commissioning lock
+	time.Sleep(50 * time.Millisecond)
+
+	// Second request (should be accepted at HTTP level, but goroutine emits error)
+	resp2, _ := http.Post(ts.URL+"/api/commission-on-network", "application/json",
+		strings.NewReader(`{"pin_code":22222222}`))
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusAccepted {
+		t.Fatalf("second request: expected 202, got %d", resp2.StatusCode)
+	}
+
+	// Wait for commission_error event from the blocked goroutine
+	var foundError bool
+	for i := 0; i < 20; i++ {
+		select {
+		case evt := <-h.eventCh:
+			if evt.Type == "commission_error" {
+				foundError = true
+			}
+		default:
+		}
+		if foundError {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if !foundError {
+		t.Error("expected commission_error for concurrent commissioning attempt")
+	}
+}

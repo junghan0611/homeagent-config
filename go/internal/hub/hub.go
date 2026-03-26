@@ -1144,6 +1144,11 @@ func (h *Hub) handleCommissionOnNetwork(w http.ResponseWriter, r *http.Request) 
 
 		ds := h.addNode(*node)
 		log.Printf("[hub] commission-on-network success: node %d", ds.NodeID)
+		h.eventCh <- Event{
+			Type:     "device_added",
+			DeviceID: node.NodeID,
+			Value:    ds,
+		}
 	}()
 
 	w.Header().Set("Content-Type", "application/json")

@@ -173,12 +173,7 @@ class ChipBridge(
         Log.i(TAG, "pairDevice: node=$nodeId disc=$discriminator pin=${setupPinCode} short=$isShortDiscriminator creds=${networkCredentials != null}")
 
         // 1.5. 이전 BLE 연결 정리 (재시도 시 "Bluetooth connection already in use" 방지)
-        bleGatt?.let { gatt ->
-            Log.i(TAG, "Closing previous GATT connection")
-            gatt.disconnect()
-            gatt.close()
-            bleGatt = null
-        }
+        cleanupBle()
         bleConnectionId++
 
         // 2. BLE scan for Matter device
@@ -283,6 +278,8 @@ class ChipBridge(
         ctrl.setCompletionListener(object : ChipDeviceController.CompletionListener {
             override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
                 Log.i(TAG, "commissioning complete: node=$nodeId error=$errorCode")
+                // BLE 정리 — 커미셔닝 후 BLE 불필요 (CASE/IP로 전환됨)
+                cleanupBle()
                 if (errorCode == 0L) {
                     result.success(mapOf("nodeId" to nodeId, "success" to true))
                 } else {
@@ -472,6 +469,26 @@ class ChipBridge(
 
     // ── Helpers ───────────────────────────────────────────
 
+    /**
+     * BLE GATT + AndroidBleManager 정리.
+     * OS GATT 객체를 닫고, AndroidBleManager 내부 connection 리스트에서도 제거.
+     * 이전 연결이 남아있으면 2차 pairDevice 시 "connection already in use" 에러 발생.
+     */
+    private fun cleanupBle() {
+        bleGatt?.let { gatt ->
+            Log.i(TAG, "cleanupBle: disconnect + close GATT, remove from BleManager connId=$bleConnectionId")
+            gatt.disconnect()
+            gatt.close()
+            try {
+                chipPlatform?.bleManager?.removeConnection(bleConnectionId)
+            } catch (e: Exception) {
+                Log.w(TAG, "cleanupBle: removeConnection failed (non-critical): ${e.message}")
+            }
+            bleGatt = null
+            bleConnectionId = 0
+        }
+    }
+
     private fun buildServiceData(discriminator: Int): ByteArray {
         val opcode = 0
         val version = 0
@@ -485,7 +502,7 @@ class ChipBridge(
     }
 
     fun dispose() {
-        bleGatt?.close()
+        cleanupBle()
         controller?.close()
         controller = null
         networkCredentials = null

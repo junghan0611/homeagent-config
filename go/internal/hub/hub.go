@@ -562,10 +562,29 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/home", h.handleHomeSurface)
 	mux.HandleFunc("/api/events", h.handleSSE)
 	mux.HandleFunc("/api/thread/status", h.handleThreadStatus)
+	mux.HandleFunc("/api/thread/dataset", h.handleThreadDataset)
 	mux.HandleFunc("/api/system", h.handleSystem)
 
 	// matterjs-server 대시보드 리다이렉트 — ws://host:5580 → http://host:5580
 	mux.HandleFunc("/dashboard", h.handleDashboardRedirect)
+}
+
+func (h *Hub) handleThreadDataset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	dataset, err := getOTBRDataset(h.cfg.OtCtlPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"dataset": dataset})
 }
 
 func (h *Hub) handleThreadStatus(w http.ResponseWriter, r *http.Request) {

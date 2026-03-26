@@ -80,24 +80,56 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
     return true;
   }
 
-  /// Go 서버에서 Thread dataset 가져와서 CHIP SDK에 설정
+  /// OTBR REST API에서 Thread dataset TLV hex 가져와서 CHIP SDK에 설정
+  /// Go 서버 경유(/api/thread-dataset) → 폴백: OTBR REST 직접
   Future<void> _loadThreadDataset() async {
+    String? datasetHex;
+
+    // 1차: Go 서버 /api/thread/dataset
     try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
       final request = await client.getUrl(
-        Uri.parse('${widget.serverUrl}/api/thread-dataset'),
+        Uri.parse('${widget.serverUrl}/api/thread/dataset'),
       );
       final response = await request.close();
       if (response.statusCode == 200) {
         final body = await response.transform(const SystemEncoding().decoder).join();
         final data = jsonDecode(body);
-        final dataset = data['dataset'] as String?;
-        if (dataset != null && dataset.isNotEmpty) {
-          await _chip.setThreadDataset(dataset);
-        }
+        datasetHex = data['dataset'] as String?;
       }
     } catch (e) {
-      debugPrint('[CHIP] Thread dataset load failed (non-fatal): $e');
+      debugPrint('[CHIP] Go server thread dataset failed: $e');
+    }
+
+    // 2차 폴백: OTBR REST 직접 (같은 호스트 :8081)
+    if (datasetHex == null || datasetHex.isEmpty) {
+      try {
+        // serverUrl에서 호스트 추출 (예: http://192.168.0.162:8080 → 192.168.0.162)
+        final serverUri = Uri.parse(widget.serverUrl);
+        final otbrUrl = 'http://${serverUri.host}:8081/node/dataset/active';
+        final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+        final request = await client.getUrl(Uri.parse(otbrUrl));
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final body = await response.transform(const SystemEncoding().decoder).join();
+          final data = jsonDecode(body);
+          // OTBR REST는 JSON 반환 — networkKey를 포함한 전체 dataset
+          // CHIP SDK에는 TLV hex가 필요하므로, Go 서버 없이는 ot-ctl 필요
+          // networkKey가 있으면 dataset이 존재한다는 의미
+          if (data['networkKey'] != null) {
+            debugPrint('[CHIP] OTBR has active dataset (networkKey present)');
+            // TLV hex는 Go 서버/ot-ctl에서만 가능하므로 여기서는 표시만
+            // → _startCommissioning에서 Thread 선택 시 Go 서버에서 가져옴
+          }
+        }
+      } catch (e) {
+        debugPrint('[CHIP] OTBR REST fallback failed: $e');
+      }
+    }
+
+    if (datasetHex != null && datasetHex.isNotEmpty) {
+      await _chip.setThreadDataset(datasetHex);
+      debugPrint('[CHIP] Thread dataset loaded (${datasetHex.length} chars)');
     }
   }
 

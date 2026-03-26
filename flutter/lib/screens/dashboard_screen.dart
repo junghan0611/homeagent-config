@@ -160,6 +160,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }).catchError((e) {
       debugPrint('[Dashboard] command error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('명령 실패: $e')),
+        );
+      }
     });
   }
 

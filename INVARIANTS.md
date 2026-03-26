@@ -227,6 +227,45 @@ Dart 테스트 ←── mock ──→ MethodChannel ←→ Kotlin (ChipBridge.
 
 ---
 
+### D-6: HTTP 응답 상태 코드 — 확인 없이 진행 금지
+
+**위반 패턴**:
+```dart
+final response = await request.close();
+await response.drain();
+// statusCode 체크 없이 성공으로 간주
+```
+
+**문제**: Go 서버가 400/500 반환해도 Dart가 성공으로 처리 → 명령이 안 먹혀도 UI에 에러 표시 없음.
+
+**규칙**: `_get`/`_post`/`_delete` 헬퍼에서 `statusCode >= 400`이면 `HttpException` throw. 호출부에서 catch하여 사용자에게 피드백.
+
+---
+
+### D-7: 명령 실패 — 사용자에게 피드백
+
+**위반 패턴**:
+```dart
+}).catchError((e) {
+  debugPrint('[Dashboard] command error: $e');  // 로그만
+});
+```
+
+**규칙**: 사용자 인터랙션(명령, 삭제 등) 실패 시 `SnackBar`로 에러 표시. `debugPrint`는 개발자용 — 사용자는 안 봄.
+
+---
+
+### D-8: catch (_) {} — 완전 무음 금지
+
+**위반 패턴**:
+```dart
+} catch (_) {}  // 에러 삼킴
+```
+
+**규칙**: 최소 `catch (e) { debugPrint('...: $e'); }`. 완전 무음은 디버깅 불가. `healthCheck`처럼 실패가 정상인 경우에도 로그는 남겨야 네트워크 문제 추적 가능.
+
+---
+
 ## Go (서버)
 
 ### G-1: goroutine에서 상태 변경 시 — 이벤트 발행 잊지 마라
@@ -247,6 +286,21 @@ Dart 테스트 ←── mock ──→ MethodChannel ←→ Kotlin (ChipBridge.
 |------------|-----------|-----------|
 | `pin_code` | `setup_pin_code` | `hub.go` → `client.go` |
 | `ip_addr` | `ip_addr` | 동일 (변환 없음) |
+
+---
+
+### G-3: 디바이스 명령 값 범위 검증
+
+**위반 패턴**: `level=999`가 Matter 디바이스에 직접 전송 → 디바이스 거부 또는 예측 불가.
+
+**규칙**: `handleDeviceCommand`에서 값 범위 체크 후 400 반환.
+
+| 필드 | 범위 | Matter spec |
+|------|------|-------------|
+| `level` | 0-254 | 0x00-0xFE |
+| `hue` | 0-254 | 0x00-0xFE |
+| `saturation` | 0-254 | 0x00-0xFE |
+| `color_temp` | 153-500 | mireds (2000K-6535K) |
 
 ---
 

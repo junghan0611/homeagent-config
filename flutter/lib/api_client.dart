@@ -103,7 +103,9 @@ class ApiClient {
     try {
       final data = await _get('/api/home');
       if (data is Map<String, dynamic>) return data;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ApiClient] getHome failed: $e');
+    }
     return null;
   }
 
@@ -111,7 +113,8 @@ class ApiClient {
     try {
       final data = await _get('/healthz');
       return data is Map && data['status'] == 'ok';
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ApiClient] healthCheck failed: $e');
       return false;
     }
   }
@@ -253,40 +256,67 @@ class ApiClient {
   Future<dynamic> _get(String path) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 3);
-    final request = await client.getUrl(Uri.parse('$baseUrl$path'));
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    client.close();
-    return jsonDecode(body);
+    try {
+      final request = await client.getUrl(Uri.parse('$baseUrl$path'));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode >= 400) {
+        throw HttpException('HTTP ${response.statusCode}: $body', uri: Uri.parse('$baseUrl$path'));
+      }
+      return jsonDecode(body);
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> _post(String path, Map<String, dynamic> body) async {
-    final client = HttpClient();
-    final request = await client.postUrl(Uri.parse('$baseUrl$path'));
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(body));
-    final response = await request.close();
-    await response.drain();
-    client.close();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.postUrl(Uri.parse('$baseUrl$path'));
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(body));
+      final response = await request.close();
+      final respBody = await response.transform(utf8.decoder).join();
+      if (response.statusCode >= 400) {
+        throw HttpException('HTTP ${response.statusCode}: $respBody', uri: Uri.parse('$baseUrl$path'));
+      }
+    } finally {
+      client.close();
+    }
   }
 
   Future<Map<String, dynamic>> _postReturning(
       String path, Map<String, dynamic> body) async {
-    final client = HttpClient();
-    final request = await client.postUrl(Uri.parse('$baseUrl$path'));
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(body));
-    final response = await request.close();
-    final respBody = await response.transform(utf8.decoder).join();
-    client.close();
-    return Map<String, dynamic>.from(jsonDecode(respBody) as Map);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.postUrl(Uri.parse('$baseUrl$path'));
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(body));
+      final response = await request.close();
+      final respBody = await response.transform(utf8.decoder).join();
+      if (response.statusCode >= 400) {
+        throw HttpException('HTTP ${response.statusCode}: $respBody', uri: Uri.parse('$baseUrl$path'));
+      }
+      return Map<String, dynamic>.from(jsonDecode(respBody) as Map);
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> _delete(String path) async {
-    final client = HttpClient();
-    final request = await client.deleteUrl(Uri.parse('$baseUrl$path'));
-    final response = await request.close();
-    await response.drain();
-    client.close();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.deleteUrl(Uri.parse('$baseUrl$path'));
+      final response = await request.close();
+      final respBody = await response.transform(utf8.decoder).join();
+      if (response.statusCode >= 400) {
+        throw HttpException('HTTP ${response.statusCode}: $respBody', uri: Uri.parse('$baseUrl$path'));
+      }
+    } finally {
+      client.close();
+    }
   }
 }

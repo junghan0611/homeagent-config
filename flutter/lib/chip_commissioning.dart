@@ -327,40 +327,6 @@ class _ChipCommissioningScreenState extends State<ChipCommissioningScreen> {
   ///
   /// CHIP SDK의 NsdManager 기반 mDNS는 Android에서 타이밍 문제가 있음
   /// (connectedhomeip#31133). 같은 AP에서 matter.js(자체 mDNS)는 성공.
-  /// python-matter-server도 자체 CHIP mDNS를 사용하므로 찾을 수 있음.
-  ///
-  /// 전제: CHIP SDK가 BLE→WiFi credential 전달까지 성공 → 디바이스가 WiFi에 연결됨
-  /// failsafe timer 동안 원래 페어링 코드로 커미셔닝 가능
-  Future<void> _wifiCommissionFallback(String pairingCode, String networkType) async {
-    setState(() => _status = '🔄 WiFi 디바이스 — 서버 직접 커미셔닝 중...\n'
-        '(디바이스가 WiFi에 연결됨, 서버가 검색 중)\n'
-        '(60~120초 소요)');
-
-    _listenHandoffResult(networkType);
-
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-    try {
-      final request = await client.postUrl(
-        Uri.parse('${widget.serverUrl}/api/commission'),
-      );
-      request.headers.contentType = ContentType.json;
-      request.write(jsonEncode({
-        'code': pairingCode,
-        'network_only': true,
-      }));
-      final response = await request.close();
-      await response.drain();
-
-      if (response.statusCode != 200 && response.statusCode != 202) {
-        throw Exception('서버 커미셔닝 요청 실패: HTTP ${response.statusCode}');
-      }
-
-      setState(() => _status = '⏳ 서버에서 WiFi 디바이스 검색 중...\n(60~120초 소요)');
-    } finally {
-      client.close();
-    }
-  }
-
   /// Go 서버에 multi-admin 핸드오프 요청 (비동기 — 202 반환)
   Future<void> _requestHandoff(int setupPinCode) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);

@@ -1321,6 +1321,10 @@ func (h *Hub) handleDeviceCommand(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"level required (0-254)"}`, http.StatusBadRequest)
 			return
 		}
+		if *req.Level < 0 || *req.Level > 254 {
+			http.Error(w, `{"error":"level must be 0-254"}`, http.StatusBadRequest)
+			return
+		}
 		err = h.SetLevel(ctx, req.NodeID, *req.Level, req.TransitionTime)
 
 	case "set_color":
@@ -1328,11 +1332,19 @@ func (h *Hub) handleDeviceCommand(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"hue and saturation required (0-254)"}`, http.StatusBadRequest)
 			return
 		}
+		if *req.Hue < 0 || *req.Hue > 254 || *req.Saturation < 0 || *req.Saturation > 254 {
+			http.Error(w, `{"error":"hue and saturation must be 0-254"}`, http.StatusBadRequest)
+			return
+		}
 		err = h.SetColor(ctx, req.NodeID, *req.Hue, *req.Saturation, req.TransitionTime)
 
 	case "set_color_temp":
 		if req.ColorTemp == nil {
 			http.Error(w, `{"error":"color_temp required (mireds 153-500)"}`, http.StatusBadRequest)
+			return
+		}
+		if *req.ColorTemp < 153 || *req.ColorTemp > 500 {
+			http.Error(w, `{"error":"color_temp must be 153-500 mireds"}`, http.StatusBadRequest)
 			return
 		}
 		err = h.SetColorTemperature(ctx, req.NodeID, *req.ColorTemp, req.TransitionTime)

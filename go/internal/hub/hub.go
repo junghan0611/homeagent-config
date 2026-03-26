@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -405,6 +406,53 @@ var attrMap = map[string]string{
 	"1/257/0":  "lock_state",  // DoorLock — LockState (1=Locked, 2=Unlocked)
 }
 
+// convertAttrValue converts raw Matter attribute values to human-readable format.
+// Conversion happens at the Go layer — Flutter receives display-ready values.
+// INV: Flutter에 raw Matter 값을 보내지 않는다.
+func convertAttrValue(key string, raw interface{}) interface{} {
+	v, ok := toFloat64(raw)
+	if !ok {
+		return raw
+	}
+	switch key {
+	case "temperature":
+		return math.Round(v/10) / 10 // 2350 → 23.5 (0.01°C → °C, 소수1자리)
+	case "humidity":
+		return math.Round(v/10) / 10 // 6500 → 65.0 (0.01% → %, 소수1자리)
+	case "pressure":
+		return math.Round(v) / 10 // 1013 → 101.3 (0.1kPa → kPa)
+	case "illuminance":
+		if v <= 0 {
+			return 0
+		}
+		return math.Round(math.Pow(10, (v-1)/10000)) // Matter spec → lux
+	case "occupancy":
+		return int(v)&1 == 1 // bitmap bit0 → bool
+	case "lock_state":
+		return int(v) == 1 // 1=Locked → true, 2=Unlocked → false
+	default:
+		return raw
+	}
+}
+
+func toFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
 func (h *Hub) addNode(n matter.Node) *DeviceState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -480,7 +528,7 @@ func (h *Hub) addNode(n matter.Node) *DeviceState {
 	// Extract initial state — attribute path → state key via attrMap
 	for path, key := range attrMap {
 		if val, ok := n.Attributes[path]; ok {
-			ds.State[key] = val
+			ds.State[key] = convertAttrValue(key, val)
 		}
 	}
 
@@ -503,7 +551,7 @@ func (h *Hub) handleMatterEvent(evt matter.Event) {
 		if ok {
 			// Map Matter attribute path to human-readable key via attrMap
 			if key, mapped := attrMap[upd.Path]; mapped {
-				ds.State[key] = upd.Value
+				ds.State[key] = convertAttrValue(key, upd.Value)
 			} else {
 				ds.State[upd.Path] = upd.Value
 			}

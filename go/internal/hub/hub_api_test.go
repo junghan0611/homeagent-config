@@ -972,7 +972,7 @@ func TestAddNode_TemperatureSensor_State(t *testing.T) {
 		},
 	})
 	if ds.Type != "temperature_sensor" { t.Errorf("got type %q", ds.Type) }
-	if ds.State["temperature"] != float64(2350) { t.Errorf("got temperature=%v", ds.State["temperature"]) }
+	if ds.State["temperature"] != 23.5 { t.Errorf("got temperature=%v", ds.State["temperature"]) }
 }
 
 func TestAddNode_HumiditySensor_State(t *testing.T) {
@@ -985,7 +985,7 @@ func TestAddNode_HumiditySensor_State(t *testing.T) {
 		},
 	})
 	if ds.Type != "humidity_sensor" { t.Errorf("got type %q", ds.Type) }
-	if ds.State["humidity"] != float64(4500) { t.Errorf("got humidity=%v", ds.State["humidity"]) }
+	if ds.State["humidity"] != 45.0 { t.Errorf("got humidity=%v", ds.State["humidity"]) }
 }
 
 func TestAttrMap_SSEMapping(t *testing.T) {
@@ -1017,8 +1017,8 @@ func TestAddNode_Temperature_Negative(t *testing.T) {
 			"1/1026/0": float64(-1000), // -10.00°C
 		},
 	})
-	if ds.State["temperature"] != float64(-1000) {
-		t.Errorf("negative temperature: expected -1000, got %v", ds.State["temperature"])
+	if ds.State["temperature"] != -10.0 {
+		t.Errorf("negative temperature: expected -10.0, got %v", ds.State["temperature"])
 	}
 }
 
@@ -1031,8 +1031,8 @@ func TestAddNode_Temperature_Zero(t *testing.T) {
 			"1/1026/0": float64(0), // 0.00°C
 		},
 	})
-	if ds.State["temperature"] != float64(0) {
-		t.Errorf("zero temperature: expected 0, got %v", ds.State["temperature"])
+	if ds.State["temperature"] != 0.0 {
+		t.Errorf("zero temperature: expected 0.0, got %v", ds.State["temperature"])
 	}
 }
 
@@ -1045,8 +1045,8 @@ func TestAddNode_Humidity_Full(t *testing.T) {
 			"1/1029/0": float64(10000), // 100.00%
 		},
 	})
-	if ds.State["humidity"] != float64(10000) {
-		t.Errorf("100%% humidity: expected 10000, got %v", ds.State["humidity"])
+	if ds.State["humidity"] != 100.0 {
+		t.Errorf("100%% humidity: expected 100.0, got %v", ds.State["humidity"])
 	}
 }
 
@@ -1059,8 +1059,8 @@ func TestAddNode_Humidity_Zero(t *testing.T) {
 			"1/1029/0": float64(0),
 		},
 	})
-	if ds.State["humidity"] != float64(0) {
-		t.Errorf("0%% humidity: expected 0, got %v", ds.State["humidity"])
+	if ds.State["humidity"] != 0.0 {
+		t.Errorf("0%% humidity: expected 0.0, got %v", ds.State["humidity"])
 	}
 }
 
@@ -1181,7 +1181,7 @@ func TestHandleMatterEvent_Level_Update(t *testing.T) {
 func TestHandleMatterEvent_Temperature_Update(t *testing.T) {
 	h := testHub(t)
 	h.mu.Lock()
-	h.devices[10] = &DeviceState{NodeID: 10, Type: "temperature_sensor", State: map[string]interface{}{"temperature": float64(2000)}}
+	h.devices[10] = &DeviceState{NodeID: 10, Type: "temperature_sensor", State: map[string]interface{}{"temperature": 20.0}}
 	h.mu.Unlock()
 
 	evt := matter.Event{
@@ -1194,8 +1194,8 @@ func TestHandleMatterEvent_Temperature_Update(t *testing.T) {
 	ds := h.devices[10]
 	h.mu.RUnlock()
 
-	if ds.State["temperature"] != float64(2500) {
-		t.Errorf("temperature should be 2500 after update, got %v", ds.State["temperature"])
+	if ds.State["temperature"] != 25.0 {
+		t.Errorf("temperature should be 25.0 after update, got %v", ds.State["temperature"])
 	}
 }
 

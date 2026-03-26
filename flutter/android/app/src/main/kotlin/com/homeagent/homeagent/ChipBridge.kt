@@ -205,15 +205,18 @@ class ChipBridge(
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         var scanDone = false
 
-        val scanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, scanResult: ScanResult) {
+        // 스캔 콜백 — 단일 객체로 등록+정지 (이전: anonymous wrapper가 stopScan 누락)
+        val actualScanCallback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, sr: ScanResult) {
+                val sd = sr.scanRecord?.getServiceData(ParcelUuid(UUID.fromString(CHIP_UUID)))
+                if (sd == null) return
                 if (scanDone) return
                 scanDone = true
-                scanner.stopScan(this)
+                scanner.stopScan(this)  // this = 실제 등록된 콜백
                 handler.removeCallbacksAndMessages(null)
 
-                val device = scanResult.device
-                Log.i(TAG, "BLE device found: ${device.address} (${device.name})")
+                val device = sr.device
+                Log.i(TAG, "BLE device found: ${device.address} (${device.name}) serviceData=${sd.joinToString("") { "%02x".format(it) }}")
 
                 // 3. GATT connect → 4. pairDeviceThroughBLE
                 connectAndPair(ctrl, device, nodeId, setupPinCode, result)
@@ -228,27 +231,14 @@ class ChipBridge(
             }
         }
 
-        // 필터 없이 스캔 (디버그) — Matter FFF6 서비스 데이터가 있는 디바이스만 로그
-        Log.i(TAG, "BLE scan: filter=NONE (debug mode), looking for FFF6 service data")
-        scanner.startScan(null, scanSettings, object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, sr: ScanResult) {
-                val sd = sr.scanRecord?.getServiceData(ParcelUuid(UUID.fromString(CHIP_UUID)))
-                if (sd != null) {
-                    Log.i(TAG, "Matter BLE device: ${sr.device.address} rssi=${sr.rssi} serviceData=${sd.joinToString("") { "%02x".format(it) }}")
-                    // 필터 매칭된 것처럼 처리
-                    scanCallback.onScanResult(callbackType, sr)
-                }
-            }
-            override fun onScanFailed(errorCode: Int) {
-                scanCallback.onScanFailed(errorCode)
-            }
-        })
+        Log.i(TAG, "BLE scan: looking for Matter FFF6 service data")
+        scanner.startScan(null, scanSettings, actualScanCallback)
 
         // Timeout
         handler.postDelayed({
             if (!scanDone) {
                 scanDone = true
-                scanner.stopScan(scanCallback)
+                scanner.stopScan(actualScanCallback)
                 Log.e(TAG, "BLE scan timeout (${BLE_SCAN_TIMEOUT_MS}ms)")
                 result.error("BLE_SCAN_TIMEOUT", "No Matter device found within ${BLE_SCAN_TIMEOUT_MS}ms", null)
             }
@@ -315,12 +305,30 @@ class ChipBridge(
         }
 
         // GATT callback wrapping — forwards to AndroidBleManager's callback
+        var gattRetryCount = 0
+        val maxGattRetries = 3
+
         val gattCallback = object : BluetoothGattCallback() {
             private val wrappedCallback = platform.bleManager.callback
             private var state = 0 // 0=init, 1=discover, 2=mtu
 
             override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
                 Log.i(TAG, "GATT onConnectionStateChange: status=$status newState=$newState")
+
+                // status=133 (GATT_ERROR) — Android BLE 일시적 에러, 재시도
+                if (status == 133 && gattRetryCount < maxGattRetries) {
+                    gattRetryCount++
+                    Log.w(TAG, "GATT status=133, retry $gattRetryCount/$maxGattRetries after 1s")
+                    gatt?.close()
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        val newGatt = device.connectGatt(context, false, this)
+                        bleGatt = newGatt
+                        bleConnectionId = platform.bleManager.addConnection(newGatt)
+                        Log.i(TAG, "GATT retry connect, connId=$bleConnectionId")
+                    }, 1000L)
+                    return
+                }
+
                 wrappedCallback.onConnectionStateChange(gatt, status, newState)
                 if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                     state = 1

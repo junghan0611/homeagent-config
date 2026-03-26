@@ -224,7 +224,21 @@ class ChipBridge(
             }
         }
 
-        scanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+        // 필터 없이 스캔 (디버그) — Matter FFF6 서비스 데이터가 있는 디바이스만 로그
+        Log.i(TAG, "BLE scan: filter=NONE (debug mode), looking for FFF6 service data")
+        scanner.startScan(null, scanSettings, object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, sr: ScanResult) {
+                val sd = sr.scanRecord?.getServiceData(ParcelUuid(UUID.fromString(CHIP_UUID)))
+                if (sd != null) {
+                    Log.i(TAG, "Matter BLE device: ${sr.device.address} rssi=${sr.rssi} serviceData=${sd.joinToString("") { "%02x".format(it) }}")
+                    // 필터 매칭된 것처럼 처리
+                    scanCallback.onScanResult(callbackType, sr)
+                }
+            }
+            override fun onScanFailed(errorCode: Int) {
+                scanCallback.onScanFailed(errorCode)
+            }
+        })
 
         // Timeout
         handler.postDelayed({

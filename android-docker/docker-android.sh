@@ -360,6 +360,14 @@ cmd_all() {
     cmd_up          # matter-server 마지막 (Thread 라우팅 준비된 상태에서 시작)
     log "=== 전체 스택 기동 완료 ==="
     cmd_status
+
+    # init 서비스로 실행 시 — 프로세스 유지 (cgroup 보호)
+    # init oneshot이 종료되면 자식 프로세스도 kill됨
+    # 수동 실행(adb shell)이면 Ctrl-C로 빠져나올 수 있음
+    while true; do
+        sleep 30
+        pgrep -f "homeagent serve" > /dev/null || { log "homeagent 죽음 — 재시작"; cmd_go_start; }
+    done
 }
 
 # ─── docker CLI ───

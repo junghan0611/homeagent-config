@@ -211,14 +211,37 @@ log "=== 설치 완료 ==="
 log ""
 log "보드 파일 구조:"
 adb shell "ls -la $REMOTE/docker/ | head -15"
+# ─── 10. 부팅 자동시작 (init.rc 서비스) ───
+log "부팅 자동시작 등록..."
+
+# homeagent.rc가 이미 있으면 스킵, 없으면 disable-verity + remount 필요
+need_reboot=$(adb shell "test -f /system/etc/init/homeagent.rc && echo no || echo yes" | tr -d '\r')
+if [ "$need_reboot" = "yes" ]; then
+    log "  init 서비스 미등록 — disable-verity + remount..."
+    adb disable-verity 2>/dev/null || true
+    adb reboot 2>/dev/null && sleep 20
+    while ! adb devices 2>/dev/null | grep -q "device$"; do sleep 3; done
+    adb root 2>/dev/null && sleep 2
+    adb remount 2>/dev/null || true
+fi
+
+adb shell "cat > /system/etc/init/homeagent.rc << 'INITEOF'
+service homeagent_start /system/bin/sh /data/local/tmp/docker-android.sh all
+    class late_start
+    user root
+    group root shell
+    oneshot
+    disabled
+    seclabel u:r:su:s0
+
+on property:sys.boot_completed=1
+    start homeagent_start
+INITEOF
+chmod 644 /system/etc/init/homeagent.rc"
+log "  init 서비스 등록 ✓ (sys.boot_completed → docker-android.sh all)"
+
 log ""
-log "사용법 (adb shell에서):"
-log "  /data/local/tmp/docker-android.sh all     # 전체 스택 원커맨드"
+log "=== 설치 완료 ==="
+log "리부팅하면 자동 시작됩니다."
 log ""
-log "개별 명령:"
-log "  docker-android.sh start      # Docker Engine"
-log "  docker-android.sh load       # 이미지 로드"
-log "  docker-android.sh up         # 컨테이너 시작"
-log "  docker-android.sh go-start   # Go 서버"
-log "  docker-android.sh apk        # APK 시작"
-log "  docker-android.sh status     # 상태 확인"
+log "수동: adb shell /data/local/tmp/docker-android.sh all"

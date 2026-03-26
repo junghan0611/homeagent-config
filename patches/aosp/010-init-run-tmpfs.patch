@@ -1,0 +1,43 @@
+--- a/system/sepolicy/private/file_contexts
++++ b/system/sepolicy/private/file_contexts
+@@ -55,6 +55,7 @@
+ /apex               u:object_r:apex_mnt_dir:s0
+ /bootstrap-apex     u:object_r:apex_mnt_dir:s0
+ /tmp                u:object_r:shell_data_file:s0
++/run(/.*)?          u:object_r:shell_data_file:s0
+ 
+ # Postinstall directories
+ /postinstall         u:object_r:postinstall_mnt_dir:s0
+--- a/system/sepolicy/prebuilts/api/202404/private/file_contexts
++++ b/system/sepolicy/prebuilts/api/202404/private/file_contexts
+@@ -55,6 +55,7 @@
+ /apex               u:object_r:apex_mnt_dir:s0
+ /bootstrap-apex     u:object_r:apex_mnt_dir:s0
+ /tmp                u:object_r:shell_data_file:s0
++/run(/.*)?          u:object_r:shell_data_file:s0
+ 
+ # Postinstall directories
+ /postinstall         u:object_r:postinstall_mnt_dir:s0
+--- a/device/rockchip/rk3576/device.mk
++++ b/device/rockchip/rk3576/device.mk
+@@ -92,3 +92,6 @@
+                 ro.build.shutdown_timeout=6 \
+                 persist.enable_task_snapshots=false \
+                 ro.vendor.frameratelock=true
++
++# /run directory in root for Docker containerd (native, no chroot)
++PRODUCT_COPY_FILES += device/rockchip/rk3576/run_keepfile:$(TARGET_COPY_OUT_ROOT)/run/.keep
+--- a/system/core/rootdir/init.rc
++++ b/system/core/rootdir/init.rc
+@@ -98,6 +98,11 @@
+     chown shell shell /tmp
+     chmod 0771 /tmp
+ 
++    # /run tmpfs for Docker containerd (native, no chroot)
++    mount tmpfs tmpfs /run mode=0755
++    restorecon /run
++    chmod 0755 /run
++
+ on init
+     sysclktz 0
+ 

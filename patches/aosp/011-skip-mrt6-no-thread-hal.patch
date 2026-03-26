@@ -1,0 +1,29 @@
+--- a/packages/modules/Connectivity/service/src/com/android/server/ConnectivityService.java
++++ b/packages/modules/Connectivity/service/src/com/android/server/ConnectivityService.java
+@@ -1526,11 +1526,15 @@
+         }
+ 
+         public MulticastRoutingCoordinatorService makeMulticastRoutingCoordinatorService(
+-                    @NonNull Handler h) {
++                    @NonNull Handler h, @NonNull Context context) {
++            // Skip MRT6 socket if Thread HAL is not present (avoids conflict with native OTBR)
++            if (!context.getPackageManager().hasSystemFeature("android.hardware.thread_network")) {
++                Log.i(TAG, "Skipping MulticastRoutingCoordinatorService: no Thread HAL");
++                return null;
++            }
+             try {
+                 return new MulticastRoutingCoordinatorService(h);
+             } catch (UnsupportedOperationException e) {
+-                // Multicast routing is not supported by the kernel
+                 Log.i(TAG, "Skipping unsupported MulticastRoutingCoordinatorService");
+                 return null;
+             }
+@@ -2030,7 +2034,7 @@
+ 
+         mRoutingCoordinatorService = new RoutingCoordinatorService(netd);
+         mMulticastRoutingCoordinatorService =
+-                mDeps.makeMulticastRoutingCoordinatorService(mHandler);
++                mDeps.makeMulticastRoutingCoordinatorService(mHandler, mContext);
+ 
+         mDestroyFrozenSockets = mDeps.isAtLeastV() || (mDeps.isAtLeastU()
+                 && mDeps.isFeatureEnabled(context, KEY_DESTROY_FROZEN_SOCKETS_VERSION));

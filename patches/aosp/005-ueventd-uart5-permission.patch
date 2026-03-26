@@ -1,0 +1,12 @@
+# Thread HAL UART5 device permission
+# Apply to: device/rockchip/common/rootdir/ueventd.rockchip.rc
+
+--- a/device/rockchip/common/rootdir/ueventd.rockchip.rc	2026-01-03 12:07:47.580825273 +0900
++++ b/device/rockchip/common/rootdir/ueventd.rockchip.rc	2026-01-03 12:07:47.582825334 +0900
+@@ -218,3 +218,6 @@
+ /dev/block/mmcblk2boot0 0660 root root
+ # rkauth ufs
+ /dev/block/sda 0660 root root
++
++# Thread Network HAL (ESP32-H2 RCP via UART5)
++/dev/ttyS5                0660   system     system

@@ -1,0 +1,11 @@
+--- a/device/rockchip/rk3576/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
++++ b/device/rockchip/rk3576/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+@@ -17,7 +17,7 @@
+  */
+ -->
+ <resources>
+-    <integer name="def_screen_off_timeout">60000</integer>
++    <integer name="def_screen_off_timeout">2147483647</integer>
+    <!-- Initial value for the Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS setting,
+          which is a comma separated list of packages that no longer need confirmation
+          for immersive mode.

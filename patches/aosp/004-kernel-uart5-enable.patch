@@ -1,0 +1,18 @@
+# Kernel UART5 enable for ESP32-H2 RCP
+# Apply to: kernel-6.1/arch/arm64/boot/dts/rockchip/rk3576-evb.dtsi
+
+--- a/kernel-6.1/arch/arm64/boot/dts/rockchip/rk3576-evb.dtsi
++++ b/kernel-6.1/arch/arm64/boot/dts/rockchip/rk3576-evb.dtsi
+@@ -873,6 +873,12 @@
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&uart4m1_xfer &uart4m1_ctsn>;
+ };
++
++&uart5 {
++	status = "okay";
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart5m2_xfer>;
++};
+ 
+ &ufs {
+ 	reset-gpios = <&gpio4 RK_PD0 GPIO_ACTIVE_HIGH>;

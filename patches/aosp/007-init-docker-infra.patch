@@ -1,0 +1,18 @@
+--- a/device/rockchip/rk3576/init.rk3576.rc
++++ b/device/rockchip/rk3576/init.rk3576.rc
+@@ -65,6 +65,15 @@
+ on init
+     # Increased power consumption and CPU in exchange for memory
+     write /proc/sys/vm/swappiness 100
++
++    # Docker infrastructure
++    # /dev/run tmpfs for containerd/dockerd runtime
++    mkdir /dev/run 0755 root root
++    mount tmpfs tmpfs /dev/run mode=0755
++
++    # devices cgroup v1 (Android does not mount it, Docker requires it)
++    mkdir /dev/cg_devices 0755 root root
++    mount cgroup cgroup /dev/cg_devices devices
+     write /sys/block/zram0/comp_algorithm lz4
+ 
+     chown system system /sys/system_monitor/system_status

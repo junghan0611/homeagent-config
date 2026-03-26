@@ -19,6 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REMOTE="/data/local/tmp"
 
 log() { echo "[setup] $*"; }
@@ -35,11 +36,12 @@ for f in \
     "$SCRIPT_DIR/images/docker-29.3.0.tgz" \
     "$SCRIPT_DIR/images/docker-compose-linux-aarch64" \
     "$SCRIPT_DIR/images/matter-server-8.1.2-arm64.tar.gz" \
-    "$SCRIPT_DIR/images/otbr-0.3.0-arm64.tar.gz" \
     "$SCRIPT_DIR/docker-android.sh" \
     "$SCRIPT_DIR/docker-compose.yml"; do
     [ -f "$f" ] || err "파일 없음: $f"
 done
+# OTBR 바이너리 (네이티브 빌드) — 필수
+[ -f "$PROJECT_DIR/dist/otbr-arm64/otbr-agent" ] || err "OTBR 바이너리 없음. run.sh otbr-build 필요"
 log "필수 파일 확인 OK"
 
 # ─── 1. adb root ───
@@ -60,10 +62,9 @@ adb shell "chmod 755 $REMOTE/docker/docker-compose"
 log "Docker Compose OK"
 
 # ─── 4. Docker 이미지 push ───
-log "Docker 이미지 push (시간 소요)..."
+log "Docker 이미지 push (python-matter-server)..."
 adb push "$SCRIPT_DIR/images/matter-server-8.1.2-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
-adb push "$SCRIPT_DIR/images/otbr-0.3.0-arm64.tar.gz" "$REMOTE/" 2>&1 | tail -1
-log "Docker 이미지 OK"
+log "Docker 이미지 OK (OTBR은 네이티브 빌드 — Docker 이미지 불필요)"
 
 # ─── 5. 스크립트 + compose push ───
 log "스크립트 push..."
@@ -72,8 +73,19 @@ adb push "$SCRIPT_DIR/docker-compose.yml" "$REMOTE/" 2>&1 | tail -1
 adb shell "chmod 755 $REMOTE/docker-android.sh $REMOTE/docker/*"
 log "스크립트 OK"
 
-# ─── 6. Go 바이너리 + UI + aliases push ───
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# ─── 6. OTBR 네이티브 바이너리 push ───
+if [ -f "$PROJECT_DIR/dist/otbr-arm64/otbr-agent" ]; then
+    log "OTBR 바이너리 push..."
+    adb shell "mkdir -p $REMOTE/otbr $REMOTE/otbr-data"
+    adb push "$PROJECT_DIR/dist/otbr-arm64/otbr-agent" "$REMOTE/otbr/" 2>&1 | tail -1
+    adb push "$PROJECT_DIR/dist/otbr-arm64/ot-ctl" "$REMOTE/otbr/" 2>&1 | tail -1
+    adb shell "chmod 755 $REMOTE/otbr/otbr-agent $REMOTE/otbr/ot-ctl"
+    log "OTBR 바이너리 OK"
+else
+    log "WARNING: OTBR 바이너리 없음 ($PROJECT_DIR/dist/otbr-arm64/). run.sh otbr-build 필요"
+fi
+
+# ─── 7. Go 바이너리 + UI + aliases push ───
 if [ -f "$PROJECT_DIR/dist/homeagent-android-arm64" ]; then
     log "Go 바이너리 push..."
     adb push "$PROJECT_DIR/dist/homeagent-android-arm64" "$REMOTE/homeagent" 2>&1 | tail -1

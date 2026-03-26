@@ -139,6 +139,13 @@ cmd_status() {
     $DOCKER_BIN/docker ps -a --format "  {{.Names}}: {{.Status}}" 2>/dev/null \
         || echo "  (docker 실행 불가)"
     echo ""
+    echo "=== OTBR (native) ==="
+    pgrep -f otbr-agent > /dev/null 2>&1 \
+        && echo "  otbr-agent: running (PID $(pgrep -f otbr-agent | head -1))" \
+        || echo "  otbr-agent: not running"
+    local _state=$($D/otbr/ot-ctl state 2>/dev/null | head -1)
+    [ -n "$_state" ] && echo "  thread:     $_state" || echo "  thread:     (unknown)"
+    echo ""
     echo "=== Images ==="
     $DOCKER_BIN/docker images --format "  {{.Repository}}:{{.Tag}} ({{.Size}})" 2>/dev/null \
         || echo "  (docker 실행 불가)"
@@ -179,50 +186,143 @@ cmd_down() {
     $DOCKER_BIN/docker-compose -f $D/docker-compose.yml down
 }
 
-# ─── Thread 네트워크 초기화 ───
-cmd_thread_init() {
-    log "Thread 네트워크 초기화..."
+# ─── 네이티브 OTBR 시작 ───
+cmd_otbr_start() {
+    local RCP_DEVICE="${RCP_DEVICE:-/dev/ttyS5}"
+    local RCP_BAUDRATE="${RCP_BAUDRATE:-460800}"
+    local WPAN_IF="wpan0"
+    local OTBR_DIR="$D/otbr"
+    local OTBR_DATA="$D/otbr-data"
 
-    # OTBR REST 대기 (최대 30초)
-    local state=""
-    for i in $(seq 1 30); do
-        state=$($D/curl -s http://localhost:8081/node/state 2>/dev/null | tr -d '"')
-        [ -n "$state" ] && break
+    log "=== 네이티브 OTBR 시작 ==="
+
+    # Android Thread HAL 제거 (UART 경합 방지)
+    stop vendor.threadnetwork_hal 2>/dev/null || true
+    stop ot-daemon 2>/dev/null || true
+    for i in $(seq 1 5); do
+        pkill -9 -f "threadnetwork\|ot-daemon" 2>/dev/null || true
         sleep 1
     done
 
-    if [ -z "$state" ]; then
-        log "WARNING: OTBR REST 응답 없음 — Thread 초기화 건너뜀"
-        return 0
+    # SELinux + 디바이스 권한
+    setenforce 0 2>/dev/null || true
+    chmod 666 $RCP_DEVICE 2>/dev/null || true
+    mkdir -p $OTBR_DATA
+
+    # IPv6 forwarding
+    ip tuntap del dev $WPAN_IF mode tun 2>/dev/null || true
+    echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+
+    # 기존 otbr-agent 정리
+    pkill -f otbr-agent 2>/dev/null || true
+    sleep 1
+
+    # otbr-agent 시작 (최대 3회 재시도)
+    local OTBR_STARTED=false
+    for _try in $(seq 1 3); do
+        # UART 초기화
+        stty -F $RCP_DEVICE $RCP_BAUDRATE raw -echo -echoe -echok -echoctl 2>/dev/null || true
+        printf '\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e\x7e' > $RCP_DEVICE 2>/dev/null || true
+        sleep 1
+
+        setsid $OTBR_DIR/otbr-agent \
+            -I $WPAN_IF -d7 -v \
+            --vendor-name HomeAgent --model-name OTBR \
+            --data-path $OTBR_DATA \
+            --rest-listen-address 127.0.0.1 --rest-listen-port 8081 \
+            "spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$RCP_BAUDRATE" \
+            > /run/otbr-agent.log 2>&1 &
+        sleep 5
+
+        if pgrep -f otbr-agent > /dev/null; then
+            OTBR_STARTED=true
+            break
+        fi
+        log "otbr-agent 시작 실패 (시도 $_try/3) — 재시도..."
+        pkill -f otbr-agent 2>/dev/null || true
+        sleep 3
+    done
+
+    if [ "$OTBR_STARTED" != "true" ]; then
+        log "ERROR: otbr-agent 3회 시도 모두 실패"
+        tail -20 /run/otbr-agent.log 2>/dev/null
+        return 1
     fi
+    log "otbr-agent OK (시도 $_try/3)"
 
-    log "Thread state: $state"
+    # Thread dataset — 영속성 보장
+    log "Thread dataset 로드 대기..."
+    local EXISTING=""
+    for _try in $(seq 1 5); do
+        EXISTING=$($OTBR_DIR/ot-ctl dataset active -x 2>/dev/null | head -1)
+        case "$EXISTING" in
+            *Error*|*NotFound*|Done|"") sleep 2 ;;
+            *) break ;;
+        esac
+    done
 
-    if [ "$state" != "disabled" ]; then
-        log "Thread 이미 활성: $state"
-        return 0
-    fi
-
-    # 기존 dataset 확인 (Docker volume에 남아있을 수 있음)
-    local dataset=$($DOCKER_BIN/docker exec otbr ot-ctl dataset active 2>/dev/null)
-    if echo "$dataset" | grep -q "Network Key"; then
-        log "기존 dataset 발견 — 복원"
+    if [ -n "$EXISTING" ] && [ "$EXISTING" != "Done" ]; then
+        log "기존 dataset 사용 (otbr-data에서 복원)"
+    elif [ -f "$OTBR_DATA/dataset-backup.hex" ]; then
+        local BACKUP_HEX=$(cat $OTBR_DATA/dataset-backup.hex)
+        if [ ${#BACKUP_HEX} -gt 20 ]; then
+            log "백업에서 dataset 복원..."
+            $OTBR_DIR/ot-ctl dataset set active "$BACKUP_HEX"
+            $OTBR_DIR/ot-ctl dataset commit active
+        else
+            log "새 Thread 네트워크 생성 (백업 손상)..."
+            $OTBR_DIR/ot-ctl dataset init new
+            $OTBR_DIR/ot-ctl dataset networkname HomeAgent
+            $OTBR_DIR/ot-ctl dataset commit active
+        fi
     else
-        log "새 dataset 생성..."
-        $DOCKER_BIN/docker exec otbr ot-ctl dataset init new
-        $DOCKER_BIN/docker exec otbr ot-ctl dataset networkname HomeAgent
-        $DOCKER_BIN/docker exec otbr ot-ctl dataset commit active
+        log "새 Thread 네트워크 생성..."
+        $OTBR_DIR/ot-ctl dataset init new
+        $OTBR_DIR/ot-ctl dataset networkname HomeAgent
+        $OTBR_DIR/ot-ctl dataset commit active
+        # 새 dataset 백업
+        sleep 1
+        $OTBR_DIR/ot-ctl dataset active -x 2>/dev/null | head -1 > $OTBR_DATA/dataset-backup.hex
     fi
 
-    $DOCKER_BIN/docker exec otbr ot-ctl ifconfig up
-    $DOCKER_BIN/docker exec otbr ot-ctl thread start
-    sleep 3
+    $OTBR_DIR/ot-ctl ifconfig up
+    $OTBR_DIR/ot-ctl thread start
 
-    state=$($D/curl -s http://localhost:8081/node/state 2>/dev/null | tr -d '"')
-    log "Thread state: $state"
+    # leader 대기 (최대 30초)
+    log "Thread leader 대기..."
+    for i in $(seq 1 10); do
+        sleep 3
+        local STATE=$($OTBR_DIR/ot-ctl state 2>/dev/null | head -1)
+        case "$STATE" in
+            leader|router)
+                log "Thread state: $STATE (${i}x3초)"
+                break ;;
+        esac
+        [ $i -eq 10 ] && log "WARNING: Thread state: $STATE (타임아웃 30초)"
+    done
+
+    $OTBR_DIR/ot-ctl srp server enable 2>/dev/null || true
+
+    # IPv6 라우트 (mesh-local prefix → wpan0)
+    local MESH_PREFIX=$($OTBR_DIR/ot-ctl dataset active 2>/dev/null | grep "Mesh Local Prefix" | awk '{print $NF}')
+    if [ -n "$MESH_PREFIX" ]; then
+        ip -6 route replace ${MESH_PREFIX} dev $WPAN_IF 2>/dev/null || true
+        log "라우트: ${MESH_PREFIX} → $WPAN_IF"
+    fi
 
     # dataset 출력
-    $DOCKER_BIN/docker exec otbr ot-ctl dataset active 2>/dev/null | grep -E "Network|Channel|Pan" || true
+    $OTBR_DIR/ot-ctl dataset active 2>/dev/null | grep -E "Network|Channel|Pan" || true
+    log "=== OTBR 시작 완료 ==="
+}
+
+# ─── 네이티브 OTBR 종료 ───
+cmd_otbr_stop() {
+    local OTBR_DIR="$D/otbr"
+    $OTBR_DIR/ot-ctl thread stop 2>/dev/null || true
+    $OTBR_DIR/ot-ctl ifconfig down 2>/dev/null || true
+    pkill -f otbr-agent 2>/dev/null || true
+    ip tuntap del dev wpan0 mode tun 2>/dev/null || true
+    log "OTBR 종료"
 }
 
 # ─── Go homeagent + APK 시작 ───
@@ -259,9 +359,9 @@ cmd_go_stop() {
 cmd_all() {
     cmd_start       # Docker Engine
     cmd_load        # 이미지 로드
-    cmd_up          # 컨테이너 시작
-    sleep 5         # OTBR + matter-server 초기화 대기
-    cmd_thread_init # Thread 네트워크
+    cmd_up          # matter-server 시작
+    cmd_otbr_start  # 네이티브 OTBR + Thread
+    sleep 5         # matter-server 초기화 대기
     cmd_go_start    # Go + APK
     log "=== 전체 스택 기동 완료 ==="
     cmd_status
@@ -275,28 +375,31 @@ cmd_exec() {
 # ─── Main ───
 case "${1:-help}" in
     start)    cmd_start ;;
-    stop)     cmd_stop; cmd_go_stop ;;
+    stop)     cmd_stop; cmd_otbr_stop; cmd_go_stop ;;
     status)   cmd_status ;;
     load)     cmd_load ;;
     up)       cmd_up ;;
     down)     cmd_down ;;
-    thread-init) cmd_thread_init ;;
-    go-start) cmd_go_start ;;
-    go-stop)  cmd_go_stop ;;
-    all)      cmd_all ;;
+    otbr-start)  cmd_otbr_start ;;
+    otbr-stop)   cmd_otbr_stop ;;
+    go-start)    cmd_go_start ;;
+    go-stop)     cmd_go_stop ;;
+    all)         cmd_all ;;
     exec)     shift; cmd_exec "$@" ;;
     *)
-        echo "Usage: $0 {all|start|stop|status|load|up|down|go-start|go-stop|exec}"
+        echo "Usage: $0 {all|start|stop|status|load|up|down|otbr-start|otbr-stop|go-start|go-stop|exec}"
         echo ""
-        echo "  all        전체 스택 원커맨드 (Docker + 이미지 + 컨테이너 + Go + APK)"
-        echo "  start      Docker Engine 시작"
-        echo "  stop       전체 종료 (Docker + Go)"
-        echo "  status     상태 확인"
-        echo "  load       이미지 로드"
-        echo "  up         docker-compose up -d"
-        echo "  down       docker-compose down"
-        echo "  go-start   Go + APK 시작"
-        echo "  go-stop    Go 종료"
-        echo "  exec       docker CLI"
+        echo "  all         전체 스택 원커맨드 (Docker + 이미지 + matter-server + OTBR + Go + APK)"
+        echo "  start       Docker Engine 시작"
+        echo "  stop        전체 종료 (Docker + OTBR + Go)"
+        echo "  status      상태 확인"
+        echo "  load        이미지 로드"
+        echo "  up          docker-compose up -d (matter-server)"
+        echo "  down        docker-compose down"
+        echo "  otbr-start  네이티브 OTBR 시작 + Thread 네트워크"
+        echo "  otbr-stop   OTBR 종료"
+        echo "  go-start    Go + APK 시작"
+        echo "  go-stop     Go 종료"
+        echo "  exec        docker CLI"
         ;;
 esac

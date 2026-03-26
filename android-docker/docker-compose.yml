@@ -1,39 +1,22 @@
-# Android RK3576 Docker Compose — 네이티브 (chroot 없음)
+# Android RK3576 Docker Compose — python-matter-server only
+# OTBR은 네이티브 빌드 (docker-android.sh에서 관리)
+#
 # DOCKER_HOST=unix:///run/docker.sock docker-compose -f /data/local/tmp/docker-compose.yml up -d
 #
 # 이미지 버전 (오프라인 tar.gz로 로드, 인터넷 pull 안 함):
 #   python-matter-server: 8.1.2 (ghcr.io/matter-js/python-matter-server:stable)
-#   otbr: 0.3.0-987e44c (openthread/otbr:latest)
 #   Docker Engine: 29.3.0, Docker Compose: v5.1.1
+#
+# OTBR은 네이티브 바이너리로 실행 (OTBR_BACKBONE_ROUTER=OFF):
+#   Android system_server가 MRT6 소켓 선점 → Docker OTBR 이미지 사용 불가
+#   네이티브 빌드는 build-otbr.sh (scripts/)로 생성, matterjs 버전과 동일
 
 services:
-  otbr:
-    image: openthread/otbr:latest
-    container_name: otbr
-    network_mode: host
-    privileged: true
-    devices:
-      - ${RCP_DEVICE:-/dev/ttyS5}:${RCP_DEVICE:-/dev/ttyS5}
-      - /dev/tun:/dev/net/tun
-    volumes:
-      - otbr-data:/var/lib/thread
-    environment:
-      - INFRA_IF_NAME=${BACKBONE_IF:-wlan0}
-      - FIREWALL=0
-      - NAT64=0
-      - DNS64=0
-    # NOTE: -B 제거 — Android 커널에 CONFIG_IPV6_MROUTE 없어서 BBR multicast crash
-    # 커널 패치 후 -B wlan0 복원할 것
-    entrypoint: ["/bin/sh", "-c", "/app/etc/docker/test/docker_entrypoint.sh --radio-url \"spinel+hdlc+uart://${RCP_DEVICE:-/dev/ttyS5}?uart-baudrate=${RCP_BAUDRATE:-460800}\" & sleep 5 && sed -i 's/ -B [^ ]*//' /etc/default/otbr-agent && service otbr-agent restart && wait"]
-    restart: unless-stopped
-
   matter-server:
     image: ghcr.io/matter-js/python-matter-server:stable
     container_name: matter-server
     network_mode: host
     privileged: true
-    depends_on:
-      - otbr
     volumes:
       - matter-data:/data
     command:
@@ -44,5 +27,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  otbr-data:
   matter-data:

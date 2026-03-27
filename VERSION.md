@@ -409,9 +409,45 @@ Yocto Branch: kirkstone (4.0)
 Kernel: 6.1 | Machine: raspberrypi5
 ```
 
-**선택 기준:**
-- Vision AI만 필요 → **Option A** (LTS, 안정적)
-- GenAI (LLM/VLM/Voice) 필요 → **Option B** (Hailo-10H 필수)
+**Current: Option A** (Hailo-8, scarthgap). Verified 2026-03-27.
+
+**Selection criteria:**
+- Vision AI only → **Option A** (LTS, stable, **verified**)
+- GenAI (LLM/VLM/Voice) needed → **Option B** (Hailo-10H required)
+- Wait for meta-hailo scarthgap support for 10H before switching to kirkstone
+
+### Hailo-8 vs Hailo-10H — What changes at SW level
+
+| Area | Hailo-8 (now) | Hailo-10H (future) | SW change needed |
+|------|--------------|-------------------|-----------------|
+| Vision AI pipeline | ✅ 398 FPS (YOLOv8s) | Faster | None (swap HEF only) |
+| GStreamer elements | ✅ hailonet + hailotools | Same | None |
+| Go ↔ HailoRT integration | ✅ Build now | Same API | None |
+| presence → Matter | ✅ Build now | Same | None |
+| Multi-model scheduler | ✅ hailonet scheduling | Same | None |
+| sLLM on CPU | ✅ 5.2s (Qwen3-0.6B f16) | Same | None |
+| sLLM on NPU | ❌ On-chip memory limit | ✅ 8GB LPDDR4 | HEF conversion only |
+| GenAI apps (LLM/VLM/Voice) | ❌ | ✅ | New app layer |
+| Yocto branch | scarthgap (5.0) | kirkstone (4.0) ⚠️ | **Build fork** |
+| HailoRT version | 4.23.0 | 5.2.0+ | **Minor API migration** |
+
+**Strategy: Do everything on Hailo-8 first.** All Go integration, GStreamer pipelines,
+Matter occupancy, sLLM fallback chain — identical code carries over to 10H.
+Only HEF model files need recompilation for 10H architecture.
+
+### Benchmark (RPi5 + Hailo-8, 2026-03-27)
+
+| Model | Task | HEF | FPS (HW) | Latency | Context |
+|-------|------|-----|----------|---------|---------|
+| YOLOv8n | Detection (nano) | 4.9M | 420 | 3.5ms | Single |
+| YOLOv8s | Detection (small) | 10M | 398 | 6.7ms | Single |
+| YOLOv8m | Detection (medium) | 29M | 29 | 28ms | Multi(3) |
+| YOLOv8l | Detection (large) | 37M | 19 | 45ms | Multi(4) |
+| YOLOv8s Pose | Pose estimation | 9.8M | 326 | 7.5ms | Single |
+| SCRFD 2.5G | Face detection | 3.0M | 575 | 2.8ms | Single |
+| FastDepth | Depth estimation | 2.8M | 770 | 2.8ms | Single |
+
+Note: Requires 5V/5A+ power adapter. Underpowered PSU causes shutdown under full NPU load.
 
 ---
 

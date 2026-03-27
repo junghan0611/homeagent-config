@@ -27,4 +27,8 @@ BBLAYERS ?= " \
   \
   ${SOURCES}/meta-clang \
   ${SOURCES}/meta-flutter \
+  \
+  ${SOURCES}/meta-hailo/meta-hailo-accelerator \
+  ${SOURCES}/meta-hailo/meta-hailo-libhailort \
+  ${SOURCES}/meta-hailo/meta-hailo-tappas \
   "

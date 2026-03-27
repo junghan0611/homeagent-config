@@ -92,6 +92,18 @@ IMAGE_INSTALL:append = " \
     liberation-fonts \
     "
 
+# Hailo-8 NPU (AI 추론 가속)
+# PCIe 드라이버 + 펌웨어 + HailoRT + GStreamer + TAPPAS
+# meta-hailo (hailo8-scarthgap): HailoRT 4.23.0, TAPPAS 5.1.0
+IMAGE_INSTALL:append = " \
+    hailo-firmware \
+    hailo-pci \
+    libhailort \
+    hailortcli \
+    libgsthailo \
+    packagegroup-hailo-tappas \
+    "
+
 # USB 입력장치 (마우스/키보드)
 IMAGE_INSTALL:append = " \
     libinput \

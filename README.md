@@ -8,22 +8,35 @@ RPi5 · RK3576 · Yocto · Android · Go · Matter · LLM Agent · Flutter · Th
 
 ---
 
-## Vision
+## Vision — 힣봇미니: Physical AI Agent
 
-**"Data Privacy + On-device AI + Matter Hub"**
+**"Data Privacy + On-device AI + Matter Hub + Agent Collaboration"**
 
-HomeAgent is a **self-hosted smart home hub** — no cloud required. It combines Matter device control, real-time event streaming, and an LLM-powered agent, all in a single Go binary. Runs on RPi5 (Yocto Linux) and RK3576 (Android), same codebase.
+HomeAgent is a **self-hosted smart home hub** — no cloud required. It combines Matter device control, Hailo-8 NPU vision, on-device sLLM, and an A2A-protocol agent, all on a single RPi5 board.
 
-This is not just a smart home controller. It's a **physical anchor for offline agent collaboration** — where an edge AI guards your space, cooperates with cloud agents when needed, and always keeps your data local.
+This is not just a smart home controller. It's **힣봇미니 (GLGbot Mini)** — a Physical AI agent that gives cloud-bound agents eyes, hands, and a local brain:
+
+- **Eyes**: USB camera + Hailo-8 NPU (YOLOv8s, ~21 FPS real-time detection)
+- **Hands**: Matter protocol for lights, plugs, sensors, locks
+- **Brain**: On-device sLLM (Qwen2.5-0.5B Q4_K_M, offline-capable)
+- **Voice**: A2A protocol — cloud agents can query, subscribe to events, and even repair 힣봇미니's config remotely
+
+> *네트워크 없이도 나를 보좌하는 안전한 분신.*
+> *클라우드 분신들에게 물리세계를 열어주는 현장 친구.*
 
 ```
 Flutter App (ivi-homescreen / Android APK)
   └── WebView ──▶ Go HomeAgent v0.8 (:8080)
-                   ├── REST API (12 endpoints + SSE)
-                   ├── LLM Agent (DeepSeek / on-device sLLM)
+                   ├── REST API (18 endpoints + SSE)
+                   ├── A2A Protocol (JSON-RPC, 7 skills)
+                   ├── LLM Agent (cloud fallback ↔ on-device sLLM)
+                   ├── Event Subscribe (webhook outbound push)
+                   ├── Config API (remote repair interface)
+                   ├── Space Summary (interpreted state, not raw)
                    ├── A2UI (server-driven UI, time-based theme)
                    ├── TUI (bubbletea terminal dashboard)
                    ├── Matter WS Client (single ReadLoop)
+                   ├── Hailo-8 NPU (YOLOv8s object detection)
                    └── Matter Backend (:5580)
                         ├── python-matter-server (Docker) ← current
                         ├── matterjs-server (legacy/open-source)
@@ -132,8 +145,10 @@ Verified: physical power cycle → Thread leader + 3 devices reconnected in ~80 
 ## Key Features
 
 - 🔌 **Matter Hub** — Commission and control Thread + WiFi devices via BLE
-- 📡 **Real-time Events** — SSE streaming for instant state updates
-- 🤖 **LLM Agent** — Natural language → device control (DeepSeek / on-device sLLM)
+- 👁️ **Vision AI** — Hailo-8 NPU + USB camera, YOLOv8s ~21 FPS real-time detection
+- 🧠 **On-device sLLM** — Qwen2.5-0.5B Q4_K_M, offline natural language processing
+- 🔗 **A2A Protocol** — 7 skills, webhook subscriptions, remote config repair
+- 📡 **Real-time Events** — SSE streaming + outbound webhook push
 - 🧵 **Thread Border Router** — OTBR on both Yocto and Android (NDK cross-build)
 - 🏗️ **Reproducible Build** — Yocto image (RPi5) or NDK bundle (RK3576)
 - 🔒 **Privacy First** — No cloud dependency, all processing on-device
@@ -424,6 +439,12 @@ cd android-docker && bash setup-docker.sh
 | `/api/system` | GET | System info (versions, uptime, Thread) |
 | `/api/wifi-credentials` | POST | WiFi credential injection |
 | `/api/wifi-info` | GET | Current WiFi info |
+| `/api/subscribe` | POST | Event webhook subscription |
+| `/api/subscriptions` | GET | List active subscriptions |
+| `/api/subscribe/{id}` | DELETE | Unsubscribe |
+| `/api/config` | GET | Runtime config query |
+| `/api/config` | PATCH | **Repair** — update sLLM prompt, model, context |
+| `/api/space/summary` | GET | Space status summary (interpreted) |
 | `/healthz` | GET | Health check |
 | `/docs` | GET | Swagger UI |
 
@@ -535,10 +556,25 @@ homeagent-config/
 | RPi5 | Raspberry Pi 5 (8GB) | ZBDongle-E (USB) | Hailo-8 M.2 (준비 중) |
 | RK3576 | RK3576-EVB | ESP32-H2 (UART) | — |
 
-### Hailo-8 NPU (RPi5)
+### Hailo-8 NPU (RPi5) ✅ Verified
 
-Hailo-8 M.2 AI 가속기를 RPi5에 장착하여 on-device object detection, presence sensing 등 EdgeAI 추론에 활용 예정.
-Hailo-8을 선택한 이유: Yocto meta-hailo 레이어가 활발히 유지보수되고 있고, RPi5 M.2 HAT+에 바로 장착 가능.
+Hailo-8 M.2 AI 가속기를 RPi5에 장착. Object detection, presence sensing 동작 확인 완료.
+
+| Item | Status |
+|------|--------|
+| PCIe detection | ✅ `0000:01:00.0 Hailo-8` |
+| Firmware | ✅ 4.23.0 |
+| GStreamer hailonet | ✅ v4l2src → hailonet → YOLOv8s |
+| USB Webcam | ✅ ABKO APC930 QHD (UVC) |
+| Real-time inference | ✅ ~21 FPS (camera input) |
+| Benchmark (synthetic) | ✅ 398 FPS (YOLOv8s, no camera overhead) |
+
+**RPi5 `/opt/models/`:**
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| `yolov8s.hef` | 10 MB | Object detection (Hailo-8 NPU) |
+| `qwen2.5-0.5b-instruct-q4_k_m.gguf` | 469 MB | sLLM on-device inference |
 
 관련 3rd-party 리포 (`~/repos/3rd/homeagent-config/`):
 

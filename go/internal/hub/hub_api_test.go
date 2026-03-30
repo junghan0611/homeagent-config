@@ -23,11 +23,12 @@ import (
 func testHub(t *testing.T) *Hub {
 	t.Helper()
 	h := &Hub{
-		cfg:        &config.Config{},
-		devices:    make(map[int]*DeviceState),
-		eventCh:    make(chan Event, 100),
-		sseClients: make(map[chan Event]struct{}),
-		aliases:    make(map[int]DeviceAlias),
+		cfg:           &config.Config{},
+		devices:       make(map[int]*DeviceState),
+		eventCh:       make(chan Event, 100),
+		sseClients:    make(map[chan Event]struct{}),
+		aliases:       make(map[int]DeviceAlias),
+		subscriptions: newSubscriptionManager(),
 	}
 	// Populate mock devices
 	h.devices[1] = &DeviceState{
@@ -93,12 +94,13 @@ func testHubWithMatter(t *testing.T, handler func(conn *websocket.Conn, msg map[
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
 
 	h := &Hub{
-		cfg:        &config.Config{MatterWSURL: wsURL},
-		matter:     matter.NewClient(wsURL),
-		devices:    make(map[int]*DeviceState),
-		eventCh:    make(chan Event, 100),
-		sseClients: make(map[chan Event]struct{}),
-		aliases:    make(map[int]DeviceAlias),
+		cfg:           &config.Config{MatterWSURL: wsURL},
+		matter:        matter.NewClient(wsURL),
+		devices:       make(map[int]*DeviceState),
+		eventCh:       make(chan Event, 100),
+		sseClients:    make(map[chan Event]struct{}),
+		aliases:       make(map[int]DeviceAlias),
+		subscriptions: newSubscriptionManager(),
 	}
 
 	// Populate a test device

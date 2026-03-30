@@ -145,6 +145,13 @@ type Hub struct {
 	// Device aliases
 	aliases   map[int]DeviceAlias
 	startTime time.Time
+
+	// Webhook subscriptions
+	subscriptions *subscriptionManager
+
+	// Runtime config
+	runtimeCfg   RuntimeConfig
+	runtimeCfgMu sync.RWMutex
 }
 
 // Event is a hub-level event (abstracted from Matter/MQTT)
@@ -172,15 +179,16 @@ func New(cfg *config.Config) *Hub {
 	}
 
 	return &Hub{
-		cfg:        cfg,
-		matter:     matter.NewClient(cfg.MatterWSURL),
-		otbr:       otbr.NewClient(cfg.OtbrRESTURL),
-		devices:    make(map[int]*DeviceState),
-		eventCh:    make(chan Event, 100),
-		sseClients: make(map[chan Event]struct{}),
-		agent:      ag,
-		aliases:    loadAliases(cfg.AliasesFile),
-		startTime:  time.Now(),
+		cfg:           cfg,
+		matter:        matter.NewClient(cfg.MatterWSURL),
+		otbr:          otbr.NewClient(cfg.OtbrRESTURL),
+		devices:       make(map[int]*DeviceState),
+		eventCh:       make(chan Event, 100),
+		sseClients:    make(map[chan Event]struct{}),
+		agent:         ag,
+		aliases:       loadAliases(cfg.AliasesFile),
+		startTime:     time.Now(),
+		subscriptions: newSubscriptionManager(),
 	}
 }
 
@@ -698,6 +706,9 @@ func (h *Hub) eventBroadcaster(ctx context.Context) {
 				}
 			}
 			h.sseMu.Unlock()
+
+			// Dispatch to webhook subscribers
+			h.subscriptions.matchAndDispatch(evt)
 		}
 	}
 }
@@ -718,6 +729,17 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("/api/thread/status", h.handleThreadStatus)
 	mux.HandleFunc("/api/thread/dataset", h.handleThreadDataset)
 	mux.HandleFunc("/api/system", h.handleSystem)
+
+	// Webhook subscriptions
+	mux.HandleFunc("/api/subscribe", h.handleSubscribe)        // POST: 등록
+	mux.HandleFunc("/api/subscribe/", h.handleUnsubscribe)     // DELETE: 해제
+	mux.HandleFunc("/api/subscriptions", h.handleSubscriptions) // GET: 목록
+
+	// Runtime config
+	mux.HandleFunc("/api/config", h.handleConfig) // GET: 조회, PATCH: 변경
+
+	// Space summary
+	mux.HandleFunc("/api/space/summary", h.handleSpaceSummary) // GET: 공간 요약
 
 	// matterjs-server 대시보드 리다이렉트 — ws://host:5580 → http://host:5580
 	mux.HandleFunc("/dashboard", h.handleDashboardRedirect)

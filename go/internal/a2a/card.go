@@ -42,9 +42,23 @@ func NewAgentCard(baseURL string) *a2a.AgentCard {
 			{
 				ID:          "space_summary",
 				Name:        "Space Summary",
-				Description: "Summarize recent activity — sensor events, device changes, occupancy patterns",
+				Description: "Current space status summary — all device states, room grouping, text summary",
 				Tags:        []string{"summary", "context", "distillation"},
-				Examples:    []string{"오늘 집 상태 요약", "what happened today?"},
+				Examples:    []string{"오늘 집 상태 요약", "what happened today?", "공간 상태"},
+			},
+			{
+				ID:          "event_subscribe",
+				Name:        "Event Subscribe",
+				Description: "Subscribe to device/sensor events with webhook callback",
+				Tags:        []string{"webhook", "event", "subscribe"},
+				Examples:    []string{"이벤트 구독", "subscribe to device changes"},
+			},
+			{
+				ID:          "config_update",
+				Name:        "Config Update",
+				Description: "Update runtime config — sLLM prompt, model, context",
+				Tags:        []string{"config", "repair", "context-sync"},
+				Examples:    []string{"프롬프트 교체", "update sLLM model", "맥락 주입"},
 			},
 		},
 	}

@@ -237,8 +237,8 @@ func TestNewAgentCard(t *testing.T) {
 	if !card.Capabilities.Streaming {
 		t.Error("expected streaming to be enabled (Phase 1)")
 	}
-	if len(card.Skills) != 4 {
-		t.Errorf("expected 4 skills, got %d", len(card.Skills))
+	if len(card.Skills) != 6 {
+		t.Errorf("expected 6 skills, got %d", len(card.Skills))
 	}
 	if len(card.SupportedInterfaces) != 1 {
 		t.Errorf("expected 1 interface, got %d", len(card.SupportedInterfaces))

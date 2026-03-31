@@ -5,11 +5,11 @@
 
 ---
 
-## Android python-matter-server 이용 시
-android-docker/README.md 참조. Docker(python-matter-server) + Native(OTBR BBR=ON) 하이브리드.
-CHIP SDK AAR로 BLE 커미셔닝 후 python-matter-server에 multi-admin handoff.
+## Android python-matter-server (deprecated)
 
-matterjs-server와 python-matter-server는 별개. 섞지 마라.
+`deprecated/android-docker/` 이동됨. 경동 프로젝트 요청으로 임시 Docker 포장했던 것.
+Android 지원은 Flutter APK로 충분. python-matter-server Docker는 핵심 가치 아님.
+
 scripts/ 폴더는 matterjs-server(오픈소스) 전용.
 
 ## Phase 로드맵 (흔들리지 않는 방향)
@@ -62,11 +62,38 @@ APP → Go Server (:8080) → python-matter-server (:5580) → OTBR → Matter �
 
 ---
 
-# 현재 디바이스 확인
+# 디바이스 접속
 
-``` bash
-cat .current-device-ip
+## IP 확인
+
+```bash
+cat .current-device-ip        # RPi5 (기본)
+cat .current-device-ip.opi5   # OPi5
 ```
+
+## SSH 접속
+
+```bash
+./run.sh ssh              # RPi5 (기본, .current-device-ip 사용)
+./run.sh ssh opi5         # OPi5 (192.168.0.177)
+./run.sh ssh opi5 "uname -a"  # OPi5에서 원격 명령 실행
+```
+
+- SSH 키: `.sshkey/id_ed25519` (양쪽 공유)
+- 패스워드: `homeagent` (키 미등록 시)
+- 키 등록: `./run.sh setup-key opi5`
+
+## 디바이스 현황
+
+| | RPi5 | OPi5 |
+|---|---|---|
+| **SoC** | BCM2712 (4×A76) | RK3588S (4×A76 + 4×A55) |
+| **RAM** | 8GB | 4GB |
+| **NPU** | Hailo-8 (26 TOPS, 외장) | RKNN (6 TOPS, 내장) |
+| **Kernel** | 6.6 LTS | 6.9-yoctodev |
+| **이미지** | 풀 스택 (Docker+Go+matterjs+OTBR) | core-image-minimal |
+| **IP** | `.current-device-ip` | 192.168.0.177 |
+| **NIC** | eth0 | end0 |
 
 ## 프로젝트 관리
 

@@ -2,6 +2,12 @@
 # HomeAgent Flutter App — systemd autostart service
 #
 
+# meta-flutter 레이어 필수 — 없으면 건너뛴
+python () {
+    if 'meta-flutter' not in (d.getVar('BBFILE_COLLECTIONS') or '').split():
+        raise bb.parse.SkipRecipe('meta-flutter layer not available')
+}
+
 SUMMARY = "HomeAgent Flutter App autostart"
 DESCRIPTION = "Systemd service to launch homeagent Flutter app via flutter-pi on boot"
 LICENSE = "MIT"

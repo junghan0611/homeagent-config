@@ -1,4 +1,4 @@
-# RPi5 하드웨어 정보
+# 하드웨어 정보
 
 재현(reflash) 시 참고용. 네트워크/USB 구성 변경 시 이 문서도 업데이트할 것.
 
@@ -72,3 +72,41 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 ## 온도
 
 - 현재: 55.1°C (`/sys/class/thermal/thermal_zone0/temp`)
+
+---
+
+# Orange Pi 5 (RK3588S) 하드웨어 정보
+
+2026-03-31 추가. 시리얼 없이 SD카드 원샷 부팅 성공.
+
+## 보드
+
+| 항목 | 값 |
+|------|-----|
+| Model | Orange Pi 5 v1.3.2 |
+| SoC | Rockchip RK3588S (4×A76 2.4GHz + 4×A55) |
+| GPU | ARM Mali-G610 MP4 (Valhall) |
+| NPU | 6 TOPS (RKNN) |
+| RAM | 4GB LPDDR4X |
+| Kernel | 6.9.0-yoctodev-standard aarch64 (PREEMPT) |
+| OS | Yocto scarthgap 5.0 LTS (OpenEmbedded) |
+| SD Card | 128GB |
+| 패키지 수 | 최소 (core-image-minimal) |
+
+## 네트워크 인터페이스
+
+| 인터페이스 | MAC | 용도 | 비고 |
+|-----------|-----|------|------|
+| end0 | 5E:2A:56:85:D2:7D | 내장 Gigabit Ethernet | 기본 네트워크 |
+
+### 네트워크 접속
+
+- IP: 192.168.0.177 (DHCP)
+- SSH: `./run.sh ssh opi5`
+- IP 파일: `.current-device-ip.opi5`
+
+## 추가 보드 (미활성)
+
+| 보드 | SoC | 상태 |
+|------|-----|------|
+| Orange Pi 5 Ultra | RK3588 | 미설정 — DTB mainline 확인 필요 |

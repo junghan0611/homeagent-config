@@ -44,9 +44,10 @@ help() {
     echo "  go-deploy [IP]  Go 바이너리만 배포"
     echo ""
     echo -e "${GREEN}=== 디바이스 ===${NC}"
-    echo "  ssh [IP] [cmd]  SSH 접속"
-    echo "  setup-key [IP]  SSH 공개키 등록"
-    echo "  set-ip <ip>     디바이스 IP 설정"
+    echo "  ssh [IP|name] [cmd]  SSH 접속 (opi5, rpi5, IP 직접)"
+    echo "  setup-key [IP|name]  SSH 공개키 등록"
+    echo "  set-ip <ip>          디바이스 IP 설정"
+    echo "  flash-opi5 /dev/sdX  OPi5 SD카드 플래싱 (SSH 키 자동 주입)"
     echo ""
     echo -e "${GREEN}=== Android (레거시) ===${NC}"
     echo "  android <cmd>   Android 직접 배포 (scripts/android-deploy.sh)"
@@ -182,6 +183,12 @@ cmd_commit() {
 IMAGE_DIR="${BUILD_DIR}/tmp-glibc/deploy/images/raspberrypi5"
 IMAGE_NAME="core-image-weston-raspberrypi5.rootfs.wic.bz2"
 
+# OPi5 이미지
+OPI5_BUILD_DIR="${YOCTO_DIR}/build-opi5"
+OPI5_IMAGE_DIR="${OPI5_BUILD_DIR}/tmp-glibc/deploy/images/orangepi-5"
+OPI5_IMAGE_NAME="core-image-minimal-orangepi-5.rootfs.wic"
+OPI5_IMAGE_BZ2="core-image-minimal-orangepi-5.rootfs.wic.bz2"
+
 cmd_image() {
     echo -e "${CYAN}=== 빌드 이미지 정보 ===${NC}"
     if [[ -f "${IMAGE_DIR}/${IMAGE_NAME}" ]]; then
@@ -228,6 +235,70 @@ cmd_flash() {
         nix-shell -p bmaptool --run "sudo bmaptool copy '${IMAGE_DIR}/${IMAGE_NAME}' '$device'"
     fi
     echo -e "${GREEN}[DONE]${NC} 플래싱 완료. SD 카드를 분리하세요."
+}
+
+# OPi5 SD카드 플래싱 (SSH 키 + sshd 설정 자동 주입)
+cmd_flash_opi5() {
+    local device="$1"
+    if [[ -z "$device" ]]; then
+        echo -e "${RED}[ERROR]${NC} 디바이스를 지정하세요"
+        echo "  예: ./run.sh flash-opi5 /dev/sdb"
+        echo ""
+        echo -e "${CYAN}현재 블록 디바이스:${NC}"
+        lsblk -d -o NAME,SIZE,MODEL | grep -v loop
+        exit 1
+    fi
+    local wic_file="${OPI5_IMAGE_DIR}/${OPI5_IMAGE_NAME}"
+    if [[ ! -f "$wic_file" ]]; then
+        echo -e "${RED}[ERROR]${NC} OPi5 이미지가 없습니다: ${OPI5_IMAGE_NAME}"
+        echo "  빌드: nix run .#yocto -- -c 'cd yocto && source sources/poky/oe-init-build-env build-opi5 && bitbake core-image-minimal'"
+        exit 1
+    fi
+    if [[ ! -b "$device" ]]; then
+        echo -e "${RED}[ERROR]${NC} 블록 디바이스가 아닙니다: $device"
+        exit 1
+    fi
+
+    check_ssh_key
+    local PUBKEY="${SSH_KEY}.pub"
+    if [[ ! -f "$PUBKEY" ]]; then
+        ssh-keygen -y -f "$SSH_KEY" >"$PUBKEY" 2>/dev/null
+    fi
+
+    echo -e "${YELLOW}[WARNING]${NC} $device 의 모든 데이터가 삭제됩니다!"
+    echo -e "이미지: ${OPI5_IMAGE_NAME}"
+    read -p "계속하시겠습니까? (y/N) " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "취소됨"
+        exit 0
+    fi
+
+    # 1. rootfs에 SSH 키 + sshd 설정 주입
+    echo -e "${GREEN}[1/3]${NC} rootfs에 SSH 키 + sshd 설정 주입..."
+    local mnt_dir="/tmp/opi5-rootfs-$$"
+    sudo mkdir -p "$mnt_dir"
+    # wic 파티션 9 (rootfs): offset=32768*512
+    sudo mount -o loop,offset=$((32768*512)) "$wic_file" "$mnt_dir"
+
+    sudo mkdir -p "$mnt_dir/root/.ssh"
+    sudo cp "$PUBKEY" "$mnt_dir/root/.ssh/authorized_keys"
+    sudo chmod 600 "$mnt_dir/root/.ssh/authorized_keys"
+    sudo chmod 700 "$mnt_dir/root/.ssh"
+    sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' "$mnt_dir/etc/ssh/sshd_config"
+
+    sudo umount "$mnt_dir"
+    sudo rmdir "$mnt_dir"
+
+    # 2. SD카드 플래싱
+    echo -e "${GREEN}[2/3]${NC} SD카드 플래싱... ($device)"
+    sudo umount ${device}* 2>/dev/null || true
+    sudo dd if="$wic_file" of="$device" bs=4M conv=fsync status=progress
+
+    # 3. 완료
+    echo -e "${GREEN}[3/3]${NC} 완료!"
+    echo ""
+    echo -e "  SD카드 분리 → OPi5에 꼽고 부팅"
+    echo -e "  60초 후: ${CYAN}./run.sh ssh opi5${NC}"
 }
 
 cmd_deploy() {
@@ -285,12 +356,20 @@ SSH_KEY="${SCRIPT_DIR}/.sshkey/id_ed25519"
 DEVICE_IP_FILE="${SCRIPT_DIR}/.current-device-ip"
 SSH_OPTS="-o StrictHostKeyChecking=no -o LogLevel=ERROR"
 
+# 디바이스별 IP 파일: .current-device-ip (기본=rpi5), .current-device-ip.opi5 등
 get_device_ip() {
-    local arg_ip="$1"
-    if [[ "$arg_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "$arg_ip"
+    local arg="$1"
+    # IP 직접 지정
+    if [[ "$arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$arg"
         return
     fi
+    # 디바이스 이름으로 IP 파일 조회 (opi5, rpi5 등)
+    if [[ -n "$arg" ]] && [[ -f "${DEVICE_IP_FILE}.${arg}" ]]; then
+        cat "${DEVICE_IP_FILE}.${arg}"
+        return
+    fi
+    # 기본 디바이스
     if [[ -f "$DEVICE_IP_FILE" ]]; then
         cat "$DEVICE_IP_FILE"
     else
@@ -319,8 +398,9 @@ check_ssh_key() {
 cmd_setup_key() {
     local IP=$(get_device_ip "$1")
     if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
+        echo -e "${RED}[ERROR]${NC} IP 또는 디바이스 이름을 지정하세요"
         echo "  ./run.sh setup-key 192.168.0.163"
+        echo "  ./run.sh setup-key opi5"
         exit 1
     fi
 
@@ -380,10 +460,17 @@ cmd_ssh() {
     local IP CMD
 
     if [[ "$first_arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        # IP 직접 지정
         IP="$first_arg"
         shift
         CMD="$*"
+    elif [[ -n "$first_arg" ]] && [[ -f "${DEVICE_IP_FILE}.${first_arg}" ]]; then
+        # 디바이스 이름 (opi5, rpi5 등)
+        IP=$(get_device_ip "$first_arg")
+        shift
+        CMD="$*"
     else
+        # 기본 디바이스
         IP=$(get_device_ip)
         CMD="$*"
     fi
@@ -391,7 +478,8 @@ cmd_ssh() {
     if [[ -z "$IP" ]]; then
         echo -e "${RED}[ERROR]${NC} 디바이스 IP가 설정되지 않았습니다."
         echo "  ./run.sh set-ip <ip>"
-        echo "  또는: ./run.sh ssh 192.168.0.163 [cmd]"
+        echo "  ./run.sh ssh opi5 [cmd]  (디바이스 이름)"
+        echo "  ./run.sh ssh 192.168.0.163 [cmd]"
         exit 1
     fi
 
@@ -977,6 +1065,9 @@ case "${1:-help}" in
         ;;
     flash)
         cmd_flash "$2"
+        ;;
+    flash-opi5)
+        cmd_flash_opi5 "$2"
         ;;
     deploy)
         cmd_deploy "$2" "$3"

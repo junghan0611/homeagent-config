@@ -18,7 +18,7 @@ scripts/ 폴더는 matterjs-server(오픈소스) 전용.
 |-------|------|------|------|
 | 1 | Yocto + Protocol | RPi5에서 Matter 동작 증명 | ✅ |
 | 2 | Matter + Go Controller | 동작하는 스마트홈 허브 (v0.8) | ✅ |
-| 3 | Cross-platform | 같은 코드, 다른 하드웨어 (RPi5 + RK3576) | ✅ |
+| 3 | Cross-platform | 같은 코드, 다른 하드웨어 (RPi5 + RK3576 + OPi5) | ✅ |
 | **4** | **HA Ecosystem + Flutter-first** | **matterjs-server 위임, Go 확장, Flutter 유니버셜 클라이언트** | **← current** |
 | 5 | Agent Intelligence | sLLM, A2UI, A2A, EdgeAI | |
 | 6 | Production + Scale | 양산, RK3588, Hailo NPU | |

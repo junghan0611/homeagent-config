@@ -1,5 +1,6 @@
 # Yocto build artifacts
 yocto/build/
+yocto/build-opi5/
 yocto/downloads/
 yocto/sstate-cache/
 *.wic
@@ -12,6 +13,8 @@ yocto/sources/meta-openembedded/
 yocto/sources/meta-raspberrypi
 yocto/sources/meta-clang/
 yocto/sources/meta-flutter
+yocto/sources/meta-arm/
+yocto/sources/meta-rockchip/
 
 # Matter (connectedhomeip ~10GB, chip-tool ~113MB)
 matter/connectedhomeip/

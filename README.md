@@ -74,7 +74,8 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
 
 | Platform | Board | OS | Thread RCP | Status |
 |----------|-------|----|-----------|--------|
-| RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap | ZBDongle-E (USB) | ✅ Production |
+| RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap (6.6 LTS) | ZBDongle-E (USB) | ✅ Production |
+| **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (6.9-dev)** | **ZBDongle-E (USB)** | **✅ Booted (2026-03-31)** |
 | RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
 
 ### Cross-Platform Verification (2026-03-18)

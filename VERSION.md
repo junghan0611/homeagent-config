@@ -19,6 +19,26 @@ Yocto/OpenEmbedded 및 Raspberry Pi 5 버전 호환성 정리
 
 ---
 
+## Orange Pi 5 (RK3588S) Yocto 지원 (2026-03-31 추가)
+
+| 항목 | 값 |
+|------|-----|
+| **Machine** | `orangepi-5` (custom conf, Rock 5A 기반) |
+| **SoC** | Rockchip RK3588S (4×A76 + 4×A55) |
+| **BSP Layer** | `radxa/meta-rockchip` (scarthgap) |
+| **추가 Layer** | `meta-arm` (TF-A/OP-TEE) |
+| **Kernel** | linux-yocto-dev 6.9 (mainline tip) |
+| **U-Boot** | 2024.01 (`orangepi-5-rk3588s_defconfig`) |
+| **DTB** | `rk3588s-orangepi-5.dtb` |
+| **빌드 디렉토리** | `yocto/build-opi5/` (RPi5 `build/`과 분리) |
+
+**커널 참고**: RK3588S DTB는 mainline 6.7+에서 추가. Scarthgap 기본 6.6 LTS에는 없음.
+`linux-yocto-dev`(mainline tip) 사용. LSM modpost 이슈 우회를 위해 `CONFIG_SECURITY=n` config fragment 적용.
+
+**빌드 성공**: core-image-minimal, SD카드 부팅 + SSH 접속 검증 (2026-03-31).
+
+---
+
 ## Raspberry Pi OS 비교
 
 | 항목 | Raspberry Pi OS | Yocto Scarthgap |

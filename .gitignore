@@ -1,6 +1,8 @@
-# Yocto build artifacts
+# Yocto build artifacts (conf/ 제외 — 빌드 설정은 추적)
 yocto/build/
+!yocto/build/conf/
 yocto/build-opi5/
+!yocto/build-opi5/conf/
 yocto/downloads/
 yocto/sstate-cache/
 *.wic

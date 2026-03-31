@@ -1,6 +1,7 @@
 # HomeAgent OTBR Agent Configuration
-# RPi5: eth0 (내장 이더넷), ttyUSB0 (Thread RCP ZBDongle-E)
+# backbone: @BACKBONE_IF@ (빌드 시 머신별 치환: RPi5=eth0, OPi5=end0)
+# RCP: ttyUSB0 (Thread RCP ZBDongle-E, baudrate 460800)
 
 # Options to pass to otbr-agent
-OTBR_AGENT_OPTS="-I wpan0 -B eth0 spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800"
+OTBR_AGENT_OPTS="-I wpan0 -B @BACKBONE_IF@ spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800"
 OTBR_NO_AUTO_ATTACH=1

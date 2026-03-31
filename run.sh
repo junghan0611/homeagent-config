@@ -43,6 +43,16 @@ help() {
     echo "  ha-logs [IP] [target]  로그 (go/matter/otbr/all)"
     echo "  go-deploy [IP]  Go 바이너리만 배포"
     echo ""
+    echo -e "${GREEN}=== Yocto 빌드 ===${NC}"
+    echo "  bb [target]          RPi5 빌드 (기본: core-image-weston)"
+    echo "  bb-opi5 [target]     OPi5 빌드 (기본: core-image-minimal)"
+    echo "  bb-cmd <args>        RPi5 bitbake 직접 실행"
+    echo "  bb-cmd-opi5 <args>   OPi5 bitbake 직접 실행"
+    echo "  bb-clean [target]    RPi5 클린 빌드"
+    echo "  bb-clean-opi5 [target]  OPi5 클린 빌드"
+    echo "  bb-resume            RPi5 빌드 이어하기"
+    echo "  bb-resume-opi5       OPi5 빌드 이어하기"
+    echo ""
     echo -e "${GREEN}=== 디바이스 ===${NC}"
     echo "  ssh [IP|name] [cmd]  SSH 접속 (opi5, rpi5, IP 직접)"
     echo "  setup-key [IP|name]  SSH 공개키 등록"
@@ -151,6 +161,68 @@ cmd_bb_resume() {
     echo -e "${GREEN}[RESUME]${NC} 이전 빌드 계속..."
     cd "$BUILD_DIR"
     source ../sources/poky/oe-init-build-env . >/dev/null 2>&1
+    bitbake
+}
+
+# === OPi5 빌드 명령 (build-opi5 디렉토리 사용) ===
+
+# === OPi5 빌드 명령 (build-opi5 디렉토리 사용) ===
+# oe-init-build-env는 yocto/ 디렉토리에서 실행, build-opi5를 인자로 전달
+
+cmd_bb_opi5() {
+    local target="${1:-core-image-minimal}"
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 OPi5 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-opi5 $target"
+    fi
+    echo -e "${GREEN}[BUILD-OPi5]${NC} bitbake $target"
+    cd "$YOCTO_DIR"
+    source sources/poky/oe-init-build-env build-opi5 >/dev/null 2>&1
+    bitbake "$target"
+}
+
+cmd_bb_cmd_opi5() {
+    if [[ $# -eq 0 ]]; then
+        echo -e "${RED}[ERROR]${NC} bitbake 인자를 지정하세요"
+        echo "  예: ./run.sh bb-cmd-opi5 -c cleansstate ot-br-posix"
+        exit 1
+    fi
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 OPi5 실행..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-cmd-opi5 $*"
+    fi
+    echo -e "${GREEN}[BITBAKE-OPi5]${NC} bitbake $*"
+    cd "$YOCTO_DIR"
+    source sources/poky/oe-init-build-env build-opi5 >/dev/null 2>&1
+    bitbake "$@"
+}
+
+cmd_bb_clean_opi5() {
+    local target="${1:-core-image-minimal}"
+    echo -e "${GREEN}[CLEAN BUILD-OPi5]${NC} bitbake $target (클린)"
+    echo -e "${YELLOW}[INFO]${NC} tmp-glibc 삭제 중..."
+    rm -rf "${OPI5_BUILD_DIR}/tmp-glibc" 2>/dev/null || true
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 OPi5 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-clean-opi5 $target"
+    fi
+    cd "$YOCTO_DIR"
+    source sources/poky/oe-init-build-env build-opi5 >/dev/null 2>&1
+    bitbake "$target"
+}
+
+cmd_bb_resume_opi5() {
+    if ! in_fhs; then
+        echo -e "${YELLOW}[INFO]${NC} FHS 환경 진입 후 OPi5 빌드..."
+        cd "$SCRIPT_DIR"
+        exec nix run .#yocto -- -c "export HOMEAGENT_FHS=1 && $SCRIPT_DIR/run.sh bb-resume-opi5"
+    fi
+    echo -e "${GREEN}[RESUME-OPi5]${NC} 이전 OPi5 빌드 계속..."
+    cd "$YOCTO_DIR"
+    source sources/poky/oe-init-build-env build-opi5 >/dev/null 2>&1
     bitbake
 }
 
@@ -1044,6 +1116,21 @@ case "${1:-help}" in
         ;;
     bb-resume)
         cmd_bb_resume
+        ;;
+    bb-opi5)
+        shift
+        cmd_bb_opi5 "$@"
+        ;;
+    bb-cmd-opi5)
+        shift
+        cmd_bb_cmd_opi5 "$@"
+        ;;
+    bb-clean-opi5)
+        shift
+        cmd_bb_clean_opi5 "$@"
+        ;;
+    bb-resume-opi5)
+        cmd_bb_resume_opi5
         ;;
     clean)
         cmd_clean

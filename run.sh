@@ -35,13 +35,19 @@ help() {
     echo "  apk-build       APK 릴리즈 빌드"
     echo "  apk-go          Go arm64 Android 크로스컴파일"
     echo ""
-    echo -e "${GREEN}=== 배포 (Docker 기반) ===${NC}"
+    echo -e "${GREEN}=== 배포 (Docker 기반 — RPi5) ===${NC}"
     echo "  ha-deploy [IP]  전체 배포 (빌드+Docker+Go→디바이스→시작)"
     echo "  ha-start  [IP]  Docker 스택 + Go 시작"
     echo "  ha-stop   [IP]  전체 스택 종료"
     echo "  ha-status [IP]  컨테이너/서비스 상태"
     echo "  ha-logs [IP] [target]  로그 (go/matter/otbr/all)"
     echo "  go-deploy [IP]  Go 바이너리만 배포"
+    echo ""
+    echo -e "${GREEN}=== 배포 (Yocto 네이티브 — OPi5) ===${NC}"
+    echo "  opi5-deploy     Go+UI+aliases 배포 (Docker 불필요)"
+    echo "  opi5-start      Go 서버 시작"
+    echo "  opi5-stop       Go 서버 종료"
+    echo "  opi5-status     서비스 상태 (systemd + Go)"
     echo ""
     echo -e "${GREEN}=== Yocto 빌드 ===${NC}"
     echo "  bb [target]          RPi5 빌드 (기본: core-image-weston)"
@@ -1002,6 +1008,165 @@ cmd_go_build() {
     file bin/homeagent
 }
 
+# ─── OPi5 Yocto 네이티브 배포 (Docker 불필요) ───
+# OPi5는 matterjs-server + otbr-agent가 systemd 서비스로 동작
+# Go 서버 + UI + aliases만 배포하면 됨
+
+cmd_opi5_deploy() {
+    local IP=$(get_device_ip "opi5")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} .current-device-ip.opi5 파일이 없습니다"
+        echo "  echo '192.168.0.177' > .current-device-ip.opi5"
+        exit 1
+    fi
+    check_ssh_key
+
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+    echo -e "${CYAN}  OPi5 배포 (Yocto 네이티브) → $IP${NC}"
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+
+    # 1. Go 빌드
+    cmd_go_build
+
+    # 2. UI 빌드
+    cmd_ui_build
+
+    # 3. 기존 Go 프로세스 정지
+    cmd_opi5_stop 2>/dev/null || true
+
+    # 4. 파일 전송
+    echo -e "${GREEN}[UPLOAD]${NC} Go + UI + aliases + env..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "mkdir -p /opt/homeagent/ui"
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/go/bin/homeagent" root@"$IP":/opt/homeagent/homeagent
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/aliases.json" root@"$IP":/opt/homeagent/aliases.json
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "rm -rf /opt/homeagent/ui/*"
+    scp -i "$SSH_KEY" $SSH_OPTS -r "$SCRIPT_DIR/ui/dist/"* root@"$IP":/opt/homeagent/ui/
+
+    # env 파일 전송
+    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/.env.opi5" root@"$IP":/opt/homeagent/.env
+
+    # .env에 LLM 키 추가
+    if [[ -f "$HOME/.env.local" ]]; then
+        local _key
+        _key=$(grep -m1 '^export OPENROUTER_API_KEY=' "$HOME/.env.local" 2>/dev/null | sed 's/^export //' || true)
+        [[ -n "$_key" ]] && ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "echo '$_key' >> /opt/homeagent/.env"
+    fi
+
+    # 5. 시작
+    cmd_opi5_start
+
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}[DONE]${NC} OPi5 배포 완료! http://$IP:8080"
+    echo -e "${CYAN}══════════════════════════════════════${NC}"
+}
+
+cmd_opi5_start() {
+    local IP=$(get_device_ip "opi5")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} .current-device-ip.opi5 파일이 없습니다"; exit 1
+    fi
+    check_ssh_key
+
+    echo -e "${GREEN}[START]${NC} OPi5 Go 서버 시작 ($IP)..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'OPI5_START'
+set -e
+HA_DIR="/opt/homeagent"
+log()  { echo -e "\033[0;32m[opi5]\033[0m $*"; }
+
+# systemd 서비스 확인
+log "systemd 서비스 확인..."
+for svc in matterjs-server otbr-agent avahi-daemon; do
+    if systemctl is-active --quiet $svc 2>/dev/null; then
+        log "  $svc: ✅"
+    else
+        log "  $svc: ❌ (시작 시도)"
+        systemctl start $svc 2>/dev/null || true
+    fi
+done
+
+# matterjs-server WS 준비 대기
+log "matterjs-server WS 대기..."
+for i in $(seq 1 30); do
+    wget -qO- http://localhost:5580 >/dev/null 2>&1 && break
+    sleep 1
+done
+
+# Go HomeAgent
+if pidof homeagent > /dev/null 2>&1; then
+    log "homeagent 이미 실행 중"
+else
+    log "homeagent 시작..."
+    cd "$HA_DIR"
+    [ -f "$HA_DIR/.env" ] && { set -a; . "$HA_DIR/.env"; set +a; }
+
+    HOMEAGENT_HTTP_ADDR="${HOMEAGENT_HTTP_ADDR:-:8080}" \
+    HOMEAGENT_MATTER_WS="${HOMEAGENT_MATTER_WS:-ws://localhost:5580}" \
+    HOMEAGENT_UI_DIR="${HOMEAGENT_UI_DIR:-$HA_DIR/ui}" \
+    HOMEAGENT_ALIASES_FILE="${HOMEAGENT_ALIASES_FILE:-$HA_DIR/aliases.json}" \
+    nohup ./homeagent > /tmp/homeagent.log 2>&1 &
+    sleep 3
+fi
+
+log "=== 완료 ==="
+grep "connected:\|listening" /tmp/homeagent.log 2>/dev/null | tail -3 || true
+OPI5_START
+}
+
+cmd_opi5_stop() {
+    local IP=$(get_device_ip "opi5")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} .current-device-ip.opi5 파일이 없습니다"; exit 1
+    fi
+    check_ssh_key
+    echo -e "${YELLOW}[STOP]${NC} OPi5 Go 서버 종료 ($IP)..."
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" \
+        'kill $(pidof homeagent) 2>/dev/null && echo "homeagent stopped" || echo "homeagent not running"'
+}
+
+cmd_opi5_status() {
+    local IP=$(get_device_ip "opi5")
+    if [[ -z "$IP" ]]; then
+        echo -e "${RED}[ERROR]${NC} .current-device-ip.opi5 파일이 없습니다"; exit 1
+    fi
+    check_ssh_key
+    echo -e "${CYAN}[STATUS]${NC} OPi5 ($IP)"
+    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'OPI5_STATUS'
+echo "=== systemd 서비스 ==="
+for svc in matterjs-server otbr-agent avahi-daemon mosquitto; do
+    if systemctl is-active --quiet $svc 2>/dev/null; then
+        echo "  $svc: ✅"
+    else
+        echo "  $svc: ❌"
+    fi
+done
+
+echo ""
+echo "=== Go HomeAgent ==="
+pidof homeagent > /dev/null 2>&1 && echo "  homeagent: ✅" || echo "  homeagent: ❌"
+
+echo ""
+echo "=== Thread ==="
+STATE=$(ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "unknown")
+echo "  state: $STATE"
+ot-ctl srp server state 2>/dev/null | grep -v Done | tr -d '\r' | sed 's/^/  SRP: /' || true
+
+echo ""
+echo "=== 네트워크 ==="
+ip -br addr show end0 2>/dev/null || echo "  end0 not found"
+
+echo ""
+echo "=== 디바이스 ==="
+wget -qO- http://localhost:8080/api/devices 2>/dev/null || echo "  (API 응답 없음)"
+
+echo ""
+echo "=== 시스템 ==="
+df -h / | tail -1 | awk '{print "  disk: "$3"/"$2" ("$5")"}'
+echo -n "  mem: "; free -m 2>/dev/null | awk '/Mem/{print $3"/"$2"M"}' || echo "(N/A)"
+echo -n "  uptime: "; uptime | sed 's/.*up //' | sed 's/,.*//' 
+echo -n "  temp: "; cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk '{printf "%.1f°C\n", $1/1000}' || echo "N/A"
+OPI5_STATUS
+}
+
 cmd_go_deploy() {
     local IP=$(get_device_ip "$1")
     if [[ -z "$IP" ]]; then
@@ -1208,6 +1373,18 @@ case "${1:-help}" in
     go-dev)
         shift
         cmd_go_dev "$@"
+        ;;
+    opi5-deploy)
+        cmd_opi5_deploy
+        ;;
+    opi5-start)
+        cmd_opi5_start
+        ;;
+    opi5-stop)
+        cmd_opi5_stop
+        ;;
+    opi5-status)
+        cmd_opi5_status
         ;;
     flash-rcp|build-chip-tool|deploy-chip-tool)
         echo -e "${RED}[DEPRECATED]${NC} 이 명령은 제거됐습니다. scripts/deprecated/ 참고"

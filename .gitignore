@@ -106,6 +106,8 @@ tmp
 
 # Docker 환경 설정 (비밀 아님)
 !.env.docker.*
+!.env.rpi5
+!.env.opi5
 
 # CHIP SDK binaries (built from connectedhomeip, 107MB)
 flutter/android/app/libs/*.jar

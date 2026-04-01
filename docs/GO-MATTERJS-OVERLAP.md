@@ -42,6 +42,10 @@ Go REST API는 다음 이유로 유지:
 | `GET /api/home` | A2UI Surface | 디바이스 상태 |
 | `GET /api/wifi-info` | Android WiFi 감지 | Android prop |
 | `/dashboard` | matterjs 대시보드 리다이렉트 | matterjs :5580 |
+| `POST /api/devices/:id/attributes` | 속성 쓰기 (write_attribute) | matterjs WS |
+| `GET /api/discover` | 커미셔닝 가능 디바이스 발견 | matterjs WS |
+| `GET /api/devices/fabrics/:id` | 패브릭 목록 조회 | matterjs WS |
+| `DELETE /api/devices/fabrics/:id` | 패브릭 제거 | matterjs WS |
 
 ---
 

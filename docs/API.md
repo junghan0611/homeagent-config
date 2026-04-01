@@ -41,6 +41,10 @@ RPi5 로컬: `http://localhost:8080`
 | GET | `/api/events` | SSE 실시간 이벤트 | ✅ 구현됨 |
 | POST | `/api/chat` | LLM 에이전트 (자연어→제어) | ✅ 구현됨 |
 | GET | `/api/home` | A2UI Home Surface | ✅ 구현됨 |
+| POST | `/api/devices/:id/attributes` | 디바이스 속성 쓰기 (write_attribute) | ✅ 구현됨 |
+| GET | `/api/discover` | 커미셔닝 가능 디바이스 발견 | ✅ 구현됨 |
+| GET | `/api/devices/fabrics/:id` | 디바이스 패브릭 목록 조회 | ✅ 구현됨 |
+| DELETE | `/api/devices/fabrics/:id` | 디바이스 패브릭 제거 | ✅ 구현됨 |
 
 ---
 
@@ -454,10 +458,84 @@ curl -H "X-API-Key: ha_xxxxxxxxxxxx" http://localhost:8080/api/devices
 - [x] SSE 실시간 이벤트
 - [x] LLM 에이전트 채팅
 - [x] A2UI Home Surface
-- [ ] 개별 디바이스 조회 (`/api/devices/:node_id`)
-- [ ] 클러스터별 세분화 제어 (Level, Color, Thermostat)
+- [x] 개별 디바이스 조회 (`/api/devices/:node_id`)
+- [x] 클러스터별 세분화 제어 (Level, Color, Thermostat)
+- [x] write_attribute, discover, fabric 관리
 - [ ] toggle 명령
 - [ ] 이벤트 필터링 (노드/타입별 구독)
 - [ ] API key 인증
 - [ ] OpenAPI 3.0 스펙 생성
 - [ ] Android IPC 어댑터 (AIDL thin layer)
+
+---
+
+## 추가된 엔드포인트 상세
+
+### POST /api/devices/:id/attributes
+
+디바이스 속성 직접 쓰기 (write_attribute). 팬 속도, 모드 등 고급 제어.
+
+**요청:**
+```json
+{"path": "1/6/0", "value": true}
+```
+
+**응답:**
+```json
+{
+  "node_id": 8,
+  "path": "1/6/0",
+  "results": [{"Path": {"EndpointId": 1, "ClusterId": 6, "AttributeId": 0}, "Status": 0}]
+}
+```
+
+> **참고:** GET /api/devices/:id/attributes?path=1/6/0 은 읽기(기존), POST는 쓰기(신규).
+
+---
+
+### GET /api/discover
+
+커미셔닝 가능한 Matter 디바이스를 mDNS/DNS-SD로 탐색.
+
+**응답:**
+```json
+[
+  {
+    "instance_name": "ABCD1234",
+    "device_name": "Test Light",
+    "vendor_id": 65521,
+    "product_id": 32768,
+    "port": 5540,
+    "commissioning_mode": 1,
+    "addresses": ["192.168.0.50", "fd3f::1"]
+  }
+]
+```
+
+---
+
+### GET /api/devices/fabrics/:node_id
+
+노드에 등록된 모든 패브릭(컨트롤러) 목록 조회.
+
+**응답:**
+```json
+[
+  {"fabric_id": 1, "vendor_id": 65521, "fabric_index": 1, "fabric_label": "HomeAgent"},
+  {"fabric_id": 2, "vendor_id": 4996, "fabric_index": 2, "fabric_label": "Google Home"}
+]
+```
+
+---
+
+### DELETE /api/devices/fabrics/:node_id?fabric_index=N
+
+노드에서 특정 패브릭을 제거 (멀티 어드민 관리).
+
+**쿼리 파라미터:**
+- `fabric_index` (필수): 제거할 패브릭 인덱스
+
+**응답:**
+```json
+{"status": "ok"}
+```

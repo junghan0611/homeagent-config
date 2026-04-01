@@ -501,6 +501,148 @@ func (c *Client) NodeDiagnostics(ctx context.Context, nodeID int) (json.RawMessa
 	return result, nil
 }
 
+// WriteAttributeResult represents a single write status
+type WriteAttributeResult struct {
+	Path   map[string]int `json:"Path"`
+	Status int            `json:"Status"`
+}
+
+// CommissionableNode represents a discovered commissionable Matter device
+type CommissionableNode struct {
+	InstanceName     string   `json:"instance_name"`
+	HostName         string   `json:"host_name"`
+	Port             int      `json:"port"`
+	LongDiscriminator int    `json:"long_discriminator"`
+	VendorID         int      `json:"vendor_id"`
+	ProductID        int      `json:"product_id"`
+	CommissioningMode int    `json:"commissioning_mode"`
+	DeviceType       int      `json:"device_type"`
+	DeviceName       string   `json:"device_name"`
+	Addresses        []string `json:"addresses"`
+}
+
+// MatterFabric represents a fabric entry on a node
+type MatterFabric struct {
+	FabricID    int    `json:"fabric_id"`
+	VendorID    int    `json:"vendor_id"`
+	FabricIndex int    `json:"fabric_index"`
+	FabricLabel string `json:"fabric_label"`
+	VendorName  string `json:"vendor_name,omitempty"`
+}
+
+// WriteAttribute writes an attribute value to a device
+func (c *Client) WriteAttribute(ctx context.Context, nodeID int, attrPath string, value interface{}) ([]WriteAttributeResult, error) {
+	id, ch, err := c.send("write_attribute", map[string]interface{}{
+		"node_id":        nodeID,
+		"attribute_path": attrPath,
+		"value":          value,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("write_attribute parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("write_attribute error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var results []WriteAttributeResult
+	if err := json.Unmarshal(resp.Result, &results); err != nil {
+		return nil, fmt.Errorf("write_attribute parse result: %w", err)
+	}
+	return results, nil
+}
+
+// DiscoverCommissionableNodes discovers Matter devices available for commissioning
+func (c *Client) DiscoverCommissionableNodes(ctx context.Context) ([]CommissionableNode, error) {
+	id, ch, err := c.send("discover_commissionable_nodes", map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Discovery can take a while (mDNS/DNS-SD)
+	raw, err := c.waitResponse(id, ch, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("discover parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("discover error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var nodes []CommissionableNode
+	if err := json.Unmarshal(resp.Result, &nodes); err != nil {
+		return nil, fmt.Errorf("discover parse result: %w", err)
+	}
+	log.Printf("[matter] discovered %d commissionable node(s)", len(nodes))
+	return nodes, nil
+}
+
+// GetMatterFabrics returns all fabrics on a commissioned node
+func (c *Client) GetMatterFabrics(ctx context.Context, nodeID int) ([]MatterFabric, error) {
+	id, ch, err := c.send("get_matter_fabrics", map[string]int{"node_id": nodeID})
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("get_matter_fabrics parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return nil, fmt.Errorf("get_matter_fabrics error %d: %s", resp.ErrorCode, resp.Details)
+	}
+
+	var fabrics []MatterFabric
+	if err := json.Unmarshal(resp.Result, &fabrics); err != nil {
+		return nil, fmt.Errorf("get_matter_fabrics parse result: %w", err)
+	}
+	return fabrics, nil
+}
+
+// RemoveMatterFabric removes a specific fabric from a node
+func (c *Client) RemoveMatterFabric(ctx context.Context, nodeID int, fabricIndex int) error {
+	id, ch, err := c.send("remove_matter_fabric", map[string]int{
+		"node_id":      nodeID,
+		"fabric_index": fabricIndex,
+	})
+	if err != nil {
+		return err
+	}
+
+	raw, err := c.waitResponse(id, ch, 15*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var resp WSMessage
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return fmt.Errorf("remove_matter_fabric parse: %w", err)
+	}
+	if resp.ErrorCode != 0 {
+		return fmt.Errorf("remove_matter_fabric error %d: %s", resp.ErrorCode, resp.Details)
+	}
+	log.Printf("[matter] removed fabric index %d from node %d", fabricIndex, nodeID)
+	return nil
+}
+
 // CommissioningParameters holds the result of opening a commissioning window.
 type CommissioningParameters struct {
 	SetupPinCode    int    `json:"setup_pin_code"`

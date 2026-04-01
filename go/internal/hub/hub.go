@@ -741,6 +741,12 @@ func (h *Hub) RegisterHTTP(mux *http.ServeMux) {
 	// Space summary
 	mux.HandleFunc("/api/space/summary", h.handleSpaceSummary) // GET: 공간 요약
 
+	// Discovery
+	mux.HandleFunc("/api/discover", h.handleDiscover) // GET: 커미셔닝 가능 디바이스 발견
+
+	// Fabric management
+	mux.HandleFunc("/api/devices/fabrics/", h.handleDeviceFabrics) // GET/DELETE: 패브릭 관리
+
 	// matterjs-server 대시보드 리다이렉트 — ws://host:5580 → http://host:5580
 	mux.HandleFunc("/dashboard", h.handleDashboardRedirect)
 }
@@ -901,7 +907,11 @@ func (h *Hub) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "attributes":
-			h.handleReadAttribute(w, r, nodeID)
+			if r.Method == http.MethodPost {
+				h.handleWriteAttribute(w, r, nodeID)
+			} else {
+				h.handleReadAttribute(w, r, nodeID)
+			}
 		case "ping":
 			h.handlePingNode(w, r, nodeID)
 		case "interview":
@@ -1070,6 +1080,116 @@ func (h *Hub) handleNodeDiagnostics(w http.ResponseWriter, r *http.Request, node
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(result)
+}
+
+// handleWriteAttribute writes an attribute value to a device
+// POST /api/devices/:id/attributes
+// Body: {"path": "1/6/0", "value": true}
+func (h *Hub) handleWriteAttribute(w http.ResponseWriter, r *http.Request, nodeID int) {
+	var req struct {
+		Path  string      `json:"path"`
+		Value interface{} `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"잘못된 JSON 형식"}`, http.StatusBadRequest)
+		return
+	}
+	if req.Path == "" {
+		http.Error(w, `{"error":"path 필수 (예: 1/6/0)"}`, http.StatusBadRequest)
+		return
+	}
+
+	results, err := h.matter.WriteAttribute(r.Context(), nodeID, req.Path, req.Value)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"node_id": nodeID,
+		"path":    req.Path,
+		"results": results,
+	})
+}
+
+// handleDiscover finds commissionable Matter devices on the network
+// GET /api/discover
+func (h *Hub) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	nodes, err := h.matter.DiscoverCommissionableNodes(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(nodes)
+}
+
+// handleDeviceFabrics manages fabrics on a device
+// GET /api/devices/fabrics/:node_id — list fabrics
+// DELETE /api/devices/fabrics/:node_id?fabric_index=N — remove fabric
+func (h *Hub) handleDeviceFabrics(w http.ResponseWriter, r *http.Request) {
+	// Parse node_id from path: /api/devices/fabrics/8
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/devices/fabrics/")
+	if idStr == "" {
+		http.Error(w, `{"error":"node_id 필수"}`, http.StatusBadRequest)
+		return
+	}
+
+	var nodeID int
+	if _, err := fmt.Sscanf(idStr, "%d", &nodeID); err != nil {
+		http.Error(w, `{"error":"invalid node_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		fabrics, err := h.matter.GetMatterFabrics(r.Context(), nodeID)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(fabrics)
+
+	case http.MethodDelete:
+		fiStr := r.URL.Query().Get("fabric_index")
+		if fiStr == "" {
+			http.Error(w, `{"error":"fabric_index 쿼리 파라미터 필수"}`, http.StatusBadRequest)
+			return
+		}
+		var fabricIndex int
+		if _, err := fmt.Sscanf(fiStr, "%d", &fabricIndex); err != nil {
+			http.Error(w, `{"error":"invalid fabric_index"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := h.matter.RemoveMatterFabric(r.Context(), nodeID, fabricIndex); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+
+	default:
+		http.Error(w, "GET or DELETE only", http.StatusMethodNotAllowed)
+	}
 }
 
 // handleDeleteDevice removes a device from the fabric

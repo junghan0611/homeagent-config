@@ -489,6 +489,201 @@ func TestNodeDiagnostics(t *testing.T) {
 	}
 }
 
+// --- WriteAttribute ---
+
+func TestWriteAttribute(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "write_attribute" {
+			args, _ := msg["args"].(map[string]interface{})
+			if args["attribute_path"] != "1/6/0" {
+				t.Errorf("expected path 1/6/0, got %v", args["attribute_path"])
+			}
+			resultsJSON, _ := json.Marshal([]map[string]interface{}{
+				{"Path": map[string]int{"EndpointId": 1, "ClusterId": 6, "AttributeId": 0}, "Status": 0},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(resultsJSON),
+			})
+		}
+	})
+	defer srv.Close()
+
+	results, err := c.WriteAttribute(context.Background(), 8, "1/6/0", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != 0 {
+		t.Errorf("expected status 0, got %d", results[0].Status)
+	}
+}
+
+func TestWriteAttribute_Error(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "write_attribute" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"error_code": 2,
+				"details":    "write not supported",
+			})
+		}
+	})
+	defer srv.Close()
+
+	_, err := c.WriteAttribute(context.Background(), 8, "1/6/0", true)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "write not supported") {
+		t.Errorf("expected details in error, got: %v", err)
+	}
+}
+
+// --- DiscoverCommissionableNodes ---
+
+func TestDiscoverCommissionableNodes(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "discover_commissionable_nodes" {
+			nodesJSON, _ := json.Marshal([]CommissionableNode{
+				{InstanceName: "ABCD1234", DeviceName: "Test Light", VendorID: 65521, ProductID: 32768, Port: 5540, CommissioningMode: 1},
+				{InstanceName: "EFGH5678", DeviceName: "Test Sensor", VendorID: 65521, ProductID: 32769, Port: 5541, CommissioningMode: 1},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(nodesJSON),
+			})
+		}
+	})
+	defer srv.Close()
+
+	nodes, err := c.DiscoverCommissionableNodes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	}
+	if nodes[0].DeviceName != "Test Light" {
+		t.Errorf("expected 'Test Light', got %q", nodes[0].DeviceName)
+	}
+	if nodes[1].Port != 5541 {
+		t.Errorf("expected port 5541, got %d", nodes[1].Port)
+	}
+}
+
+func TestDiscoverCommissionableNodes_Empty(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "discover_commissionable_nodes" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage("[]"),
+			})
+		}
+	})
+	defer srv.Close()
+
+	nodes, err := c.DiscoverCommissionableNodes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 0 {
+		t.Errorf("expected 0 nodes, got %d", len(nodes))
+	}
+}
+
+// --- GetMatterFabrics ---
+
+func TestGetMatterFabrics(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "get_matter_fabrics" {
+			fabricsJSON, _ := json.Marshal([]MatterFabric{
+				{FabricID: 1, VendorID: 65521, FabricIndex: 1, FabricLabel: "HomeAgent"},
+				{FabricID: 2, VendorID: 4996, FabricIndex: 2, FabricLabel: "Google Home"},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(fabricsJSON),
+			})
+		}
+	})
+	defer srv.Close()
+
+	fabrics, err := c.GetMatterFabrics(context.Background(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fabrics) != 2 {
+		t.Fatalf("expected 2 fabrics, got %d", len(fabrics))
+	}
+	if fabrics[0].FabricLabel != "HomeAgent" {
+		t.Errorf("expected label 'HomeAgent', got %q", fabrics[0].FabricLabel)
+	}
+	if fabrics[1].FabricIndex != 2 {
+		t.Errorf("expected fabric_index 2, got %d", fabrics[1].FabricIndex)
+	}
+}
+
+// --- RemoveMatterFabric ---
+
+func TestRemoveMatterFabric(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "remove_matter_fabric" {
+			args, _ := msg["args"].(map[string]interface{})
+			if int(args["fabric_index"].(float64)) != 2 {
+				t.Errorf("expected fabric_index 2, got %v", args["fabric_index"])
+			}
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     map[string]interface{}{},
+			})
+		}
+	})
+	defer srv.Close()
+
+	err := c.RemoveMatterFabric(context.Background(), 8, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemoveMatterFabric_Error(t *testing.T) {
+	c, srv := testClientWithHandler(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "remove_matter_fabric" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"error_code": 5,
+				"details":    "cannot remove own fabric",
+			})
+		}
+	})
+	defer srv.Close()
+
+	err := c.RemoveMatterFabric(context.Background(), 8, 1)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "cannot remove own fabric") {
+		t.Errorf("expected details in error, got: %v", err)
+	}
+}
+
 // --- SetDefaultFabricLabel ---
 
 func TestSetDefaultFabricLabel(t *testing.T) {

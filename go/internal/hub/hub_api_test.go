@@ -2057,3 +2057,288 @@ func TestCommissionOnNetwork_ConcurrentBlocked(t *testing.T) {
 		t.Error("expected commission_error for concurrent commissioning attempt")
 	}
 }
+
+// --- POST /api/devices/:id/attributes (write_attribute) ---
+
+func TestAPIWriteAttribute(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "write_attribute" {
+			args, _ := msg["args"].(map[string]interface{})
+			if args["attribute_path"] != "1/6/0" {
+				t.Errorf("expected path 1/6/0, got %v", args["attribute_path"])
+			}
+			resultsJSON, _ := json.Marshal([]map[string]interface{}{
+				{"Path": map[string]int{"EndpointId": 1, "ClusterId": 6, "AttributeId": 0}, "Status": 0},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(resultsJSON),
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	body := `{"path":"1/6/0","value":true}`
+	resp, err := http.Post(srv.URL+"/api/devices/8/attributes", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["path"] != "1/6/0" {
+		t.Errorf("expected path 1/6/0, got %v", result["path"])
+	}
+	results, ok := result["results"].([]interface{})
+	if !ok || len(results) != 1 {
+		t.Errorf("expected 1 result, got %v", result["results"])
+	}
+}
+
+func TestAPIWriteAttribute_MissingPath(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	body := `{"value":true}`
+	resp, err := http.Post(srv.URL+"/api/devices/8/attributes", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400 for missing path, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIWriteAttribute_BadJSON(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/devices/8/attributes", "application/json", strings.NewReader("not json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// GET /api/devices/:id/attributes still works (read)
+func TestAPIReadAttribute_StillWorksWithWriteRoute(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "read_attribute" {
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     true,
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/devices/8/attributes?path=1/6/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// --- GET /api/discover ---
+
+func TestAPIDiscover(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "discover_commissionable_nodes" {
+			nodesJSON, _ := json.Marshal([]matter.CommissionableNode{
+				{InstanceName: "ABCD1234", DeviceName: "Test Light", VendorID: 65521, Port: 5540, CommissioningMode: 1},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(nodesJSON),
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/discover")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var nodes []matter.CommissionableNode
+	json.NewDecoder(resp.Body).Decode(&nodes)
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+	if nodes[0].DeviceName != "Test Light" {
+		t.Errorf("expected 'Test Light', got %q", nodes[0].DeviceName)
+	}
+}
+
+func TestAPIDiscover_MethodNotAllowed(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/discover", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 405 {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
+// --- GET/DELETE /api/devices/fabrics/:node_id ---
+
+func TestAPIGetDeviceFabrics(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "get_matter_fabrics" {
+			fabricsJSON, _ := json.Marshal([]matter.MatterFabric{
+				{FabricID: 1, VendorID: 65521, FabricIndex: 1, FabricLabel: "HomeAgent"},
+				{FabricID: 2, VendorID: 4996, FabricIndex: 2, FabricLabel: "Google Home"},
+			})
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     json.RawMessage(fabricsJSON),
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/devices/fabrics/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var fabrics []matter.MatterFabric
+	json.NewDecoder(resp.Body).Decode(&fabrics)
+	if len(fabrics) != 2 {
+		t.Fatalf("expected 2 fabrics, got %d", len(fabrics))
+	}
+	if fabrics[0].FabricLabel != "HomeAgent" {
+		t.Errorf("expected label 'HomeAgent', got %q", fabrics[0].FabricLabel)
+	}
+}
+
+func TestAPIRemoveDeviceFabric(t *testing.T) {
+	h, wsSrv := testHubWithMatter(t, func(conn *websocket.Conn, msg map[string]interface{}) {
+		cmd, _ := msg["command"].(string)
+		msgID, _ := msg["message_id"].(string)
+		if cmd == "remove_matter_fabric" {
+			args, _ := msg["args"].(map[string]interface{})
+			if int(args["fabric_index"].(float64)) != 2 {
+				t.Errorf("expected fabric_index 2, got %v", args["fabric_index"])
+			}
+			conn.WriteJSON(map[string]interface{}{
+				"message_id": msgID,
+				"result":     map[string]interface{}{},
+			})
+		}
+	})
+	defer wsSrv.Close()
+
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/devices/fabrics/8?fabric_index=2", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["status"] != "ok" {
+		t.Errorf("expected status ok, got %q", result["status"])
+	}
+}
+
+func TestAPIRemoveDeviceFabric_MissingIndex(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/devices/fabrics/8", nil)
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIDeviceFabrics_MethodNotAllowed(t *testing.T) {
+	h := testHub(t)
+	mux := testMux(h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/devices/fabrics/8", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 405 {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}

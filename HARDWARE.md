@@ -88,10 +88,11 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 | GPU | ARM Mali-G610 MP4 (Valhall) |
 | NPU | 6 TOPS (RKNN) |
 | RAM | 4GB LPDDR4X |
-| Kernel | 6.9.0-yoctodev-standard aarch64 (PREEMPT) |
+| Kernel | **6.14.0**-yoctodev-standard aarch64 (PREEMPT) |
 | OS | Yocto scarthgap 5.0 LTS (OpenEmbedded) |
+| Mesa | **24.1.7** (panfrost + panthor kmod) |
 | SD Card | 128GB |
-| 패키지 수 | 최소 (core-image-minimal) |
+| 패키지 수 | 최소 (core-image-minimal + GPU) |
 
 ## 네트워크 인터페이스
 
@@ -104,6 +105,55 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 - IP: 192.168.0.177 (DHCP)
 - SSH: `./run.sh ssh opi5`
 - IP 파일: `.current-device-ip.opi5`
+
+## GPU 스택 (2026-04-03 검증 완료)
+
+| 항목 | 값 |
+|------|-----|
+| GPU 드라이버 | panthor 1.3.0 (kernel module) |
+| Mesa 드라이버 | panfrost + panthor_kmod.c 백엔드 |
+| GL | OpenGL ES 3.1 Mesa 24.1.7 |
+| GL renderer | Mali-G610 (Panfrost) — **HW 가속** |
+| Weston | 13.0.1 DRM backend |
+| HDMI | dw-hdmi-qp, **3840x2160@30Hz** 검증 (LG HDR 4K) |
+| USB-C DP | PHY/TypeC/fusb302 로드됨, DRM 드라이버 미머지 (6.14) |
+| 전원 | **USB-C to C 필수** (4K 출력 시 전력 부족 주의) |
+
+### 커널 버전 히스토리
+
+| 버전 | 상태 | 비고 |
+|------|------|------|
+| 6.9 | 초기 부팅 | panfrost만, GPU 가속 불가 |
+| 6.11 | VOP2 동작 | HDMI TX controller 없음 |
+| **6.14** | **현재** | panthor 1.3.0 + dw-hdmi-qp + HDMI 4K 완전체 |
+
+## NPU (RKNN)
+
+| 항목 | 값 |
+|------|-----|
+| 하드웨어 | RK3588S 내장 NPU 3코어, **6 TOPS** (INT8) |
+| mainline 커널 (6.14) | ❌ rknpu 드라이버 없음, DTS 노드도 없음 |
+| Rockchip BSP 커널 | ✅ `rknpu` 드라이버 포함 (vendor fork) |
+| 유저스페이스 | `rknn-toolkit2` (Python) + `rknn_server` (C) |
+| 모델 포맷 | RKNN (.rknn) |
+| 상태 | **미검증** — 다음 사이클에서 out-of-tree 모듈 빌드 예정 |
+
+### RPi5 Hailo-8 vs OPi5 RKNN 비교
+
+| | RPi5 + Hailo-8 | OPi5 RKNN |
+|---|---|---|
+| **TOPS** | 26 (외장 M.2) | 6 (내장) |
+| **커널 드라이버** | meta-hailo (out-of-tree, 안정) | vendor BSP only |
+| **mainline 지원** | ❌ (out-of-tree) | ❌ (vendor BSP) |
+| **Yocto 레시피** | meta-hailo ✅ | 직접 작성 필요 |
+| **모델 포맷** | HEF | RKNN |
+
+### NPU 활성화 계획
+
+1. Rockchip BSP에서 `rknpu` 드라이버 소스 추출
+2. out-of-tree 커널 모듈로 6.14에 빌드
+3. `rknn-toolkit2` + `rknn_server` Yocto 레시피 작성
+4. 추론 벤치마크 (YOLOv8 등)
 
 ## 추가 보드 (미활성)
 

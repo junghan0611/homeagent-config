@@ -1,25 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: pi <pi@local>
-Date: Fri, 3 Apr 2026 11:30:00 +0900
-Subject: [PATCH] arm64: dts: rockchip: orangepi5: enable vop + hdmi phy
-
-On mainline rk3588s-orangepi-5, the display-subsystem exists but the
-actual VOP/VOP MMU and HDMI0 TX PHY remain disabled. This causes:
-
-  rockchip-drm display-subsystem: No available vop found for display-subsystem
-
-Enable the minimal display pipeline blocks needed for HDMI output.
-
-Signed-off-by: pi <pi@local>
----
- arch/arm64/boot/dts/rockchip/rk3588s-orangepi-5.dts | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
-
-diff --git a/arch/arm64/boot/dts/rockchip/rk3588s-orangepi-5.dts b/arch/arm64/boot/dts/rockchip/rk3588s-orangepi-5.dts
-index 111111111111..222222222222 100644
 --- a/arch/arm64/boot/dts/rockchip/rk3588s-orangepi-5.dts
 +++ b/arch/arm64/boot/dts/rockchip/rk3588s-orangepi-5.dts
-@@ -748,3 +748,15 @@ &usb_host1_ohci {
+@@ -764,3 +764,15 @@
+ &usb_host2_xhci {
  	status = "okay";
  };
 +
@@ -34,5 +16,3 @@ index 111111111111..222222222222 100644
 +&hdptxphy_hdmi0 {
 +	status = "okay";
 +};
--- 
-2.49.0

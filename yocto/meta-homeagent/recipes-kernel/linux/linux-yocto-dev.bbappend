@@ -8,4 +8,7 @@ LINUX_VERSION = "6.11"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/linux-yocto-dev:"
 
-SRC_URI += " file://panthor-gpu.cfg"
+SRC_URI += " \
+    file://panthor-gpu.cfg \
+    file://0001-arm64-dts-rockchip-orangepi5-enable-vop-hdmi-phy.patch \
+"

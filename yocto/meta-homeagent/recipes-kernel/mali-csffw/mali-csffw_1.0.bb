@@ -3,6 +3,7 @@ DESCRIPTION = "Installs mali_csffw.bin required by the panthor DRM driver for Va
 HOMEPAGE = "https://gitlab.com/kernel-firmware/linux-firmware"
 LICENSE = "Firmware-Abilis"
 LIC_FILES_CHKSUM = "file://LICENCE.mali_csffw;md5=e064aaec4d21ef856e1b76a6f5dc435f"
+NO_GENERIC_LICENSE[Firmware-Abilis] = "LICENCE.mali_csffw"
 
 SRC_URI = " \
   https://gitlab.com/kernel-firmware/linux-firmware/-/raw/c01388616e35c2f9dbcc4a207703e1ae0b47fcd9/arm/mali/arch10.8/mali_csffw.bin;downloadfilename=mali_csffw.bin;sha256sum=43c3c36b914c031d88ae152fd89019d8f99ad41d9879fb5ab7496ed13f7b378b \

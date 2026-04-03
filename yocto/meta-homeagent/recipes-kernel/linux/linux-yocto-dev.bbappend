@@ -3,9 +3,9 @@
 # - 6.10+: panthor 머지됨 (Valhall CSF)
 # - 6.11: 안정성 개선
 
-KBRANCH:orangepi-5 = "v6.11/standard/base"
-LINUX_VERSION:orangepi-5 = "6.11"
+KBRANCH = "v6.11/standard/base"
+LINUX_VERSION = "6.11"
 
-FILESEXTRAPATHS:prepend:orangepi-5 := "${THISDIR}/linux-yocto-dev:"
+FILESEXTRAPATHS:prepend := "${THISDIR}/linux-yocto-dev:"
 
-SRC_URI:append:orangepi-5 = " file://panthor-gpu.cfg"
+SRC_URI += " file://panthor-gpu.cfg"

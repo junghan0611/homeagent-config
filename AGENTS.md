@@ -52,12 +52,13 @@ APP → Go Server (:8080) → python-matter-server (:5580) → OTBR → Matter �
 - **Go가 확장 API 추가** (aliases, LLM, A2UI, OTBR, SSE)
 - **matter_client.dart는 예비용** (경량 모드/디버깅, 현재 미사용)
 
-### 현재 상태 (2026-03-20)
+### 현재 상태 (2026-04-03 업데이트)
 
 - Go: 18 REST 엔드포인트, 117 PASS
 - Flutter: 89 PASS, 디바이스 상세 화면 완성
 - WS 커버리지: 13/31 (42%)
 - RPi5 + Android 양쪽 배포 동작
+- **OPi5 GPU 스택 검증 완료**: 커널 6.14 + Mesa 24.1.7 + Mali-G610 + HDMI 4K
 - 에이전트4 리서치: HA 생태계 5개 분석 완료 (office/research-*.md)
 
 ---
@@ -83,15 +84,20 @@ cat .current-device-ip.opi5   # OPi5
 - 패스워드: `homeagent` (키 미등록 시)
 - 키 등록: `./run.sh setup-key opi5`
 
-## 디바이스 현황
+## 디바이스 현황 (2026-04-03 업데이트)
 
 | | RPi5 | OPi5 |
 |---|---|---|
 | **SoC** | BCM2712 (4×A76) | RK3588S (4×A76 + 4×A55) |
 | **RAM** | 8GB | 4GB |
-| **NPU** | Hailo-8 (26 TOPS, 외장) | RKNN (6 TOPS, 내장) |
-| **Kernel** | 6.6 LTS | 6.9-yoctodev |
-| **이미지** | 풀 스택 (Docker+Go+matterjs+OTBR) | core-image-minimal |
+| **NPU** | Hailo-8 (26 TOPS, 외장) | RKNN (6 TOPS, 내장) — 미검증 |
+| **Kernel** | 6.6 LTS (linux-raspberrypi) | **6.14** (linux-yocto-dev) |
+| **Mesa** | 24.0.7 (vc4/v3d) | **24.1.7** (panfrost + panthor kmod) |
+| **GPU** | VideoCore VII | **Mali-G610 (panthor 1.3.0)** ✅ |
+| **Display** | HDMI (vc4-kms-v3d) | **HDMI 4K@30Hz (dw-hdmi-qp)** ✅ |
+| **USB-C DP** | — | PHY 로드됨, DRM 미머지 (6.14) |
+| **전원** | 5V/5A USB-C | **USB-C to C 필수** (4K 시) |
+| **이미지** | 풀 스택 (Docker+Go+matterjs+OTBR) | core-image-minimal + GPU |
 | **IP** | `.current-device-ip` | 192.168.0.177 |
 | **NIC** | eth0 | end0 |
 

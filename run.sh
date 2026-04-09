@@ -355,8 +355,13 @@ cmd_flash_opi5() {
     echo -e "${GREEN}[1/3]${NC} rootfs에 SSH 키 + sshd 설정 주입..."
     local mnt_dir="/tmp/opi5-rootfs-$$"
     sudo mkdir -p "$mnt_dir"
-    # wic 파티션 9 (rootfs): offset=32768*512
-    sudo mount -o loop,offset=$((32768*512)) "$wic_file" "$mnt_dir"
+    # wic rootfs 파티션 자동 감지 (Linux filesystem 타입)
+    local rootfs_start=$(fdisk -l "$wic_file" 2>/dev/null | awk '/Linux filesystem/ {print $2; exit}')
+    if [[ -z "$rootfs_start" ]]; then
+        echo -e "${RED}[ERROR]${NC} rootfs 파티션을 찾을 수 없습니다"
+        exit 1
+    fi
+    sudo mount -o loop,offset=$(($rootfs_start * 512)) "$wic_file" "$mnt_dir"
 
     sudo mkdir -p "$mnt_dir/root/.ssh"
     sudo cp "$PUBKEY" "$mnt_dir/root/.ssh/authorized_keys"

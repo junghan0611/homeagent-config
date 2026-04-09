@@ -113,3 +113,4 @@ tmp
 # CHIP SDK binaries (built from connectedhomeip, 107MB)
 flutter/android/app/libs/*.jar
 flutter/android/app/libs/jniLibs/
+yocto/sources/meta-rockchip.jeffycn/

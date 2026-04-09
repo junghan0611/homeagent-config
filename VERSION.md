@@ -4,21 +4,18 @@ Yocto/OpenEmbedded, Raspberry Pi 5 및 Orange Pi 5 버전 호환성 정리
 
 ---
 
-## 디바이스 GPU/디스플레이 스택 비교 (2026-04-03)
+## 디바이스 스택 비교 (2026-04-09 업데이트)
 
 | 항목 | **RPi5** | **OPi5** |
 |------|---------|----------|
 | **SoC** | BCM2712 (4×A76) | RK3588S (4×A76 + 4×A55) |
-| **GPU** | VideoCore VII (vc4/v3d) | Mali-G610 (panthor 1.3.0) |
-| **커널** | linux-raspberrypi **6.6 LTS** | linux-yocto-dev **6.14** |
-| **Mesa** | 24.0.7 (vc4/v3d) | **24.1.7** (panfrost + panthor kmod) |
-| **GL** | OpenGL ES 3.1 | OpenGL ES 3.1 |
-| **디스플레이** | HDMI (vc4-kms-v3d) | HDMI (dw-hdmi-qp), 4K@30Hz |
-| **Weston** | 13.0.1 | 13.0.1 |
-| **USB-C DP** | — | PHY 로드됨, DRM 드라이버 미머지 (6.14) |
-| **NPU** | Hailo-8 (26 TOPS, M.2) | RKNN (6 TOPS, 내장) — 미검증 |
-| **전원** | 5V/5A USB-C | USB-C to C 필수 (4K 시 전력 부족 주의) |
-| **검증** | ✅ 풀스택 | ✅ GPU+HDMI 검증 (2026-04-03) |
+| **커널** | linux-raspberrypi **6.6 LTS** | linux-rockchip **6.1** (vendor BSP) |
+| **BSP** | meta-raspberrypi | JeffyCN meta-rockchip |
+| **GPU** | VideoCore VII (vc4/v3d), Mesa 24.0.7 | Mali-G610 — **headless** (미사용) |
+| **디스플레이** | HDMI (Weston 13) | 없음 (headless NPU hub) |
+| **NPU** | Hailo-8 (26 TOPS, M.2) | RKNN (6 TOPS, 내장) — rockchip-npu |
+| **모드** | 풀스택 (GUI + NPU) | **headless** (NPU + IoT hub) |
+| **검증** | ✅ 풀스택 | ✅ 빌드 성공 (2026-04-09), 부팅 검증 예정 |
 
 ---
 
@@ -37,46 +34,44 @@ Yocto/OpenEmbedded, Raspberry Pi 5 및 Orange Pi 5 버전 호환성 정리
 
 ---
 
-## Orange Pi 5 (RK3588S) Yocto 지원 (2026-03-31 추가)
+## Orange Pi 5 (RK3588S) Yocto 지원
+
+### 현재: Vendor BSP 6.1 Headless (2026-04-09)
 
 | 항목 | 값 |
 |------|-----|
-| **Machine** | `orangepi-5` (custom conf, Rock 5A 기반) |
+| **Machine** | `orangepi-5` (custom conf) |
 | **SoC** | Rockchip RK3588S (4×A76 + 4×A55) |
-| **BSP Layer** | `radxa/meta-rockchip` (scarthgap) |
-| **추가 Layer** | `meta-arm` (TF-A/OP-TEE) |
-| **Kernel** | linux-yocto-dev **6.14** (`v6.14/standard/base`) |
-| **Mesa** | **24.1.7** (panfrost + panthor kmod) |
-| **GPU** | Mali-G610 — **panthor** 1.3.0 (HW 가속 검증 완료) |
-| **Display** | HDMI (dw-hdmi-qp) — Weston 13, **3840x2160@30Hz** 검증 |
-| **U-Boot** | 2024.01 (`orangepi-5-rk3588s_defconfig`) |
+| **BSP Layer** | **JeffyCN meta-rockchip** (Rockchip 공식 vendor BSP) |
+| **Kernel** | linux-rockchip **6.1** (vendor LTS) |
+| **DTS** | Armbian `rk-6.1-rkr5.1` 기반 (카메라 dtsi 제외) |
+| **GPU** | 미사용 (headless — libmali/weston 제외) |
+| **NPU** | `rockchip-npu` (RKNN 펌웨어 + 유틸, 6 TOPS) |
+| **VPU** | `rockchip-mpp` (미디어 처리) |
+| **U-Boot** | u-boot-rockchip 2017.09 (vendor) |
 | **DTB** | `rk3588s-orangepi-5.dtb` |
+| **이미지** | 183MB (wic.bz2) |
 | **빌드 디렉토리** | `yocto/build-opi5/` (RPi5 `build/`과 분리) |
 
-**커널 버전 선택 이유**:
-- RK3588S DTB는 mainline 6.7+에서 추가. Scarthgap 기본 6.6 LTS에는 없음
-- panthor GPU 드라이버: 6.10+ (Valhall CSF)
-- HDMI TX controller (dw-hdmi-qp): **6.13+** 에서 머지
-- 6.14에서 OPi5 DTS에 hdmi0/vop/connector 완전체 포함 → 커스텀 DT 패치 불필요
+**vendor BSP 전환 사유** (mainline 6.14 → vendor 6.1):
+- mainline 6.14: NPU 드라이버 없음 (Rocket 드라이버 6.18 예정), DTS에 NPU 노드 없음
+- vendor 6.1: rknpu 드라이버 내장, NPU/IOMMU DTS 노드 포함
+- NPU가 핵심 목표이고, mainline에서 2년+ 기다릴 수 없음
+- 제품화에 vendor BSP LTS가 유리
 
-**Mesa 버전 선택 이유**:
-- Mesa 24.0.x: panfrost만 있고 panthor kmod 백엔드 없음 → softpipe fallback
-- Mesa 24.1+: `panthor_kmod.c` 추가 → CSF GPU 하드웨어 가속
-- 24.1.7은 Scarthgap(mesa.inc)과 호환성 우수 (kmsro/swrast 옵션 유지)
-- wayland-protocols 1.33→1.34 업그레이드 필요 (bbappend)
+**WKS (이미지 레이아웃)**:
+- `orangepi-5.wks.in` (meta-homeagent/wic/)
+- RK3588 부트체인: idblock(SPL) → uboot(ATF 통합) → kernel → rootfs
+- trust.img 불필요 (ATF가 uboot에 통합)
 
-**USB-C DP Alt Mode**: PHY/TypeC/fusb302 드라이버 로드됨, 파트너 감지 성공.
-하지만 RK3588 DP 디스플레이 컨트롤러 DRM 드라이버가 Linux 6.14 mainline에 미머지.
-USB-C DP 출력은 커널 후속 버전에서 지원 예정.
+### 이전: Mainline 6.14 GPU 검증 (2026-03-31 ~ 04-03)
 
-**전원 주의**: HDMI 4K 출력 시 USB-C to C 전원 어댑터 필수 (전력 부족 시 화면 미출력).
+> GPU/HDMI 검증용으로 사용. headless 전환으로 현재 미사용.
 
-**GPU 스택 검증 완료** (2026-04-03):
-- `GL renderer: Mali-G610 (Panfrost)` — OpenGL ES 3.1
-- Weston 13 DRM backend — 3840x2160@30Hz, LG HDR 4K 모니터
-- 부팅 로그 콘솔 출력 + Weston 데스크톱 + weston-terminal 확인
-
-**빌드 성공**: core-image-minimal, SD카드 부팅 + SSH + GPU + HDMI 검증 (2026-04-03).
+- 커널: linux-yocto-dev 6.14, BSP: radxa/meta-rockchip
+- GPU: panthor 1.3.0, Mesa 24.1.7 (panfrost + panthor kmod)
+- GL: OpenGL ES 3.1, Weston 13, HDMI 3840x2160@30Hz 검증
+- USB-C DP: PHY 로드됨, DRM 드라이버 미머지 (6.14)
 
 ---
 

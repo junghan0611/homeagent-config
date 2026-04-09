@@ -17,6 +17,7 @@ yocto/sources/meta-clang/
 yocto/sources/meta-flutter
 yocto/sources/meta-arm/
 yocto/sources/meta-rockchip/
+yocto/sources/meta-rockchip.radxa-backup/
 
 # Matter (connectedhomeip ~10GB, chip-tool ~113MB)
 matter/connectedhomeip/

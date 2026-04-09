@@ -1,0 +1,17 @@
+# HomeAgent: Orange Pi 5 (RK3588S) SD Card Image Layout
+# Based on Rockchip GPT partition scheme for RK3588
+# Reference: https://opensource.rock-chips.com/wiki_Partitions
+#
+# RK3588 boot chain: idblock (SPL) → uboot (ATF integrated)
+# trust.img is NOT needed — ATF is embedded in uboot.img
+
+bootloader --ptable gpt
+
+# SPL (idblock) at sector 64
+part --source rawcopy --sourceparams="file=idblock.img" --align 32 --no-table
+
+# U-Boot proper at 8MB offset
+part --source rawcopy --sourceparams="file=uboot.img" --part-name uboot --offset 8192s
+
+# Root filesystem
+part / --source rootfs --fstype ext4 --part-name rootfs --offset 32768s --align 8192 --mkfs-extraopts "-O ^metadata_csum"

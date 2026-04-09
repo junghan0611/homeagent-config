@@ -75,7 +75,7 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
 | Platform | Board | OS | Thread RCP | Status |
 |----------|-------|----|-----------|--------|
 | RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap (6.6 LTS) | ZBDongle-E (USB) | ✅ Production |
-| **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (6.9-dev)** | **ZBDongle-E (USB)** | **✅ Booted (2026-03-31)** |
+| **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (vendor 6.1)** | **ZBDongle-E (USB)** | **✅ Build OK (2026-04-09)** |
 | RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
 
 ### Cross-Platform Verification (2026-03-18)
@@ -246,7 +246,7 @@ The mind. AI that understands context.
 
 The product. Ship it.
 
-- [ ] RK3588 Yocto port (production target)
+- [x] **RK3588 Yocto port** — OPi5 vendor BSP 6.1 headless NPU hub, 빌드 성공 (2026-04-09)
 - [ ] Hailo-8 M.2 NPU on RPi5 — object detection, presence sensing
 - [ ] Zig firmware for custom Thread sensors
 - [ ] Client branding APK (bd-2jt)
@@ -555,6 +555,7 @@ homeagent-config/
 | Platform | Board | Thread RCP | NPU |
 |----------|-------|-----------|-----|
 | RPi5 | Raspberry Pi 5 (8GB) | ZBDongle-E (USB) | Hailo-8 M.2 (준비 중) |
+| **OPi5** | **Orange Pi 5 (4GB)** | **ZBDongle-E (USB)** | **RKNN 6 TOPS (내장)** |
 | RK3576 | RK3576-EVB | ESP32-H2 (UART) | — |
 
 ### Hailo-8 NPU (RPi5) ✅ Verified

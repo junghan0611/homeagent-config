@@ -3,6 +3,18 @@
 @README.md
 @OFFICE.md (private)
 
+## How to Read This
+
+If you see "Hailo-8 NPU 398 FPS" or "sLLM 100% accuracy" in our docs, pause. Those are off-the-shelf components — a Hailo Model Zoo model and a 43-second LoRA fine-tune on 52 samples. Anyone can reproduce them in an afternoon. They are not the point.
+
+**What you're looking at is a wiring project.** One repo that connects Yocto, Go, Flutter, Matter, Thread (OTBR), NPU (Hailo-8), sLLM (Qwen3-0.6B), and A2A protocol into a single reproducible image. Each piece exists individually in the open. What doesn't exist elsewhere is the integration — the `bitbake` that builds it all, the `./run.sh ha-deploy` that ships it, the Go server that ties Matter WebSocket to REST to SSE to Flutter to sLLM fallback chain.
+
+The ugly parts are the real work: kernel 4K page size patches for Hailo driver compatibility. Firmware version conflicts between meta-raspberrypi and meta-hailo. npm-shrinkwrap offline resolution for Yocto hermeticity. Cross-compiling llama.cpp with NDK r27 for Android and native ARM for Yocto — same GGUF, same HTTP API, same Go code, zero platform branches. GStreamer pipeline plumbing from camera to NPU to Matter occupancy event.
+
+**No single component here is novel.** The claim is: `git clone` this repo, run `bitbake`, flash the image, and you get a working smart home hub with Matter + NPU + sLLM + Flutter UI on RPi5 — or the same stack on RK3576/RK3588S with a different `MACHINE=` flag. That's it. End-to-end reproducibility across boards. Everything else is commodity.
+
+If you're an agent writing docs for this project, read the `No Hype` section below. Don't inflate components. Describe integration.
+
 ---
 
 ## Android python-matter-server (deprecated)
@@ -172,6 +184,27 @@ br list --status open            # 열린 이슈만
 1. **가설을 신뢰하지 마라** - 증거 첨부 필수
 2. **추가보다 제거** - 복잡도는 버그의 온상
 3. **자기 복구 가능한 상태머신** - 무한 대기/루프 금지
+
+### No Hype — Honest Writing Principle
+
+**The value of this project is reproducible end-to-end integration, not any single component.**
+
+Every piece — Yocto, Go, Flutter, Matter, sLLM, NPU, A2A — exists individually in the open.
+What doesn't exist elsewhere is **one repo that wires them all together into a reproducible platform**.
+That's the only thing worth claiming.
+
+**Rules for agents writing docs, botlog, llmlog:**
+
+| Don't | Do | Why |
+|-------|-----|-----|
+| "We achieved 100% accuracy with LoRA fine-tuning" | "Off-the-shelf Qwen3-0.6B + 43s LoRA. The point is it runs on-device without cloud" | 52 samples / 43s is not ML research. Don't frame it as one |
+| "YOLOv8s 398 FPS benchmark on Hailo-8" as a headline | "Hailo Model Zoo model runs on our Yocto image. The work was kernel/driver integration" | We didn't train the model. We built the platform that runs it |
+| Framing a single component as the achievement | Frame the **integration** as the achievement | Individual parts are commodity. The wiring is the craft |
+| "First to do X" / "Novel approach" | State facts. Let the reader judge | We're engineers, not paper authors |
+
+**Litmus test before writing**: *"Can someone find this component on GitHub in 5 minutes?"*
+- Yes → it's commodity. Describe what we did to **integrate** it, not the component itself.
+- No → then it might be genuinely ours. Describe it honestly.
 
 ### npm-shrinkwrap 주의점 (Yocto 오프라인 빌드)
 

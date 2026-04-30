@@ -149,61 +149,39 @@ VC4DTBO ?= "vc4-kms-v3d"
 
 ---
 
-## Matter 컨트롤러 — 듀얼 백엔드 (2026-03-24)
+## Matter 컨트롤러 — matter.js 단일 본류 (2026-04-30)
 
 ### 아키텍처
 
-```
-Flutter APK → Go REST(:8080) → [matterjs | python-matter-server] WS(:5580) → OTBR → Thread
-                                 ↑ Docker 컨테이너                            ↑ Docker 컨테이너
+```text
+Flutter/Linux UI → Go REST(:8080) → matterjs-server WS(:5580) → OTBR → Thread
+                         │
+                         └─ A2A / A2UI / sLLM / aliases / SSE
 ```
 
-Go `client.go`는 **코드 변경 없이** 양쪽 백엔드에 연결됨 (WS 프로토콜 완전 호환 검증 완료).
+**본류는 Linux/Yocto + matter.js다.** HomeAgent는 RPi5 Yocto에서 재현 가능한 로컬 허브를 만드는 프로젝트이며, Matter backend는 `matterjs-server`를 기준으로 유지한다.
 
 ### 현재 사용 버전
 
 | 컴포넌트 | 버전 | 비고 |
 |----------|------|------|
-| **python-matter-server** | 8.1.2 (stable) | CSA 인증, connectedhomeip 기반, Docker 배포 |
-| **home-assistant-chip-core** | 2025.7.0 | arm64 PyPI 휠 (32MB) |
-| **home-assistant-chip-clusters** | 2025.7.0 | 순수 Python |
 | **matterjs-server (matter-server)** | 0.3.5 | matter.js 기반, Yocto systemd / glibc 번들 |
 | **@matter/main** | 0.16.9-alpha | matter.js SDK |
 | **Node.js** | 20.18.2 | matterjs 런타임 |
+| **OTBR** | 0.3.0+git | Yocto 레시피 / Android NDK 검증 이력 |
 
-### Docker 인프라
+### python-matter-server / Android Docker — deprecated reference
 
-| 컴포넌트 | 버전 | 이미지/파일 | 비고 |
-|----------|------|------------|------|
-| **Docker Engine** | 29.3.0 | `docker-29.3.0.tgz` (static arm64) | containerd v2.2.1 + runc 1.3.4 포함 |
-| **Docker Compose** | v5.1.1 | `docker-compose-linux-aarch64` (static) | |
-| **python-matter-server** | 8.1.2 | `matter-server-8.1.2-arm64.tar.gz` | CSA 인증, connectedhomeip 2025.7.0 |
-| **OTBR** | 0.3.0-987e44c | `otbr-0.3.0-arm64.tar.gz` | otbr-agent 0.3.0, Ubuntu 18.04 base |
+`python-matter-server`와 Android Docker 포장은 **경동/Android 호환성 검증을 위해 억지로 해본 경로**다. 경험과 스크립트는 `deprecated/android-docker/`에 보존하지만, HomeAgent 본류가 아니다.
 
-### 플랫폼별 Docker 실행 방식
+| 항목 | 상태 |
+|------|------|
+| python-matter-server 8.1.2 | deprecated reference. 본류 backend 아님 |
+| Docker Engine/Compose arm64 bundle | deprecated Android packaging 자료 |
+| Android Docker/AOSP 패치 | 실험/호환성 기록. 메인 지원 경로 아님 |
+| Android 지원 | Flutter 앱 호환/검증 수준. 서버 본류는 Linux/Yocto |
 
-| | RPi5 (Yocto) | RK3576 (Android 15) |
-|---|---|---|
-| **Docker 방식** | 직접 실행 | 네이티브 실행 (chroot 폐기) |
-| **소켓** | `/var/run/docker.sock` | `/run/docker.sock` (AOSP 010 패치) |
-| **스토리지** | overlay2 | vfs (f2fs + SELinux 호환) |
-| **cgroup** | v2 (표준) | v1 devices (`/dev/cg_devices` → `/sys/fs/cgroup/devices` bind) |
-| **proc** | 표준 | `remount,hidepid=0` 필요 |
-| **compose** | `docker-compose up -d` | `DOCKER_HOST=unix:///run/docker.sock docker-compose up -d` |
-| **AOSP 패치** | — | 006(커널) + 007(/dev/run, cgroup) + 010(/run tmpfs) |
-
-### 백엔드 비교
-
-| | python-matter-server (Docker) | matterjs-server (Yocto/번들) |
-|---|---|---|
-| **SDK** | connectedhomeip (C++ Python 바인딩) | matter.js (TypeScript) |
-| **인증** | CSA 공식 인증 ✅ | — |
-| **배포** | `docker-compose up -d` | systemd 또는 glibc 번들 |
-| **BLE** | BlueZ (`--bluetooth-adapter 0`) | BlueZ + noble |
-| **런타임** | Python 3.12 (~50MB) | Node.js 20 (~300MB) |
-| **WS 포트** | `:5580` | `:5580` |
-| **WS 프로토콜** | `{message_id, command, args}` | 동일 |
-| **용도** | 경동 요구사항 충족, Docker 플랫폼 통합 | 기존 Yocto 이미지, HA matter.js 전환 대비 |
+Go `client.go`가 python-matter-server WS와도 연결된다는 것은 **호환성 검증 결과**이지, 듀얼 백엔드를 계속 제품 경로로 운영한다는 뜻이 아니다.
 
 ### matterjs-server 릴리즈 타임라인
 
@@ -224,8 +202,8 @@ v0.5.7  2026-03-13   ← 최신 안정 (matter.js 0.17-alpha)
 | **0.17-alpha** | **2026-03** | **1.5.0 준비** | **0.5.x (최신)** |
 | 0.17 (예상) | 2026 Q2-Q3 | 1.5.0 | — |
 
-> HA가 matter.js로 전환 중 — python-matter-server는 maintenance mode.
-> 우리는 양쪽 다 지원하되, 경동 대응은 python-matter-server 우선.
+> HA도 matter.js 방향으로 이동 중이다. HomeAgent는 Linux/Yocto + matter.js를 본류로 둔다.
+> python-matter-server는 Android/Docker 호환성 검증 이력으로만 보존한다.
 
 > 상세: [docs/MATTER.md](docs/MATTER.md)
 

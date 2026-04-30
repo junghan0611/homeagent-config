@@ -31,7 +31,7 @@
 | [`BUILD.md`](BUILD.md) | 개발/빌드팜/산출물 워크플로 | 빌드·배포·dist 정리 | 절차는 HOWTO, 자원/빌드팜은 BUILD |
 | [`FLUTTER.md`](FLUTTER.md) | Flutter shell, NixOS 빌드, WebView/Native 구조 | UI/앱 작업 | flutter/README.md는 이 문서로 위임 |
 | [`THREAD.md`](THREAD.md) | OTBR, RCP, Thread 네트워크 | Thread/Matter 연결 문제 | HARDWARE의 실제 동글 상태와 구분 |
-| [`MATTER.md`](MATTER.md) | Matter SDK/matter.js/python-matter-server 판단 근거 | Matter backend 변경 | `MATTER-VERIFY.md` 핵심 검증 흡수 완료 |
+| [`MATTER.md`](MATTER.md) | Matter SDK/matter.js 본류와 Android BLE 경계 | Matter backend 변경 | python-matter-server는 deprecated 참고만 |
 | [`A2A.md`](A2A.md) | Agent protocol, AgentCard, Constitutional AI | A2A/에이전트 연동 | 철학+구현이 길어지면 구현 절차 분리 |
 | [`A2UI.md`](A2UI.md) | 서버 주도 UI, surface, 동적 UI 전략 | UI surface/LLM UI 작업 | README에는 한 문단만 남김 |
 | [`PLATFORM-MATRIX.md`](PLATFORM-MATRIX.md) | RPi5/RK3576/OPi5 플랫폼 차이 | 플랫폼별 분기 작업 | README 플랫폼 표의 상세판 |
@@ -53,7 +53,7 @@
 
 ## 현재 방향 메모
 
-- HomeAgent 본류는 **RPi5 + Yocto + Matter/Thread + Hailo/sLLM/A2A** 중심.
+- HomeAgent 본류는 **RPi5 + Yocto + matter.js + Matter/Thread + Hailo/sLLM/A2A** 중심.
 - OPi5는 **mainline 6.14 lab target**으로 보존한다. vendor 6.1/RKNN NPU 경로는 보류하고 llmlog `20260331T114944`를 참고한다.
 - ESP32/Zig 계열 edge 작업은 `~/repos/gh/edgeagent-config`로 분리한다.
 - 장난감/교육용 에이전트는 `~/repos/gh/legoagent-config`로 분리한다.

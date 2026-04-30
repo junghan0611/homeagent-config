@@ -2,9 +2,9 @@
 
 ## 왜 이 문서가 필요한가
 
-HomeAgent는 RPi5(Yocto Linux)와 RK3576(Android)에서 동일한 역할을 수행한다.
+HomeAgent의 본류는 RPi5(Yocto Linux)다. RK3576(Android)은 호환성 검증 경로로 남기되, 메인 지원 배포로 보지 않는다.
 "같은 역할이면 같은 베이스에서 처리" 원칙을 지키되,
-플랫폼 차이로 불가피한 분기점을 **명시적으로** 기록한다.
+Android에서 불가피했던 분기점을 **검증 이력으로** 기록한다.
 
 ## 스택 비교
 
@@ -21,9 +21,9 @@ HomeAgent는 RPi5(Yocto Linux)와 RK3576(Android)에서 동일한 역할을 수�
 │              여기서부터 플랫폼 분기                                 │
 └─────────────────────────────────────────────────────────────────┘
 
-  RPi5 (Yocto Linux)                    RK3576 (Android 15)
-  ──────────────────                    ───────────────────
-  ivi-homescreen (Wayland)              Flutter APK (Android WebView)
+  RPi5 (Yocto Linux, mainline)          RK3576 (Android 15, compatibility)
+  ────────────────────────────          ─────────────────────────────────
+  ivi-homescreen (Wayland)              Flutter APK compatibility
   systemd services                      shell scripts (start/stop)
   │                                     │
   ├─ otbr-agent                         ├─ otbr-agent
@@ -58,7 +58,7 @@ HomeAgent는 RPi5(Yocto Linux)와 RK3576(Android)에서 동일한 역할을 수�
 | **backbone** | eth0 | wlan0 | ❌ 다른 IF |
 | **ot-ctl** | PATH에 있음 | /data/local/tmp/otbr/ | ❌ 다른 경로 |
 
-**결론**: 소스는 동일하나 빌드/배포 방식이 다름. `scripts/build-otbr.sh`(Android), `yocto/meta-homeagent/.../ot-br-posix_git.bbappend`(Yocto)에서 각각 관리.
+**결론**: 소스는 동일하나 본류는 Yocto 레시피다. Android NDK 빌드는 검증 이력/호환성 경로로 관리한다.
 
 ### 2. Go homeagent
 
@@ -72,7 +72,7 @@ HomeAgent는 RPi5(Yocto Linux)와 RK3576(Android)에서 동일한 역할을 수�
 | 항목 | RPi5 | RK3576 | 비고 |
 |------|------|--------|------|
 | **Node.js** | Yocto nodejs 패키지 | glibc 번들 (ld-linux) | ❌ 다른 배포 |
-| **BLE** | noble (Linux HCI) | `--bluetooth-adapter 0` | BLE HAL 차이 |
+| **BLE** | noble (Linux HCI) | Flutter/Android BLE API | Android HAL은 BlueZ/HCI 미노출 |
 | **코드** | 동일 | 동일 | ✅ |
 
 ### 4. Flutter APK

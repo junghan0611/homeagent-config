@@ -38,17 +38,16 @@ Flutter App (ivi-homescreen / Android APK)
                    ├── Matter WS Client (single ReadLoop)
                    ├── Hailo-8 NPU (YOLOv8s object detection)
                    └── Matter Backend (:5580)
-                        ├── python-matter-server (Docker) ← current
-                        ├── matterjs-server (legacy/open-source)
-                        ├── BLE commissioning (CHIP SDK AAR)
-                        └── OTBR (native build, BBR=ON)
+                        ├── matterjs-server (matter.js) ← mainline
+                        ├── OTBR (Yocto/Linux)
+                        └── Android/Flutter compatibility ← verified, not mainline
 ```
 
 ---
 
 ## Platform Support
 
-HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) for the full comparison.
+HomeAgent's mainline target is RPi5 Yocto/Linux. Android/RK3576 was verified as a compatibility path, but it is not the main supported deployment. See [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) for the full comparison.
 
 ```
                      Common Layer
@@ -56,27 +55,27 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
   │  Flutter APK (WebView Shell)      — same code    │
   │  Go homeagent (:8080)             — same binary  │
   │  Lit UI (ui/dist/)                — same bundle  │
-  │  Matter Backend (:5580)           — Docker       │
-  │  OTBR (Thread Border Router)      — Docker       │
+  │  Matter Backend (:5580)           — matter.js    │
+  │  OTBR (Thread Border Router)      — Linux/Yocto  │
   │  matter/ (pure Dart)              — same BLE     │
   ├──────────────────────────────────────────────────┤
   │               Platform Divergence                │
   └──────────────────────────────────────────────────┘
 
-  RPi5 (Yocto Linux)              RK3576 (Android 15)
-  ─────────────────              ───────────────────
-  ivi-homescreen (Wayland)       Flutter APK (WebView)
-  docker-compose up -d           docker-android.sh (native Docker)
+  RPi5 (Yocto Linux)              RK3576 (Android 15, verified path)
+  ─────────────────              ─────────────────────────────────
+  ivi-homescreen (Wayland)       Flutter APK compatibility
+  matterjs + OTBR on Linux       Android-specific scripts archived/secondary
   /dev/ttyUSB0 (ZBDongle-E)     /dev/ttyS5 (ESP32-H2)
   eth0 backbone                  wlan0 backbone
-  Hailo-8 NPU (optional)        —
+  Hailo-8 NPU                    —
 ```
 
 | Platform | Board | OS | Thread RCP | Status |
 |----------|-------|----|-----------|--------|
 | RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap (6.6 LTS) | ZBDongle-E (USB) | ✅ Production |
 | **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (mainline 6.14)** | **ZBDongle-E (USB)** | **🟡 Lab only — SSH/GPU verified, NPU parked** |
-| RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
+| RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | 🟡 Verified compatibility, not mainline |
 
 > OPi5 is kept as a lab target on mainline 6.14 to avoid vendor BSP drift. RKNN/vendor 6.1 notes are parked in llmlog `20260331T114944`; focus stays on RPi5 for HomeAgent, `edgeagent-config` for ESP32/Zig work, and `legoagent-config` for toy-agent experiments.
 
@@ -213,17 +212,16 @@ Multi-platform. Same hub, different hardware.
 
 ### Phase 4: HA Ecosystem + Flutter-first ← **current**
 
-The platform. Docker-based Matter+OTBR, Go as extension layer, Flutter as the universal client.
+The platform. Linux/Yocto Matter hub, Go as extension layer, Flutter as the universal client.
 
-**Principle**: Linux (RPi5) first → Android second. Never Android-locked.
+**Principle**: Linux (RPi5) first. Android is a verified compatibility path, not the main supported deployment.
 
-- [x] **Docker-based deployment** — RPi5: `docker-compose up -d`, Android: `docker-android.sh start/load/up`
-- [x] **python-matter-server 8.1.2** — HA 공식 Matter 컨트롤러, Go 코드 변경 0줄로 호환
-- [x] **Android native Docker** — chroot 폐기 → 네이티브 실행. AOSP 3개 패치로 완결
-- [x] **Android Docker 컨테이너 실행** — matter-server Docker + OTBR 네이티브 하이브리드 구성 ✅
-- [x] **CHIP SDK AAR BLE commissioning** — Thread + WiFi, multi-admin handoff to python-matter-server ✅
-- [x] **OTBR BBR=ON + AOSP 011 패치** — MRT6 충돌 해결, mDNS/SRP proxy 동작 ✅
-- [x] **Thread 도어센서 커미셔닝** — BLE→PASE→Thread→CASE→CommissionComplete→handoff ✅
+- [x] **matter.js backend** — matterjs-server as the main Matter controller on Linux/Yocto
+- [x] **Go extension layer** — REST/SSE, aliases, A2A, A2UI, sLLM fallback, system/thread state
+- [x] **Android compatibility verified** — Flutter APK + Go + matterjs experiments completed
+- [x] **Deprecated Android Docker package archived** — `deprecated/android-docker/`, not mainline
+- [x] **Thread door sensor commissioning verified** — BLE→PASE→Thread→CASE→CommissionComplete
+- [x] **OTBR + Thread path verified** — RPi5 mainline, Android/RK3576 as compatibility evidence
 - [x] **Swagger UI** — OpenAPI 3.0 spec + /docs endpoint
 - [x] **REST API 12 endpoints** — devices, commission, command, chat, home, events, system, thread
 - [ ] **Flutter Linux app** — RPi5 ivi-homescreen native UI (not WebView), matterjs WS direct
@@ -280,16 +278,15 @@ The product. Ship it.
 └─────────────────┬───────────────────────────┘
                   │ WebSocket (:5580)
 ┌─────────────────┴───────────────────────────┐
-│  Matter Backend (Docker)                    │
-│  ├── python-matter-server 8.1.2 (current)   │
-│  └── matterjs-server (legacy)               │
-│  BLE commissioning · Thread · WiFi · Events │
+│  Matter Backend (matter.js)                 │
+│  └── matterjs-server (:5580) mainline       │
+│  BLE/on-network commissioning · Events      │
 └─────────────────┬───────────────────────────┘
                   │ Spinel HDLC (UART)
 ┌─────────────────┴───────────────────────────┐
-│  Thread Border Router (Docker)               │
+│  Thread Border Router (Linux/Yocto)          │
 │  wpan0 · SRP Server · Border Routing        │
-│  RPi5: docker-compose / RK3576: native Docker│
+│  Android/RK3576 path is compatibility-only   │
 └─────────────────┬───────────────────────────┘
                   │
               ESP32-H2 / ZBDongle-E (Thread RCP)
@@ -349,21 +346,21 @@ HomeAgent is not a rule engine. It's an **agent with context, principles, and ju
 ## Runtime Stack
 
 ```
-RPi5 (Yocto) / RK3576 (Android) — HomeAgent Hub
-├── Docker   containerd + dockerd (static binary, both platforms)
-│   └── python-matter-server (Matter protocol engine, Docker container)
-├── Native   OTBR (Thread Border Router, NDK cross-build, BBR=ON)
+RPi5 (Yocto/Linux) — HomeAgent Hub mainline
+├── Node.js  matterjs-server (Matter protocol engine, matter.js)
+├── Native   OTBR (Thread Border Router)
 ├── Go       HomeAgent (controller, AI, state machine, A2A, Swagger UI)
-├── Dart     Flutter Native UI / WebView Shell + CHIP SDK AAR BLE commissioning
+├── Dart     Flutter Native UI / WebView Shell compatibility
 ├── C/C++    llama.cpp (sLLM on-device inference)
 └── (none)   Python — not used on the hub (training only on GPU cluster)
+
+Android/RK3576: verified compatibility path only. Docker/python-matter-server experiments are archived under deprecated/android-docker.
 
 Dev environment (NixOS host)
 ├── Go 1.25  go build / GOOS=linux GOARCH=arm64
 ├── Flutter  3.38.9 (APK build, Linux desktop)
-├── Docker   28.x (image pull/save for offline deploy)
-├── NDK r27  ot-br-posix cross-compile (legacy native build)
-└── Node 22  matterjs-server development (legacy)
+├── NDK r27  ot-br-posix cross-compile (Android compatibility experiments)
+└── Node 22  matterjs-server development
 ```
 
 ---

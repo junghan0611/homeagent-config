@@ -176,9 +176,9 @@ chip-tool booleanstate read state-value <node-id> 1
 - chip-tool: **반드시 v1.4.0.0 + Docker tag 81** (glib 호환)
 - `--bypass-attestation-verifier true` 필수
 
-## 9. Android/RK3576 배포 요약
+## 9. Android/RK3576 호환성 검증 요약
 
-Android 보드는 HomeAgent의 두 번째 검증 경로다. 자세한 플랫폼 차이는 `docs/PLATFORM-MATRIX.md`, Flutter 구조는 `docs/FLUTTER.md`, Matter BLE 경계는 `docs/MATTER.md`를 본다.
+Android 보드는 HomeAgent의 메인 지원 배포가 아니다. 과거 호환성 검증 경로와 Flutter APK 확인 절차만 보존한다. 자세한 플랫폼 차이는 `docs/PLATFORM-MATRIX.md`, Flutter 구조는 `docs/FLUTTER.md`, Matter BLE 경계는 `docs/MATTER.md`를 본다.
 
 ```bash
 # 개발 환경: Android SDK 때문에 --impure 필요

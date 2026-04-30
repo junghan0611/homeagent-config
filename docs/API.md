@@ -10,7 +10,7 @@ Matter 디바이스를 제어하기 위한 표준 인터페이스.
 ## 설계 원칙
 
 1. **REST-first** — 제어/조회는 REST, 실시간 이벤트만 SSE
-2. **OHF 시맨틱 호환** — python-matter-server / matterjs-server와 동일한 개념 모델
+2. **OHF 시맨틱 호환** — Matter node/endpoint/cluster 개념 모델 유지
 3. **플랫폼 무관** — 웹, Android, CLI, 자동화 스크립트 어디서든 호출
 4. **단일 소스** — Go Hub이 모든 상태의 진실의 원천 (Single Source of Truth)
 
@@ -419,7 +419,7 @@ print(result["reply"])
 
 ## OHF 호환성
 
-HomeAgent API는 [Open Home Foundation](https://www.openhomefoundation.org/)의 python-matter-server와 동일한 개념 모델을 사용합니다:
+HomeAgent API는 [Open Home Foundation](https://www.openhomefoundation.org/) Matter 생태계와 같은 개념 모델을 사용합니다. backend 본류는 matterjs-server이며, python-matter-server는 deprecated 호환성 검증 이력으로만 남깁니다:
 
 | OHF 개념 | HomeAgent 매핑 | 비고 |
 |----------|---------------|------|
@@ -429,10 +429,10 @@ HomeAgent API는 [Open Home Foundation](https://www.openhomefoundation.org/)의 
 | Attribute | `attributes` (상세 조회) | Matter 속성 경로 |
 | Fabric | 내부 관리 | matterjs-server가 관리 |
 
-**python-matter-server → HomeAgent 전환 시:**
-- WebSocket → REST (더 단순)
-- 동일한 node_id / command 시맨틱
-- SSE로 이벤트 구독 (WebSocket 대안)
+**외부 클라이언트 연동 시:**
+- Matter WebSocket 세부사항 대신 Go REST를 호출
+- 동일한 node_id / command 시맨틱 유지
+- SSE로 이벤트 구독
 
 ---
 

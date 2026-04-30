@@ -37,10 +37,10 @@ scripts/ 폴더는 matterjs-server(오픈소스) 전용.
 
 ### Phase 4 원칙
 
-1. **Docker = Matter+OTBR 배포** — python-matter-server + OTBR Docker 컨테이너. 네이티브 실행 (chroot 폐기)
+1. **Linux/Yocto + matter.js가 본류** — Matter backend는 matterjs-server 기준. python-matter-server/Docker는 deprecated 참고 자료.
 2. **Go 서버 = 확장 레이어** — 커스텀 REST, aliases, sLLM, A2UI, 클라이언트별 API
-3. **Flutter = 유니버셜 클라이언트, 네이티브 UI 기본** — Android는 반드시 네이티브 UI (NavShell). WebView는 RPi5 전용. Android 종속 금지
-4. **HA Kotlin→Dart** — ha-android 핵심 로직을 Flutter로 포팅, 오픈소스 기여 경로
+3. **Flutter = 유니버셜 클라이언트, 네이티브 UI 기본** — Android는 호환성 검증/앱 지원 수준. 서버 본류는 Linux/Yocto.
+4. **Android 종속 금지** — Android Docker/python-matter-server 경로는 `deprecated/android-docker/`에 보관, 메인 지원 경로 아님.
 
 ### Flutter UI 규칙 (흔들리지 않음)
 
@@ -55,21 +55,21 @@ scripts/ 폴더는 matterjs-server(오픈소스) 전용.
 ### 아키텍처 결정 (2026-03-25 업데이트)
 
 ```
-APP → Go Server (:8080) → python-matter-server (:5580) → OTBR → Matter 디바이스
-                            ↑ Docker container              ↑ Docker container
+APP/Flutter → Go Server (:8080) → matterjs-server (:5580) → OTBR → Matter 디바이스
+                                     ↑ matter.js / Linux-Yocto mainline
 ```
 
-- **앱은 Go 서버만 안다** (단일 진입점, 이중 경로 금지)
-- **Go가 matterjs WS를 래핑** (13/31 명령, 42% 커버리지)
-- **Go가 확장 API 추가** (aliases, LLM, A2UI, OTBR, SSE)
-- **matter_client.dart는 예비용** (경량 모드/디버깅, 현재 미사용)
+- **앱은 Go 서버를 안정 진입점으로 본다** (외부 API는 Go REST/SSE 기준)
+- **Go가 matterjs WS를 래핑/확장** (aliases, LLM, A2UI, OTBR, SSE)
+- **Android는 Flutter 호환성 경로** — 서버 배포 주력으로 보지 않는다.
+- **python-matter-server/Docker는 deprecated** — 경동/Android 검증 이력으로만 보존.
 
 ### 현재 상태 (2026-04-03 업데이트)
 
 - Go: 18 REST 엔드포인트, 117 PASS
 - Flutter: 89 PASS, 디바이스 상세 화면 완성
 - WS 커버리지: 13/31 (42%)
-- RPi5 + Android 양쪽 배포 동작
+- RPi5 본류 동작, Android/RK3576 호환성 검증 이력 보존
 - **OPi5는 lab target**: 커널 6.14 + Mesa 24.1.7 + Mali-G610 + HDMI 4K 검증 완료. vendor 6.1/RKNN NPU 경로는 보류 — 필요 시 llmlog `20260331T114944` 참고.
 - 에이전트4 리서치: HA 생태계 5개 분석 완료 (office/research-*.md)
 

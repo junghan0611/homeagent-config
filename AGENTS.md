@@ -15,6 +15,26 @@ The ugly parts are the real work: kernel 4K page size patches for Hailo driver c
 
 If you're an agent writing docs for this project, read the `No Hype` section below. Don't inflate components. Describe integration.
 
+### Current Work Contract (read before doing anything)
+
+**Do not optimize for broad board bring-up right now.**
+
+The current mission is:
+1. keep **RPi5 + Hailo-8** as the mainline HomeAgent hub,
+2. integrate `edgeagent-config` micro-family nodes into that hub,
+3. prepare HomeAgent to receive, register, mirror, and bridge those nodes.
+
+When in doubt, prefer work that strengthens:
+- companion registry
+- NodeCard ingest
+- edge health/capability mirroring
+- inner transport bridge (ESP-NOW ↔ MQTT/A2A/home transport)
+
+When in doubt, defer work on:
+- new board validation for its own sake
+- Android-specific deployment expansion
+- OPi5 vendor/NPU resurrection
+
 ---
 
 ## Android python-matter-server (deprecated)
@@ -64,7 +84,7 @@ APP/Flutter → Go Server (:8080) → matterjs-server (:5580) → OTBR → Matte
 - **Android는 Flutter 호환성 경로** — 서버 배포 주력으로 보지 않는다.
 - **python-matter-server/Docker는 deprecated** — 경동/Android 검증 이력으로만 보존.
 
-### 현재 상태 (2026-04-03 업데이트)
+### 현재 상태 (2026-04-30 업데이트)
 
 - Go: 18 REST 엔드포인트, 117 PASS
 - Flutter: 89 PASS, 디바이스 상세 화면 완성
@@ -72,6 +92,34 @@ APP/Flutter → Go Server (:8080) → matterjs-server (:5580) → OTBR → Matte
 - RPi5 본류 동작, Android/RK3576 호환성 검증 이력 보존
 - **OPi5는 lab target**: 커널 6.14 + Mesa 24.1.7 + Mali-G610 + HDMI 4K 검증 완료. vendor 6.1/RKNN NPU 경로는 보류 — 필요 시 llmlog `20260331T114944` 참고.
 - 에이전트4 리서치: HA 생태계 5개 분석 완료 (office/research-*.md)
+
+### 현재 최우선 포커스 (RPI5 + Hailo-8 + EdgeAgent 연동)
+
+앞으로 HomeAgent의 주력은 **새 보드 검증**보다 **RPi5(Hailo-8 포함 풀세트)** 와 `edgeagent-config`에서 만드는 micro family node의 연동이다.
+
+#### 역할 분담
+
+- `homeagent-config` = **대표/bridge/confederation 노드**
+- `edgeagent-config` = **1원 내부 micro family node**
+- `legoagent-config` = 장난감/교육/실험용 별도 생태
+
+#### HomeAgent가 이후 맡아야 할 것
+
+1. **edge node registration / companion registry**
+   - Matter node registry와 별도로, edge node의 identity/lifecycle/transport를 다룰 준비를 한다.
+2. **NodeCard 수용 계층**
+   - edge node가 방송/전달한 card를 받아 저장·검증·대표 표면으로 변환한다.
+3. **대표/미러링 계층**
+   - edge의 card/health/state summary/capability를 HomeAgent가 대표 발신하거나 미러링한다.
+4. **inner transport bridge**
+   - ESP-NOW 같은 inner transport와 MQTT/A2A/home transport 사이의 bridge 관점을 유지한다.
+
+#### EdgeAgent 정렬 원칙
+
+- edge는 transport를 바꿔도 envelope/contract는 유지한다.
+- 보드는 boot-stable static profile만 주입하고, **NodeCard는 코어가 만든다**.
+- HomeAgent는 raw peripheral 세부보다 **card / capability / health / summary**를 먼저 받는 쪽으로 설계한다.
+- 새 작업에서 Android 전용 경로나 새 보드 포팅보다, **RPi5 ↔ edge card ingest / registry / mirroring** 관련 작업을 우선한다.
 
 ---
 
@@ -305,6 +353,7 @@ That's the only thing worth claiming.
 | 플랫폼 분기 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) |
 | Yocto 레시피 | [docs/YOCTO-OFFLINE-FIRST.md](docs/YOCTO-OFFLINE-FIRST.md) |
 | Zigbee/MQTT/ESP32 경계 | [docs/EDGE-ZIGBEE.md](docs/EDGE-ZIGBEE.md) + `~/repos/gh/edgeagent-config` |
+| Edge family 연동 | `~/repos/gh/edgeagent-config` README/AGENTS + [docs/A2A.md](docs/A2A.md) |
 
 ### 핵심 docs
 
@@ -322,6 +371,8 @@ That's the only thing worth claiming.
 | [docs/YOCTO-OFFLINE-FIRST.md](docs/YOCTO-OFFLINE-FIRST.md) | Yocto 오프라인 레시피 정책 |
 | [docs/EDGE-ZIGBEE.md](docs/EDGE-ZIGBEE.md) | HomeAgent ↔ Edge/Zigbee/MQTT 경계 |
 | [VERSION.md](VERSION.md) | 버전/스택 SSOT |
+| `~/repos/gh/edgeagent-config/README.md` | Edge 4-layer architecture, card-first principle |
+| `~/repos/gh/edgeagent-config/AGENTS.md` | multi-board posture, invariant-first work rules |
 | [HARDWARE.md](HARDWARE.md) | 실제 장비 상태 SSOT |
 
 ## Landing the Plane (세션 종료)

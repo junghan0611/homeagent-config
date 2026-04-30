@@ -45,9 +45,26 @@ Flutter App (ivi-homescreen / Android APK)
 
 ---
 
+## Current Focus
+
+HomeAgent is no longer primarily a board-validation project. The current work contract is:
+
+1. **RPi5 + Hailo-8** remains the mainline hub.
+2. `edgeagent-config` produces the **micro-family node** side.
+3. HomeAgent evolves into the **representative / bridge / confederation** side.
+
+This means the next important integration surfaces are:
+
+- companion registry
+- NodeCard ingest
+- edge health/capability mirroring
+- bridge between inner transports (e.g. ESP-NOW) and home transports (MQTT/A2A)
+
+If a change does not help that direction, it is probably secondary for now.
+
 ## Platform Support
 
-HomeAgent's mainline target is RPi5 Yocto/Linux. Android/RK3576 was verified as a compatibility path, but it is not the main supported deployment. See [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) for the full comparison.
+HomeAgent's mainline target is RPi5 Yocto/Linux. Android/RK3576 was verified as a compatibility path, but it is not the main supported deployment. The current focus is no longer broad board validation; it is **RPi5 + Hailo-8 mainline** and the integration of micro-family nodes being designed in `edgeagent-config`. See [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) for the full comparison.
 
 ```
                      Common Layer
@@ -216,6 +233,23 @@ The platform. Linux/Yocto Matter hub, Go as extension layer, Flutter as the univ
 
 **Principle**: Linux (RPi5) first. Android is a verified compatibility path, not the main supported deployment.
 
+### Current Integration Focus
+
+HomeAgent is being re-centered around **RPi5 + Hailo-8** as the mainline hub and `edgeagent-config` as the source of small edge-family nodes.
+
+- `homeagent-config` = representative / bridge / confederation node
+- `edgeagent-config` = micro family node side (ESP32-WROOM, ESP32-CAM, future MCU family)
+- `legoagent-config` = toy/education/experiment track
+
+Near-term design pressure on HomeAgent:
+
+- companion registry for edge nodes
+- NodeCard ingest and validation
+- mirroring/export of edge card + health + capability
+- bridge between inner transports (e.g. ESP-NOW) and home transports (MQTT/A2A)
+
+That means future HomeAgent work should prefer **hub↔edge integration** over new board validation.
+
 - [x] **matter.js backend** — matterjs-server as the main Matter controller on Linux/Yocto
 - [x] **Go extension layer** — REST/SSE, aliases, A2A, A2UI, sLLM fallback, system/thread state
 - [x] **Android compatibility verified** — Flutter APK + Go + matterjs experiments completed
@@ -233,6 +267,15 @@ The platform. Linux/Yocto Matter hub, Go as extension layer, Flutter as the univ
 ### Phase 5: Agent Intelligence
 
 The mind. AI that understands context.
+
+#### Edge federation TODOs (coming into focus)
+
+- [ ] **Companion registry** — edge node registration, lifecycle, trust boundary
+- [ ] **NodeCard ingest** — receive/store/validate edge cards
+- [ ] **Representative mirroring** — export edge state/health/capability through HomeAgent
+- [ ] **Inner transport bridge** — ESP-NOW/broadcast style inner transport ↔ MQTT/A2A/home transport
+
+The longer-term shape is: edge nodes stay small and local; HomeAgent represents them outward.
 
 - [x] **A2A Phase 0+1** — AgentCard + JSON-RPC + Task lifecycle + SSE streaming
 - [x] **sLLM benchmark** — Qwen3-0.6B: baseline 42% → LoRA 88% (action 100%)

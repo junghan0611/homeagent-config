@@ -189,6 +189,137 @@ Layer 3: Protocol Bindings
 
 ---
 
+## HomeAgent ↔ EdgeAgent federation sketch
+
+`edgeagent-config`는 작은 node가 자신의 카드와 envelope을 스스로 말하는 쪽을 정의한다. `homeagent-config`는 그 node들을 받아 **대표/bridge/confederation** 역할을 맡는다. 이 섹션은 HomeAgent가 edge family를 어떻게 수용할지에 대한 문서 초안이다.
+
+### 1. Companion registry key shape
+
+HomeAgent는 edge node를 두 층으로 본다.
+
+| 층 | 의미 | 후보 키 |
+|----|------|---------|
+| **persistent identity** | "어떤 node family member인가" | `mac + board_family + firmware_role` |
+| **instance identity** | "이번 부팅 인스턴스는 무엇인가" | `persistent identity + boot_epoch` |
+
+원칙:
+
+- `mac`는 하드웨어 축이다.
+- `board_family`는 HAL/profile 축이다.
+- `firmware_role`은 같은 보드라도 어떤 존재로 동작하는지 구분한다.
+- `boot_epoch`는 같은 persistent node의 **새 부팅 인스턴스**를 구분한다.
+
+HomeAgent 내부에서는 필요하면 surrogate id를 둘 수 있지만, raw edge envelope과 registry의 1차 키는 위 조합을 기준으로 한다.
+
+### 2. Raw edge envelope 저장 방식
+
+HomeAgent는 edge가 보낸 canonical envelope을 **원형 보존**한다.
+
+저장 계층은 세 층으로 나눈다.
+
+| 층 | 내용 |
+|----|------|
+| `raw_envelope` | 수신한 CBOR 바이트 원문 |
+| `decoded_envelope` | kind/from/to/seq/boot_epoch/body를 decode한 구조화 view |
+| `mirror_metadata` | RSSI, serial port, ingest time, bridge source, trust/decode status 등 HomeAgent가 덧붙인 정보 |
+
+원칙:
+
+1. **canonical envelope 바깥에만 mirror metadata를 둔다.**
+2. **raw CBOR를 항상 복구 가능하게 둔다.**
+3. HomeAgent의 decode/summary/view는 파생물이지 원본이 아니다.
+4. `from`, `seq`, `boot_epoch`, `uptime_ms`는 canonical 의미를 유지한다.
+
+즉 저장 모델은 대략 이렇게 된다.
+
+```text
+EdgeIngressRecord {
+  raw_cbor,
+  decoded_envelope,
+  mirror_metadata,
+}
+```
+
+### 3. Federated public card / representative view
+
+HomeAgent는 edge node를 외부에 그대로 쏟아내는 대신, **대표 view**를 만든다.
+
+세 층을 구분한다.
+
+| 층 | 설명 |
+|----|------|
+| **raw edge card** | edge가 직접 만든 NodeCard. 불변 계약면 |
+| **mirror view** | HomeAgent 내부에서 쓰는 ingest/registry/health view |
+| **federated public card** | 외부 A2A/MQTT/home transport로 내보내는 대표 표현 |
+
+대표 규칙:
+
+- edge의 `NodeCard`는 그대로 보존한다.
+- HomeAgent는 여러 edge node를 한 confederation 아래에 묶어 보여줄 수 있다.
+- upstream에는 필요에 따라
+  - 개별 edge card 그대로,
+  - 집계된 representative view,
+  - 둘 다
+  를 노출할 수 있다.
+
+HomeAgent 자신의 card와 edge card의 관계는 다음과 같다.
+
+```text
+HomeAgent card
+  ├─ self capabilities (hub, matter, thread, llm, ui)
+  └─ represented companions
+       ├─ edge raw card refs
+       └─ federated summary / public projection
+```
+
+즉 HomeAgent는 edge의 원본 정체성을 지우지 않고, 그 위에 대표/집계/요약 계층을 올린다.
+
+### 4. Transport bridge posture
+
+bridge의 기본 자세는 **semantic translation은 제한적으로, canonical preservation은 강하게**다.
+
+#### 그대로 유지해야 하는 것
+
+- canonical envelope kind: `card / query / event / ack`
+- `from`, `to`, `seq`, `boot_epoch`, `uptime_ms`
+- `body`의 canonical meaning
+- raw CBOR recoverability
+
+#### 번역 가능한 것
+
+- Layer 4 carrier framing (ESP-NOW ↔ serial ↔ MQTT payload ↔ A2A transport)
+- addressing adaptation
+- retry / buffering / fragmentation
+- HomeAgent 바깥 시스템이 요구하는 topic/path/REST/A2A wrapper
+
+#### 번역하면 안 되는 것
+
+- edge canonical envelope 내부 필드 삭제
+- mirror metadata를 canonical envelope 안에 삽입
+- wall-clock과 monotonic/boot identity 의미 섞기
+- transport 제약 때문에 contract shape 자체를 바꾸기
+
+요약하면:
+
+```text
+inner transport changes carrier,
+HomeAgent preserves contract,
+upstream view may be richer,
+but raw edge truth remains recoverable.
+```
+
+### HomeAgent implementation posture (document-level)
+
+이 문서 단계에서 HomeAgent는 다음 규칙을 따른다.
+
+1. **registry는 own** — HomeAgent가 companion registry를 가진다.
+2. **raw envelope은 preserve** — CBOR 원문을 잃지 않는다.
+3. **mirror는 derive** — 내부 view는 파생물이다.
+4. **public representative view는 separate** — 외부 대표 표면은 원본과 분리한다.
+5. **edge canonical contract는 modify하지 말 것** — bridge는 보존 우선이다.
+
+---
+
 ## HomeAgent ↔ A2A 매핑
 
 ### 이미 있는 것 → A2A로 노출

@@ -75,8 +75,10 @@ HomeAgent runs on two platforms from the same codebase. See [docs/PLATFORM-MATRI
 | Platform | Board | OS | Thread RCP | Status |
 |----------|-------|----|-----------|--------|
 | RPi5 | Raspberry Pi 5 8GB | Yocto scarthgap (6.6 LTS) | ZBDongle-E (USB) | ✅ Production |
-| **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (vendor 6.1)** | **ZBDongle-E (USB)** | **✅ Build OK (2026-04-09)** |
+| **OPi5** | **Orange Pi 5 v1.3.2** | **Yocto scarthgap (mainline 6.14)** | **ZBDongle-E (USB)** | **🟡 Lab only — SSH/GPU verified, NPU parked** |
 | RK3576 | RK3576-EVB | Android 15 | ESP32-H2 (UART) | ✅ Verified |
+
+> OPi5 is kept as a lab target on mainline 6.14 to avoid vendor BSP drift. RKNN/vendor 6.1 notes are parked in llmlog `20260331T114944`; focus stays on RPi5 for HomeAgent, `edgeagent-config` for ESP32/Zig work, and `legoagent-config` for toy-agent experiments.
 
 ### Cross-Platform Verification (2026-03-18)
 
@@ -246,7 +248,7 @@ The mind. AI that understands context.
 
 The product. Ship it.
 
-- [x] **RK3588 Yocto port** — OPi5 vendor BSP 6.1 headless NPU hub, 빌드 성공 (2026-04-09)
+- [ ] **RK3588/OPi5 follow-up** — lab target only; mainline 6.14 SSH/GPU verified, vendor 6.1 NPU path parked
 - [ ] Hailo-8 M.2 NPU on RPi5 — object detection, presence sensing
 - [ ] Zig firmware for custom Thread sensors
 - [ ] Client branding APK (bd-2jt)
@@ -395,25 +397,15 @@ OPENROUTER_API_KEY=sk-... /opt/homeagent/homeagent
 ./run.sh bundle            # Full bundle (Go+Node+matterjs+UI)
 ```
 
-### Option D: Deploy to Android Board — Docker + Native OTBR (RK3576)
+### Option D: Android Docker Package (deprecated reference)
+
+Android Docker packaging was kept for a client/compatibility path, but it is not the HomeAgent core path. Use the Flutter APK/native deployment path unless you explicitly need the old Docker package.
 
 ```bash
-# PC (one command — push Docker + OTBR + Go + APK)
-cd android-docker && bash setup-docker.sh
-
-# Board (one command — Docker + matter-server + OTBR + Thread + Go + APK)
-/data/local/tmp/docker-android.sh all
-
-# Or step by step:
-/data/local/tmp/docker-android.sh start      # Docker Engine
-/data/local/tmp/docker-android.sh load       # Load matter-server image
-/data/local/tmp/docker-android.sh up         # Start matter-server container
-/data/local/tmp/docker-android.sh otbr-start # Native OTBR + Thread network
-/data/local/tmp/docker-android.sh go-start   # Go server + APK
-/data/local/tmp/docker-android.sh status     # Verify
+cd deprecated/android-docker && bash setup-docker.sh
 ```
 
-> See [android-docker/README.md](android-docker/README.md) for architecture details and AOSP patches.
+> See [deprecated/android-docker/README.md](deprecated/android-docker/README.md) for archived architecture details and AOSP patches.
 
 ### Option E: Deploy to Android Board — Native (legacy)
 
@@ -490,10 +482,10 @@ homeagent-config/
 │   ├── lib/matter/        # Pure Dart: BTP, PASE, TLV, Spake2+
 │   └── test/matter/       # 39 unit tests
 ├── ui/                    # Lit frontend (Vite)
-├── android-docker/        # Android Docker deploy (Phase 4)
-│   ├── docker-android.sh  # Native Docker Engine management
-│   ├── docker-compose.yml # Android-specific compose (no dbus)
-│   └── setup-docker.sh    # PC → board one-command setup
+├── deprecated/android-docker/ # Archived Android Docker package
+│   ├── docker-android.sh      # Native Docker Engine management
+│   ├── docker-compose.yml     # Android-specific compose (no dbus)
+│   └── setup-docker.sh        # PC → board one-command setup
 ├── docker-compose.yml     # RPi5 Docker compose
 ├── scripts/
 │   ├── android-deploy.sh  # Android 네이티브 배포 (legacy)
@@ -504,10 +496,10 @@ homeagent-config/
 ├── yocto/                 # Yocto build config
 │   └── meta-homeagent/    # Recipes: homeagent, matterjs, OTBR
 ├── docs/
-│   ├── PLATFORM-MATRIX.md # RPi5 vs RK3576 stack comparison
-│   ├── ARCHITECTURE.md    # ADR — why Go, Flutter, matterjs, Docker
+│   ├── README.md          # 문서 지도 — 무엇을 읽고 어디로 흡수할지
+│   ├── ARCHITECTURE.md    # ADR — 구조 결정 근거
+│   ├── API.md             # REST/SSE API spec
 │   ├── THREAD.md          # Thread Border Router guide
-│   ├── API.md             # REST API spec (12 endpoints)
 │   ├── FLUTTER.md         # Flutter shell architecture
 │   ├── A2UI.md            # Agent-driven UI strategy
 │   └── A2A.md             # Agent protocol, Constitutional AI
@@ -533,20 +525,29 @@ homeagent-config/
 
 ## Documentation
 
+Start with [docs/README.md](docs/README.md). It is the document map: which files are SSOT, which are evidence logs, and which documents should eventually be absorbed elsewhere.
+
 | Doc | Content |
 |-----|---------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture Decision Records — why Go, Flutter, matterjs |
-| [docs/MATTER.md](docs/MATTER.md) | Matter SDK strategy — why matter.js, runtime analysis, roadmap |
-| [docs/BUILD.md](docs/BUILD.md) | Build guide — environment, resources, two-machine workflow |
-| [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs RK3576 stack comparison |
-| [docs/THREAD.md](docs/THREAD.md) | Thread Border Router (Yocto + Android NDK) |
-| [docs/API.md](docs/API.md) | REST API spec (8 commands, OHF compatible) |
+| [docs/README.md](docs/README.md) | 문서 지도 — 역할, 읽는 시점, 흡수/이동 방향 |
+| [README.md](README.md) | Public landing — vision, roadmap, quick start |
+| [AGENTS.md](AGENTS.md) | Agent instructions — current direction, invariants, no-hype rules |
+| [VERSION.md](VERSION.md) | Version/stack SSOT — Yocto, kernels, runtime versions |
+| [HARDWARE.md](HARDWARE.md) | Physical device state — boards, IPs, dongles, RCP |
+| [HOWTO.md](HOWTO.md) | RPi5 clean rebuild/reflash guide |
+| [INVARIANTS.md](INVARIANTS.md) | Runtime invariants and review checklist |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture Decision Records |
+| [docs/API.md](docs/API.md) | REST/SSE API spec; keep aligned with OpenAPI and Go routes |
+| [docs/MATTER.md](docs/MATTER.md) | Matter SDK/backend strategy |
+| [docs/BUILD.md](docs/BUILD.md) | Build environment, artifacts, build farm workflow |
+| [docs/THREAD.md](docs/THREAD.md) | Thread Border Router and RCP guide |
 | [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter shell architecture + NixOS build |
 | [docs/A2UI.md](docs/A2UI.md) | Agent-to-User Interface strategy |
-| [docs/A2A.md](docs/A2A.md) | Agent protocol, Constitutional AI |
-| [android-docker/README.md](android-docker/README.md) | Android Docker 배포 가이드 + 핵심 해법 |
-| [HOWTO.md](HOWTO.md) | Full setup guide (clean state → working hub) |
-| [VERSION.md](VERSION.md) | Version matrix (Yocto/Flutter/Node/NDK/Docker) |
+| [docs/A2A.md](docs/A2A.md) | Agent protocol and Constitutional AI |
+| [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | Platform divergence details |
+| [docs/YOCTO-OFFLINE-FIRST.md](docs/YOCTO-OFFLINE-FIRST.md) | Yocto offline recipe policy |
+| [docs/EDGE-ZIGBEE.md](docs/EDGE-ZIGBEE.md) | HomeAgent ↔ Edge/Zigbee/MQTT boundary |
+| [deprecated/android-docker/README.md](deprecated/android-docker/README.md) | Deprecated Android Docker packaging kept for reference |
 
 ---
 
@@ -555,7 +556,7 @@ homeagent-config/
 | Platform | Board | Thread RCP | NPU |
 |----------|-------|-----------|-----|
 | RPi5 | Raspberry Pi 5 (8GB) | ZBDongle-E (USB) | Hailo-8 M.2 (준비 중) |
-| **OPi5** | **Orange Pi 5 (4GB)** | **ZBDongle-E (USB)** | **RKNN 6 TOPS (내장)** |
+| **OPi5** | **Orange Pi 5 (4GB)** | **ZBDongle-E (USB)** | **RKNN 6 TOPS (내장, parked)** |
 | RK3576 | RK3576-EVB | ESP32-H2 (UART) | — |
 
 ### Hailo-8 NPU (RPi5) ✅ Verified

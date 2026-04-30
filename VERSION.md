@@ -4,18 +4,18 @@ Yocto/OpenEmbedded, Raspberry Pi 5 및 Orange Pi 5 버전 호환성 정리
 
 ---
 
-## 디바이스 스택 비교 (2026-04-09 업데이트)
+## 디바이스 스택 비교 (2026-04-30 업데이트)
 
 | 항목 | **RPi5** | **OPi5** |
 |------|---------|----------|
 | **SoC** | BCM2712 (4×A76) | RK3588S (4×A76 + 4×A55) |
-| **커널** | linux-raspberrypi **6.6 LTS** | linux-rockchip **6.1** (vendor BSP) |
-| **BSP** | meta-raspberrypi | JeffyCN meta-rockchip |
-| **GPU** | VideoCore VII (vc4/v3d), Mesa 24.0.7 | Mali-G610 — **headless** (미사용) |
-| **디스플레이** | HDMI (Weston 13) | 없음 (headless NPU hub) |
-| **NPU** | Hailo-8 (26 TOPS, M.2) | RKNN (6 TOPS, 내장) — rockchip-npu |
-| **모드** | 풀스택 (GUI + NPU) | **headless** (NPU + IoT hub) |
-| **검증** | ✅ 풀스택 | ✅ 빌드 성공 (2026-04-09), 부팅 검증 예정 |
+| **커널** | linux-raspberrypi **6.6 LTS** | linux-yocto-dev **6.14** (mainline) |
+| **BSP** | meta-raspberrypi | radxa/meta-rockchip + local machine |
+| **GPU** | VideoCore VII (vc4/v3d), Mesa 24.0.7 | Mali-G610 — panthor/panfrost 검증 |
+| **디스플레이** | HDMI (Weston 13) | HDMI 4K@30Hz 검증 |
+| **NPU** | Hailo-8 (26 TOPS, M.2) | RKNN 6 TOPS — vendor 6.1 필요, parked |
+| **모드** | 풀스택 (GUI + NPU) | **lab target** (SSH/GPU 검증용) |
+| **검증** | ✅ 풀스택 | 🟡 SSH/GPU 검증 완료, NPU 보류 |
 
 ---
 
@@ -36,42 +36,59 @@ Yocto/OpenEmbedded, Raspberry Pi 5 및 Orange Pi 5 버전 호환성 정리
 
 ## Orange Pi 5 (RK3588S) Yocto 지원
 
-### 현재: Vendor BSP 6.1 Headless (2026-04-09)
+### 현재: Mainline 6.14 Lab Target (2026-04-30)
+
+OPi5는 HomeAgent의 주력 경로가 아니라 lab target으로만 유지한다. RPi5가 HomeAgent 실험에 충분하고, ESP32/Zig 계열 edge 작업은 별도 `edgeagent-config` 리포에서 진행한다.
 
 | 항목 | 값 |
 |------|-----|
 | **Machine** | `orangepi-5` (custom conf) |
 | **SoC** | Rockchip RK3588S (4×A76 + 4×A55) |
-| **BSP Layer** | **JeffyCN meta-rockchip** (Rockchip 공식 vendor BSP) |
-| **Kernel** | linux-rockchip **6.1** (vendor LTS) |
-| **DTS** | Armbian `rk-6.1-rkr5.1` 기반 (카메라 dtsi 제외) |
-| **GPU** | 미사용 (headless — libmali/weston 제외) |
-| **NPU** | `rockchip-npu` (RKNN 펌웨어 + 유틸, 6 TOPS) |
-| **VPU** | `rockchip-mpp` (미디어 처리) |
-| **U-Boot** | u-boot-rockchip 2017.09 (vendor) |
-| **DTB** | `rk3588s-orangepi-5.dtb` |
-| **이미지** | 183MB (wic.bz2) |
+| **BSP Layer** | radxa/meta-rockchip 기반 |
+| **Kernel** | linux-yocto-dev **6.14** (mainline) |
+| **GPU** | panthor 1.3.0, Mesa 24.1.7 (panfrost + panthor kmod) |
+| **Display** | HDMI 3840x2160@30Hz 검증 |
+| **NPU** | RKNN은 보류 — vendor 6.1 BSP 필요 |
 | **빌드 디렉토리** | `yocto/build-opi5/` (RPi5 `build/`과 분리) |
 
-**vendor BSP 전환 사유** (mainline 6.14 → vendor 6.1):
-- mainline 6.14: NPU 드라이버 없음 (Rocket 드라이버 6.18 예정), DTS에 NPU 노드 없음
-- vendor 6.1: rknpu 드라이버 내장, NPU/IOMMU DTS 노드 포함
-- NPU가 핵심 목표이고, mainline에서 2년+ 기다릴 수 없음
-- 제품화에 vendor BSP LTS가 유리
+**정책**:
+- 기본은 mainline 6.14로 둔다. SSH/GPU/HDMI 검증 상태를 보존한다.
+- vendor 6.1 + RKNN NPU 경로는 지금 추적하지 않는다. 필요할 때 llmlog `20260331T114944`를 보고 재개한다.
+- HomeAgent 핵심 검증은 RPi5에 집중한다. OPi5 작업이 RPi5 경로를 흔들지 않게 문서/레시피 수를 최소화한다.
 
-**WKS (이미지 레이아웃)**:
-- `orangepi-5.wks.in` (meta-homeagent/wic/)
-- RK3588 부트체인: idblock(SPL) → uboot(ATF 통합) → kernel → rootfs
-- trust.img 불필요 (ATF가 uboot에 통합)
+### 보류: Vendor BSP 6.1 NPU path
 
-### 이전: Mainline 6.14 GPU 검증 (2026-03-31 ~ 04-03)
+- mainline 6.14에는 rknn-toolkit2와 호환되는 BSP rknpu 경로가 없다.
+- vendor 6.1은 rknpu/IOMMU/DTS 경로가 있으나, 별도 recipe/patch 유지 비용이 크다.
+- 따라서 vendor recipe와 임시 패치는 리포에서 제거하고, 재개 판단 자료만 llmlog에 남긴다.
 
-> GPU/HDMI 검증용으로 사용. headless 전환으로 현재 미사용.
+**참고 llmlog**: `/home/junghan/sync/org/llmlog/20260331T114944--§homeagent-config-opi5-orange-pi-5-rk3588s-yocto-scarthgap-지원-리서치__gpu_homeagent_iot_llmlog_rockchip_yocto.org`
 
-- 커널: linux-yocto-dev 6.14, BSP: radxa/meta-rockchip
-- GPU: panthor 1.3.0, Mesa 24.1.7 (panfrost + panthor kmod)
-- GL: OpenGL ES 3.1, Weston 13, HDMI 3840x2160@30Hz 검증
-- USB-C DP: PHY 로드됨, DRM 드라이버 미머지 (6.14)
+---
+
+## Target device strategy — Hailo/RK boards
+
+HomeAgent의 현재 실험/개발 기준은 **RPi5 + Hailo**다. 양산/확장 후보는 별도 보드 탐색으로 남기되, HomeAgent 본류를 흔들지 않는다.
+
+| 항목 | 현재 판단 |
+|------|-----------|
+| 개발 기준 | RPi5 + Yocto Scarthgap |
+| AI 가속 | Hailo-8 계열 우선. 내장 RKNN은 OPi5에서 parked |
+| 보드 전략 | Yocto BSP가 검증된 보드만 후보 |
+| RK3588 | 양산 후보군이지만 현재 HomeAgent 본류는 아님 |
+| Android 월패드 | HomeAgent를 Android 전용으로 만들지 않고 연동/bridge만 제공 |
+
+보드 후보 메모:
+
+| 후보 | 이유 | 상태 |
+|------|------|------|
+| RPi5 + Hailo | 현재 개발/검증 기준 | 유지 |
+| RK3588 + Hailo-8 M.2 | 양산 후보, Android 생태계와 Yocto BSP 모두 있음 | 보류 |
+| Geniatech APC3588-AI | RK3588 + Hailo 옵션 산업용 후보 | 보류 |
+| Banana Pi BPI-M7 / OPi5 Plus / NanoPi T6 | RK3588 + M.2 후보군 | 보류 |
+| NXP iMX8M Plus | 산업용/Hailo Yocto 성숙 | 보류 |
+
+`docs/TARGET_DEVICE.md`의 긴 조사 내용은 이 표로 압축 흡수했다. 새 보드 선정은 이 섹션과 `HARDWARE.md`의 실제 장비 상태를 먼저 확인한 뒤 진행한다.
 
 ---
 

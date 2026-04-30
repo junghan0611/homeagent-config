@@ -77,7 +77,7 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 
 # Orange Pi 5 (RK3588S) 하드웨어 정보
 
-2026-03-31 추가. 2026-04-08 vendor BSP 6.1 전환.
+2026-03-31 추가. 2026-04-30 정리: OPi5는 **mainline 6.14 lab target**으로 보존한다. vendor BSP 6.1/RKNN NPU 경로는 보류.
 
 ## 보드
 
@@ -85,43 +85,43 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 |------|-----|
 | Model | Orange Pi 5 v1.3.2 |
 | SoC | Rockchip RK3588S (4×A76 2.4GHz + 4×A55) |
-| GPU | ARM Mali-G610 MP4 (Valhall) — headless, 미사용 |
-| NPU | 6 TOPS (RKNN) — vendor BSP 지원 |
+| GPU | ARM Mali-G610 MP4 (Valhall) — panthor/panfrost 검증 |
+| NPU | 6 TOPS (RKNN) — vendor 6.1 필요, 현재 parked |
 | RAM | 4GB LPDDR4X |
-| Kernel | **6.1** linux-rockchip (JeffyCN vendor BSP, LTS) |
+| Kernel | **6.14** linux-yocto-dev (mainline) |
 | OS | Yocto scarthgap 5.0 LTS (OpenEmbedded) |
 | SD Card | 128GB |
-| 모드 | **Headless NPU Hub** (weston/wayland 없음) |
+| 모드 | **Lab target** (SSH/GPU/HDMI 검증용) |
 
-## Yocto BSP 구성 (2026-04-08)
+## Yocto BSP 구성 (2026-04-30)
 
 | 항목 | 값 |
 |------|-----|
-| meta-rockchip | **JeffyCN** (Rockchip 공식 vendor BSP) |
+| meta-rockchip | radxa/meta-rockchip 기반 |
 | MACHINE | `orangepi-5` |
-| 커널 | `linux-rockchip` 6.1 (vendor LTS) |
-| DTS | mainline 6.14에서 가져온 `rk3588s-orangepi-5.dts/dtsi` 패치 |
-| NPU 패키지 | `rockchip-npu` (RKNN 펌웨어 + 유틸) |
-| VPU 패키지 | `rockchip-mpp` (미디어 처리) |
-| GPU | 미포함 (libmali/weston 제외 — headless) |
+| 커널 | `linux-yocto-dev` 6.14 |
+| DTS | upstream OPi5 DTS 사용 |
+| GPU | panthor 1.3.0 + Mesa 24.1.7 |
+| HDMI | 3840x2160@30Hz 검증 |
+| NPU | 보류 — rknn-toolkit2 호환 경로는 vendor 6.1 필요 |
 
-### 전환 사유: mainline 6.14 → vendor BSP 6.1
+### 정책: vendor BSP 6.1/RKNN 경로 보류
 
 | mainline 6.14 | vendor BSP 6.1 |
 |---|---|
-| ❌ NPU 드라이버 없음 (Rocket 드라이버 6.18 예정) | ✅ rknpu 드라이버 내장 |
-| ❌ NPU DTS 노드 없음 | ✅ NPU/IOMMU 노드 포함 |
-| ✅ GPU panthor + Mesa 24.1.7 동작 확인 | ✅ libmali DDK (headless에서 불필요) |
-| △ 최신이나 HW 지원 불완전 | ✅ Rockchip 검증 안정 커널 |
+| ✅ SSH/GPU/HDMI 검증 완료 | ✅ rknpu 드라이버 경로 가능 |
+| ✅ 유지보수 부담 낮음 | ❌ 별도 recipe/patch 유지 필요 |
+| ❌ rknn-toolkit2 호환 NPU 경로 없음 | ✅ RKNN 가능성 있음 |
 
-**결론**: NPU가 핵심 목표이고, mainline에서 2년+ 기다릴 수 없음. vendor BSP 6.1이 제품화에 유리.
+**결론**: HomeAgent 본류는 RPi5로 충분하다. OPi5 vendor 6.1/RKNN 실험은 필요할 때 재개하고, 재개 자료는 llmlog `20260331T114944`를 기준으로 한다.
 
 ### meta-rockchip 히스토리
 
 | 시점 | 레이어 | 커널 | 비고 |
 |------|--------|------|------|
-| 2026-03-31 ~ 04-03 | radxa meta-rockchip | mainline 6.14 (linux-yocto-dev) | GPU 검증 완료, NPU 불가 |
-| **2026-04-08 ~** | **JeffyCN meta-rockchip** | **vendor 6.1 (linux-rockchip)** | NPU 지원, headless |
+| 2026-03-31 ~ 04-03 | radxa meta-rockchip | mainline 6.14 (linux-yocto-dev) | GPU/HDMI 검증 완료 |
+| 2026-04-08 | JeffyCN meta-rockchip | vendor 6.1 (linux-rockchip) | NPU 실험, 현재 리포에서는 보류 |
+| **2026-04-30 ~** | **radxa/meta-rockchip** | **mainline 6.14** | **lab target 보존** |
 
 ## 네트워크 인터페이스
 
@@ -135,39 +135,31 @@ Bus 003 Device 002: ID 1a40:0101  Terminus Hub          → USB 허브
 - SSH: `./run.sh ssh opi5`
 - IP 파일: `.current-device-ip.opi5`
 
-## NPU (RKNN)
+## NPU (RKNN, parked)
 
 | 항목 | 값 |
 |------|-----|
 | 하드웨어 | RK3588S 내장 NPU 3코어, **6 TOPS** (INT8) |
-| 커널 드라이버 | `rknpu` (vendor BSP 6.1 내장) |
-| Yocto 레시피 | `rockchip-npu` (JeffyCN meta-rockchip) |
-| 내용물 | NPU 펌웨어 (`npu_fw/`) + 바이너리 유틸 |
-| 유저스페이스 | `rknn-toolkit2` (Python) + `rknn_server` (C) — 별도 레시피 필요 |
+| mainline 6.14 | rknn-toolkit2 호환 BSP 경로 없음 |
+| vendor 6.1 | `rknpu` + NPU/IOMMU DTS 경로 가능 |
+| 유저스페이스 | `rknn-toolkit2` + `rknn_server` 별도 레시피 필요 |
 | 모델 포맷 | RKNN (.rknn) |
-| 상태 | **빌드 중** — 부팅 후 NPU 디바이스 노드 검증 예정 |
+| 상태 | **보류** — HomeAgent 본류에서 추적하지 않음 |
+
+재개 시 llmlog `20260331T114944`와 `VERSION.md`의 OPi5 섹션을 먼저 확인한다.
 
 ### RPi5 Hailo-8 vs OPi5 RKNN 비교
 
 | | RPi5 + Hailo-8 | OPi5 RKNN |
 |---|---|---|
 | **TOPS** | 26 (외장 M.2) | 6 (내장) |
-| **커널 드라이버** | meta-hailo (out-of-tree) | rknpu (vendor BSP 내장) |
-| **Yocto 레시피** | meta-hailo ✅ | rockchip-npu ✅ (JeffyCN) |
+| **커널 드라이버** | meta-hailo (out-of-tree) | rknpu (vendor BSP 필요) |
+| **Yocto 레시피** | meta-hailo | parked |
 | **모델 포맷** | HEF | RKNN |
 
-### NPU 검증 계획
+## GPU 스택 (mainline 6.14 검증 기록)
 
-1. ~~Rockchip BSP에서 rknpu 드라이버 소스 추출~~ → vendor 커널에 포함됨
-2. ~~out-of-tree 커널 모듈 빌드~~ → 불필요
-3. headless 이미지 빌드 → SD카드 플래시 → 부팅
-4. `/dev/rknpu` 디바이스 노드 존재 확인
-5. `rknn-toolkit2` + `rknn_server` Yocto 레시피 작성
-6. 추론 벤치마크 (YOLOv8 등)
-
-## GPU 스택 (참고 — mainline 6.14 검증 기록)
-
-> 현재 headless 전환으로 GPU 스택 미사용. 향후 디스플레이 필요 시 참고.
+> OPi5에서 현재 보존할 핵심은 이 mainline 6.14 GPU/HDMI 검증 상태다.
 
 | 항목 | 값 (mainline 6.14 기준) |
 |------|-----|

@@ -88,6 +88,43 @@ node:sqlite    — Device state DB (Node 22+ built-in)
 
 ---
 
+## Android commissioning verification — BLE boundary
+
+2026-03-08 RK3576-EVB verification established the Android boundary clearly:
+
+**Verified working:**
+
+1. matterjs-server runs on RK3576 with glibc-bundled Node.js v20.18.2 + matter-server 0.3.5.
+2. Go homeagent connects to `ws://localhost:5580`.
+3. `@matter/nodejs` and `@matter/nodejs-ble` optional dependencies must be present in the bundle.
+4. `set_wifi_credentials` works.
+5. mDNS scan on `wlan0` sees `_matterc._udp.local`.
+
+**BLE finding:** matterjs/noble can use BLE directly on Linux/Yocto, but not on Android 15 RK3576.
+
+| | RPi5 Linux/Yocto | RK3576 Android 15 |
+|---|---|---|
+| BT stack | BlueZ kernel HCI | Android HAL userspace |
+| `/sys/class/bluetooth/hci0` | present | absent |
+| `AF_BLUETOOTH` socket | present | absent |
+| noble BLE | works | cannot find HCI adapter |
+| Factory-reset WiFi commissioning | matterjs direct BLE | Flutter/Android BLE layer required |
+
+**Architecture decision:**
+
+```
+Flutter app (Android BLE API)
+  → BLE discovery + WiFi credentials provisioning
+  → device joins WiFi/Thread
+  → matterjs-server performs on-network commissioning
+```
+
+The server does not own Android BLE. It owns Matter over IP after the app has handled the radio-specific first step. This mirrors Home Assistant's split: Android app/GMS handles BLE, server handles on-network commissioning. HomeAgent uses Flutter BLE APIs instead of requiring GMS.
+
+Failed paths kept as cautionary notes: `--bluetooth-adapter 0` on Android, direct `hciattach` replacement, and stopping Android BT HAL were insufficient. Thread RCP remains separate on `/dev/ttyS5` at 460800; Android Thread HAL must still be stopped before OTBR owns that UART.
+
+---
+
 ## Alternative Runtimes: Bun and Deno
 
 ### Compatibility matrix

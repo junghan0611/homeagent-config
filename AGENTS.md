@@ -70,7 +70,7 @@ APP → Go Server (:8080) → python-matter-server (:5580) → OTBR → Matter �
 - Flutter: 89 PASS, 디바이스 상세 화면 완성
 - WS 커버리지: 13/31 (42%)
 - RPi5 + Android 양쪽 배포 동작
-- **OPi5 GPU 스택 검증 완료**: 커널 6.14 + Mesa 24.1.7 + Mali-G610 + HDMI 4K
+- **OPi5는 lab target**: 커널 6.14 + Mesa 24.1.7 + Mali-G610 + HDMI 4K 검증 완료. vendor 6.1/RKNN NPU 경로는 보류 — 필요 시 llmlog `20260331T114944` 참고.
 - 에이전트4 리서치: HA 생태계 5개 분석 완료 (office/research-*.md)
 
 ---
@@ -291,20 +291,38 @@ That's the only thing worth claiming.
 
 ## 문서
 
-| 문서 | 내용 |
+먼저 [docs/README.md](docs/README.md)를 읽어라. 이 파일이 문서 지도다. 어떤 문서가 SSOT인지, 어떤 문서가 근거 로그인지, 어떤 문서를 어디로 흡수할지 명시한다.
+
+### 에이전트 기본 읽기 순서
+
+| 상황 | 먼저 읽을 문서 |
+|------|----------------|
+| 처음 리포 파악 | [README.md](README.md) → [docs/README.md](docs/README.md) → [VERSION.md](VERSION.md) |
+| 코드 수정 | [AGENTS.md](AGENTS.md) → [INVARIANTS.md](INVARIANTS.md) → 관련 docs |
+| 빌드/플래시 | [HOWTO.md](HOWTO.md) → [docs/BUILD.md](docs/BUILD.md) → [VERSION.md](VERSION.md) |
+| 하드웨어/SSH/동글 | [HARDWARE.md](HARDWARE.md) |
+| API/클라이언트 | [docs/API.md](docs/API.md) + `go/internal/hub/hub.go` 라우트 확인 |
+| 플랫폼 분기 | [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) |
+| Yocto 레시피 | [docs/YOCTO-OFFLINE-FIRST.md](docs/YOCTO-OFFLINE-FIRST.md) |
+| Zigbee/MQTT/ESP32 경계 | [docs/EDGE-ZIGBEE.md](docs/EDGE-ZIGBEE.md) + `~/repos/gh/edgeagent-config` |
+
+### 핵심 docs
+
+| 문서 | 역할 |
 |------|------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ADR 5개 — Go, Flutter, matterjs, 프로세스 분리, 부팅 복원 |
-| [docs/MATTER.md](docs/MATTER.md) | Matter SDK 전략, 런타임 실측(65MB), matter.js 로드맵 |
-| [docs/BUILD.md](docs/BUILD.md) | 빌드 환경, 리소스, 개발 머신 + 빌드 팜 분업 |
-| [docs/GO-MATTERJS-OVERLAP.md](docs/GO-MATTERJS-OVERLAP.md) | Go↔matterjs 중복 분석 — 프록시+확장 유지 판단 |
-| [docs/API.md](docs/API.md) | REST API 명세 (18 엔드포인트, SSE, OHF 호환) |
-| [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS 빌드 가이드 |
+| [docs/README.md](docs/README.md) | 문서 지도 — 역할, 읽는 시점, 흡수/이동 방향 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ADR — 구조 결정 근거 |
+| [docs/API.md](docs/API.md) | REST/SSE API 명세. 수동 엔드포인트 수는 stale 주의 |
+| [docs/MATTER.md](docs/MATTER.md) | Matter SDK/backend 전략 |
+| [docs/BUILD.md](docs/BUILD.md) | 빌드 환경, 산출물, 빌드팜 워크플로 |
+| [docs/THREAD.md](docs/THREAD.md) | OTBR/RCP/Thread 가이드 |
+| [docs/FLUTTER.md](docs/FLUTTER.md) | Flutter 셸 아키텍처 + NixOS 빌드 |
 | [docs/A2UI.md](docs/A2UI.md) | 에이전트 주도 동적 UI 전략 |
 | [docs/A2A.md](docs/A2A.md) | 에이전트 프로토콜, Constitutional AI |
-| [docs/THREAD.md](docs/THREAD.md) | OTBR NDK 빌드 가이드 + 7개 CMake 이슈 해결 |
-| [docs/INSTALL.md](docs/INSTALL.md) | Android 보드 설치 가이드 (원커맨드 배포) |
-| [docs/PLATFORM-MATRIX.md](docs/PLATFORM-MATRIX.md) | RPi5 vs Android 전체 스택 비교 |
-| [VERSION.md](VERSION.md) | Yocto/RPi5/Flutter/matter-server 버전 매트릭스 |
+| [docs/YOCTO-OFFLINE-FIRST.md](docs/YOCTO-OFFLINE-FIRST.md) | Yocto 오프라인 레시피 정책 |
+| [docs/EDGE-ZIGBEE.md](docs/EDGE-ZIGBEE.md) | HomeAgent ↔ Edge/Zigbee/MQTT 경계 |
+| [VERSION.md](VERSION.md) | 버전/스택 SSOT |
+| [HARDWARE.md](HARDWARE.md) | 실제 장비 상태 SSOT |
 
 ## Landing the Plane (세션 종료)
 

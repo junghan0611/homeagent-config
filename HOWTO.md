@@ -176,14 +176,35 @@ chip-tool booleanstate read state-value <node-id> 1
 - chip-tool: **반드시 v1.4.0.0 + Docker tag 81** (glib 호환)
 - `--bypass-attestation-verifier true` 필수
 
-## 9. 다음 단계 (현재 진행 중)
+## 9. Android/RK3576 배포 요약
 
-| 태스크 | 상태 | 명령 |
-|--------|------|------|
-| ha-2ob: matterjs-server 빌드 검증 | 레시피 완료, 빌드 미검증 | `./run.sh npm-build matterjs-server` |
-| ha-cuj: z2m 2.8.0 업그레이드 | 대기 | `./run.sh npm-shrinkwrap zigbee2mqtt` |
-| ha-1kl: npmsw 오프라인 빌드 전환 | 대기 | - |
-| ha-tan: Go HomeAgent 컨트롤러 | 대기 | `./run.sh go-build` |
+Android 보드는 HomeAgent의 두 번째 검증 경로다. 자세한 플랫폼 차이는 `docs/PLATFORM-MATRIX.md`, Flutter 구조는 `docs/FLUTTER.md`, Matter BLE 경계는 `docs/MATTER.md`를 본다.
+
+```bash
+# 개발 환경: Android SDK 때문에 --impure 필요
+nix develop .#dev --impure
+
+# 전체 빌드 + ADB 배포 + 시작
+./run.sh android deploy
+
+# 서비스 관리
+./run.sh android start
+./run.sh android stop
+./run.sh android status
+./run.sh android logs          # all
+./run.sh android logs matter   # matterjs only
+./run.sh android logs go       # Go only
+./run.sh android logs otbr     # OTBR only
+
+# Thread RCP: RK3576 기준 ESP32-H2 /dev/ttyS5, 460800
+./run.sh android thread-start
+./run.sh android thread-status
+./run.sh android thread-stop
+```
+
+배포 대상은 `/data/local/tmp/` 아래에 놓인다: `homeagent`, `ui/dist/`, `nodejs-bundle/`, `otbr/`, `aliases.json`.
+
+Android BLE 주의: Android 15 BT HAL은 BlueZ/HCI를 노출하지 않는다. 공장 초기화 WiFi Matter 디바이스의 BLE provisioning은 Flutter/Android BLE API가 맡고, 서버/matterjs는 on-network commissioning을 맡는다.
 
 ## 전체 흐름 요약
 

@@ -99,6 +99,32 @@ Options for integrating matter.js:
 - ⚠️ Requires Node.js runtime (~68MB including node_modules)
 - ⚠️ On Android, Node.js runs via bundled glibc (ld-linux shim)
 
+### ADR 2.1: Why keep Go REST when matterjs already has WebSocket?
+
+**Decision: keep Go as a proxy+extension layer. Do not delete the REST API just because some endpoints wrap matterjs WebSocket commands.**
+
+| Go REST | matterjs WS | Go adds | Decision |
+|---------|-------------|---------|----------|
+| `GET /api/devices` | `get_nodes` | aliases, room/name mapping, normalized `DeviceState` | Keep |
+| `GET /api/devices/:id` | local cache | same normalization | Keep |
+| `DELETE /api/devices/:id` | `remove_node` | peer storage cleanup | Keep |
+| `PATCH /api/devices/:id` | — | aliases persistence | Keep — Go-only |
+| `POST /api/devices/command` | `device_command` | event normalization + SSE fanout | Keep |
+| `POST /api/commission*` | commissioning commands | WiFi/thread credential injection | Keep for compatibility |
+| `GET /api/events` | `node_updated` subscription | Matter path → stable SSE schema | Keep |
+
+Go-only endpoints are not duplicates: `/healthz`, `/api/system`, `/api/thread/status`, `/api/chat`, `/api/home`, `/api/config`, `/api/space/summary`, subscriptions, and external integration APIs.
+
+Current connection pattern:
+
+```
+Flutter ──WS 직접──→ matterjs (:5580)   # low-latency Matter operations
+  │
+  └──REST──→ Go (:8080)                 # aliases, SSE, A2UI, LLM, Thread/system state
+```
+
+Removal candidates only after clients stop depending on them: `POST /api/wifi-credentials`, `POST /api/commission`, `POST /api/commission-on-network`. Until then, REST remains the stable external interface for wall panels, curl, Swagger/OpenAPI, and future HA adapters.
+
 ---
 
 ## ADR 3: Why Flutter?

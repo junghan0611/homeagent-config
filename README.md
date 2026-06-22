@@ -31,7 +31,7 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 | RAM target | 512MB-class for Z2M + MQTT + matter.js/Go evidence |
 | Radio | onboard EFR32/Gecko, preferably MG24-class |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching |
-| Comparison | Tuya THP23-ZB-X / SSD202D / 128MB ceiling |
+| In-hand target | Tuya THP23-ZB-X / SSD202D / 128MB ceiling |
 
 USB coordinators stay useful for proof work, but they are not the final product shape.
 

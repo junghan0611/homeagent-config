@@ -15,7 +15,7 @@
 | RAM target | **512MB-class** for Z2M + MQTT + matter.js/Go measurement |
 | Radio | **onboard EFR32/Gecko**, preferably MG24-class |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching |
-| Comparison node | Tuya THP23-ZB-X / SSD202D / 128MB |
+| In-hand liberation target | Tuya THP23-ZB-X / SSD202D / 128MB (current bring-up) |
 | Preserved lane | RPi5/Yocto/Hailo/RK evidence as high-spec origin |
 
 ## Device Matrix
@@ -24,7 +24,7 @@
 |--------|-----|-----|---------------|-------|------|-------|
 | **SMHUB Nano MG24** | SOPHGO SG2000 | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary minimal hub | ordered / pending |
 | **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | public Buildroot reference | ordered / pending |
-| **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research path | EFR32/Gecko-class | comparison / liberation node | in hand |
+| **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research path | EFR32/Gecko-class | current liberation target / 128MB ceiling evidence | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 8GB | Yocto Scarthgap | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4GB | Yocto Scarthgap, mainline 6.14 | USB EFR32 proof | lab target | SSH/GPU/HDMI verified, NPU parked |
 | RK3576 Android board | RK3576 | board-specific | Android 15 | ESP32-H2 proof | compatibility evidence | archived/secondary |
@@ -69,7 +69,7 @@ Known proof radios:
 | SONOFF ZBDongle-E | EFR32MG21 | Thread RCP proof | `ot-rcp-v2.4.5.0-zbdonglee-460800.gbl` (baudrate 460800) | verified USB origin tool |
 | SONOFF ZBDongle-E | EFR32MG21 | Zigbee NCP proof | EmberZNet (Sonoff Zigbee 3.0 USB Dongle Plus V2) | available proof path |
 | SMHUB Nano MG24 | EFR32MG24 | target onboard radio | TBD after arrival | pending arrival |
-| THP23-ZB-X | EFR32/Gecko-class | comparison onboard radio | TBD | in hand |
+| THP23-ZB-X | EFR32/Gecko-class | in-hand onboard radio to identify | TBD | in hand |
 
 Firmware files are part of the firmware-switching record; keep exact filenames and baudrates here, not just generic stack names.
 

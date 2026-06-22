@@ -16,7 +16,7 @@ HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동�
 | Radio | **Onboard Silicon Labs EFR32/Gecko**, preferably MG24-class |
 | Protocol posture | Zigbee NCP **or** Thread RCP by firmware switching; no concurrent assumption |
 | USB coordinator | Proof/origin tool only, not final product shape |
-| Comparison node | Tuya THP23-ZB-X / SSD202D / 128MB, useful to prove the ceiling |
+| In-hand liberation target | Tuya THP23-ZB-X / SSD202D / 128MB, current bring-up + 128MB ceiling evidence |
 
 ---
 
@@ -37,7 +37,7 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 |------|-----|-----|---------------|-------|------|--------|
 | **SMHUB Nano MG24** | **SOPHGO SG2000** | C906 RISC-V + Cortex-A53 selectable | **512MB / 8GB eMMC** | **EFR32MG24** | primary minimal hub | delivery pending |
 | **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | C906 RISC-V + Cortex-A53 selectable | 512MB-class | board-dependent | public BSP reference / dev board | delivery pending |
-| **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / NAND** | EFR32/Gecko-class | comparison / liberation node | in hand |
+| **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | current liberation target / 128MB ceiling evidence | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 4×A76 | 8GB | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4×A76 + 4×A55 | 4GB | USB EFR32 proof | lab target | SSH/GPU verified |
 
@@ -67,7 +67,7 @@ Tuya THP23-ZB-X is the current in-hand liberation target: it is the board we own
 
 Expected outcome:
 
-- If it boots open Linux and exposes the radio, it is a success as a **comparison node**.
+- If it boots open Linux and exposes the radio, it is a success as the **current in-hand liberation target**. See [`THP23-LIBERATION.md`](THP23-LIBERATION.md) for the bring-up plan.
 - If matter.js/Zigbee2MQTT do not fit comfortably, that confirms the 512MB lower-bound target rather than invalidating the project.
 
 ---
@@ -97,7 +97,7 @@ USB dongles are still useful for firmware and protocol proof. The current target
 | Product | Host | Radio | Notes |
 |---------|------|-------|-------|
 | **SMHUB Nano MG24** | SG2000 | EFR32MG24 | primary target, 512MB-class |
-| THP23-ZB-X | SSD202D | EFR32/Gecko-class | comparison node, 128MB ceiling |
+| THP23-ZB-X | SSD202D | EFR32/Gecko-class | current liberation target, 128MB ceiling |
 | SONOFF Dongle Plus MG24 | none | EFR32MG24 | good proof coordinator, USB only |
 | Home Assistant Connect ZBT-2 | bridge MCU | EFR32MG24 | proof/reference coordinator |
 | SLZB-MR3 | coordinator box | multi-radio | useful reference, not the integrated hub target |

@@ -1,6 +1,6 @@
 # NOW — THP23-ZB-X 오픈소스 해방 (SMHUB 도착 전 현재 작업)
 
-- **현재**: living doc set 재정렬 완료, `v2026.6.22` 릴리즈 태깅됨(`a3c8db1`). 최신 후속 정리는 `197f02e`(local, 미푸시); 지금은 THP23-ZB-X 해방 레인으로 재범위 중.
+- **현재**: living doc set 재정렬 완료, `v2026.6.22` 릴리즈 태깅됨(`a3c8db1`). 최신 로컬 커밋들은 push 대기; 지금은 THP23-ZB-X 해방 레인 진행 중.
 - **바로 다음**: **THP23-ZB-X**(Tuya 제품, THP23-X-M 모듈 기반 / SSD202D + onboard EFR32 / 128MB) bring-up. **이미 in hand.** Tuya stock 펌웨어를 오픈소스 포크(Buildroot/OpenWrt/linux-chenxing)로 교체해 보드를 소유하고 로컬 컨트롤. SMHUB Nano 도착 전에 진행.
 - **Blocker(THP23 아님)**: SMHUB Nano + Milk-V Duo 개발보드는 배송 대기 — 별도 레인. THP23-ZB-X는 막혀 있지 않다.
 - **읽을 곳**: `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
@@ -12,10 +12,15 @@
 
 Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual Cortex-A7 1.2GHz / **128MB** / onboard **EFR32**/Gecko-class radio / Wi-Fi TY001 + Ethernet). 목표는 Tuya stock 펌웨어를 **오픈소스 포크로 교체**해 보드를 소유하는 것. comparison ceiling이 아니라 SMHUB 도착 전 실제 해방 작업.
 
-- 오픈소스 경로: **linux-chenxing**(SSD20x mainline 노력) + **OpenWrt** + **Buildroot** 중 가장 진척된 포크 채택.
-- bring-up 자산(datasheet): 디버그 UART `PM_UART_RX/TX`, onboard SD/USB2.0 플래시 매체, Ethernet.
+- **상세 SSOT**: `docs/THP23-LIBERATION.md` (데스크 리서치 1차 완료).
+- **결정**: **Buildroot 1차.** 경로 우선순위 — linux-chenxing(mainline, 최장기 소유) → vendor SSD202 SDK(빠른 bring-up·드라이버 참고) → OpenWrt-ssd20x(18.06 구식, 후순위). SMHUB(SG2000 `duo-buildroot-sdk`)와는 *빌드시스템 수준* 정합(arch는 ARMv7 vs RISC-V/aarch64로 다름).
+- **해방 저위험**: Tuya 공식 문서에 U-Boot 진입(`nvram set persist.uboot.enter on`)·TFTP `nand write` 플래시 절차 공개. glitch/exploit 불필요.
+- **부팅 사실**: SSD202D는 **SPI NAND 부팅(SD/eMMC 부팅 불가)**. 복구 = U-Boot + UART SPL 재주입 + TFTP.
+- **⚠️ erase 전 백업**: stock NAND 덤프 + nvram 인증키(`UUID`/`AUTHKEY`/`master_mac`/`bsn`). 분실 시 stock·Tuya 복귀 불가.
 - Criteria:
-  - [ ] UART debug console 진입 + boot log 확보
+  - [ ] 물리 검사 (GLG, 진행 중): 칩 마킹(SSD202D/EFR32)·SPI NAND·UART 패드·SoC↔EFR32 연결·점퍼
+  - [x] 오픈소스 포크 리서치 → `docs/THP23-LIBERATION.md`
+  - [ ] UART debug console 진입 + boot log 확보 (보레이트 115200 우선)
   - [ ] U-Boot/recovery path 파악, stock 백업
   - [ ] 오픈소스 image(linux-chenxing/OpenWrt/Buildroot) boot or flash
   - [ ] onboard EFR32 detection + reset/bootloader path

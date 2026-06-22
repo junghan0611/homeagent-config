@@ -16,6 +16,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 |-----|------|-----------|
 | [`../VERSION.md`](../VERSION.md) | stack / version / physical device matrix | checking current board/runtime state |
 | [`TARGET_DEVICE.md`](TARGET_DEVICE.md) | board and radio strategy details | SG2000 / SSD202D / EFR32 decisions |
+| [`THP23-LIBERATION.md`](THP23-LIBERATION.md) | THP23-ZB-X open-source liberation research | bringing up the in-hand THP23 board |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | ADRs and structure decisions | changing process/backend boundaries |
 | [`API.md`](API.md) | REST/SSE API notes | changing clients or routes |
 | [`BUILD.md`](BUILD.md) | build workflow notes | changing build/release tooling |

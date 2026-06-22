@@ -54,22 +54,25 @@ Tuya 자체 문서(THP23-X-D firmware flashing)에 U-Boot 진입·플래시 절�
   복원: `nvram set UUID ...` / `nvram set AUTHKEY ...` / `nvram commit`.
   → 이걸 잃으면 stock 복귀·Tuya 재인증/재페어링이 깨질 수 있음.
 
-## 4. 오픈소스 포크 후보 비교
+## 4. Base / Reference 후보 비교
 
-| 후보 | 빌드시스템 | SSD202D | 성숙도 | 비고 |
-|---|---|---|---|---|
-| **linux-chenxing** (mainline + buildbot) | **Buildroot** | ○ (IDO-SOM2D01 mainline DT 존재, i2c/spi/일부 DMA upstream) | 중 — mainline 추적, "own the box"에 최적. ethernet/display/주변장치 실보드 검증 필요 | `buildbot/kernel_ssd20xd.its` FIT 빌드. **1차 후보** |
-| **Vendor SSD202 SDK** (Sigmastar/8ms.xyz) | Buildroot 기반 | ○ | 상 — 가장 빨리 부팅, 가장 덜 열림(vendor kernel) | DT/드라이버 참고·**fallback**용 |
-| **wireless-tag/openwrt-ssd20x** | OpenWrt | △ (SSD201/202, **SSD202D 명시 없음**) | 하 — OpenWrt 18.06 / GCC8.2, ~44 commits, 갱신 정체 | 게이트웨이형 userland 빠른 대안이나 구식. 후순위 |
+활성도 점검(§9) 반영. mainline이 base, 죽은 포크는 reference.
+
+| 후보 | 성격 | 상태 | 역할 |
+|---|---|---|---|
+| **mainline Linux + U-Boot + Buildroot 2025.x** | upstream base | 활발(in-tree SSD202D DTS) | **long-term base** |
+| buildroot_idosom2d01 / linux-chenxing kernel·docs | porting reference | 코드 정체(2023), 문서 일부 활발 | DTS/UBI/UART/TFTP recipe + missing-driver diff |
+| **vendor SSD202 SDK** (8ms/Sigmastar) | vendor oracle | 실용 bring-up, redistribution 불명확 | first-boot oracle / partition·driver 참고 (base 아님) |
+| wireless-tag/openwrt-ssd20x | old userland fork | 2022 / "hacky" / SSD202D 미명시 | historical only |
 
 ## 5. 결정: Buildroot 우선 + SMHUB 정합
 
 - **Buildroot를 1차로 간다.** SSD202D 오픈소스 경로(linux-chenxing, vendor SDK) 양쪽이 Buildroot 중심이고, SMHUB 쪽 **SG2000/Milk-V `duo-buildroot-sdk`(V2, RISC-V+ARM)도 Buildroot 기반**이라 빌드 워크플로가 일관된다.
 - 단 정합은 **빌드시스템·운영 워크플로 수준**이다. arch는 다르다: **SSD202D = ARMv7 Cortex-A7**, **SG2000 = RISC-V C906 + ARM Cortex-A53(aarch64)**. 동일 이미지/툴체인이 아니라 "같은 Buildroot 방식으로 두 보드를 운영"하는 정합.
-- 역할 구분:
-  - **Identity / long-term target** = linux-chenxing + Buildroot. "own the box"에 부합, 최종 지향.
-  - **Bring-up oracle / fallback** = vendor SSD202 SDK. 빠르게 부팅·DTS·드라이버·partition을 떠서 참고.
-  - **Userland fallback** = OpenWrt-ssd20x. 후순위.
+- 역할 구분 (활성도 점검 반영, §9):
+  - **Identity / long-term base** = **mainline Linux + mainline U-Boot + Buildroot 2025.x** (SSD202D DTS in-tree, 활발). 커뮤니티 코드 포크(buildroot_idosom2d01/chenxing kernel)는 2022~23 정체 → mainline 위 **포팅 레시피·드라이버 diff로만** 사용.
+  - **Bring-up oracle / fallback** = vendor SSD202 SDK(8ms/Sigmastar, Buildroot 기반). 빠르게 부팅·DTS·드라이버·partition을 떠서 참고.
+  - **강등** = OpenWrt-ssd20x(hacky, 2022). 후순위.
 - 단, **첫 실보드 flash 이미지가 반드시 linux-chenxing일 필요는 없다.** stock bootlog/partition/env 확보 → 양쪽 desk build feasibility 비교 후 첫 write를 결정(§6).
 
 ## 6. 권장 bring-up 순서
@@ -78,7 +81,7 @@ Tuya 자체 문서(THP23-X-D firmware flashing)에 U-Boot 진입·플래시 절�
 2. **UART 콘솔 진입**: USB-UART 3.3V 연결, 보레이트 탐색(115200 우선), boot log 확보. 첫 세션에서 `help`·`printenv`·`mtdparts`·`nand info`·`nand bad` 캡처(가용 명령·레이아웃·env 확인).
 3. **공식 U-Boot 진입**(§3) → 위 캡처로 stock partition/env 실측.
 4. **stock 백업 + 검증**: NAND 전체 덤프 + nvram 인증 파라미터. 덤프 파일 **크기/해시/오프셋과 복원 명령까지 기록.** ← 이 검증 끝나기 전 `nand erase`/`nand write` 금지.
-5. **desk build 비교**: linux-chenxing(Buildroot)·vendor SSD202 SDK 양쪽을 빌드해 DTS·mtd·UART·ethernet feasibility 비교. **첫 write 대상은 이 비교 후 결정** — 반드시 linux-chenxing이 먼저일 필요는 없다(vendor SDK로 먼저 부팅을 떠 oracle로 쓸 수 있음).
+5. **desk build**: **mainline Linux/U-Boot + Buildroot 2025.x** 보드파일 포팅을 1차 desk build로. buildroot_idosom2d01 레시피 + linux-chenxing/vendor diff를 참고. 빠른 first-boot oracle이 필요하면 vendor SSD202 SDK도 병행 build. **첫 write 대상은 이 비교 후 결정.**
 6. **TFTP 환경** 구성(serverip/ipaddr) → 결정된 오픈소스 image 시험 플래시.
 7. **EFR32 경로**: SoC↔EFR32 연결 UART/리셋·부트로더 핀 식별 → Zigbee NCP(zigbee2mqtt/ezsp) 1 디바이스 페어링 증명.
 8. **128MB 증거**: 부팅 후 RSS/process 측정(MQTT+Z2M 등 hub 서비스 하한 확인).
@@ -92,6 +95,7 @@ Tuya 자체 문서(THP23-X-D firmware flashing)에 U-Boot 진입·플래시 절�
 - **U-Boot 백업 명령 가용성** — Tuya 문서의 TFTP `nand write`는 공개돼 있으나, 업로드/덤프(`tftpput`/`nand read`/`md`)는 stock U-Boot 빌드에 따라 없을 수 있다. 첫 UART 세션의 `help` 캡처로 가용 명령을 먼저 확인. 없으면 SPL/mainline U-Boot 재주입 후 덤프 경로를 따로 마련.
 - **OpenWrt 포크 구식** — SSD202D 미명시 + 18.06. 검증 비용 큼, 후순위.
 - **EFR32 라디오 펌웨어** — Tuya stock의 EFR32 펌웨어/연결 방식 미확인. **stock radio가 EZSP/NCP로 바로 쓰인다는 전제는 두지 않는다.** 필요 시 MG24/Gecko NCP 펌웨어(EmberZNet/EZSP) 재플래시는 별도 단계로 본다.
+- **mainline=베이스지만 THP23 DT는 포팅 대상** — 첫 write 전 반드시 확인: ① mainline U-Boot에서 THP23 SPI NAND geometry/UBI 레이아웃 일치, ② PM_UART가 실제 THP23 헤더와 일치(§8·§11), ③ mainline DTS(`som2d01`/`gw302`)의 ethernet/reset/GPIO/EFR32 UART가 THP23 보드와 얼마나 다른지.
 
 ## 8. 실보드 확인 + 시리얼 연결 (2026-06-22, 검증됨)
 
@@ -126,13 +130,31 @@ stock 출하품이라 IPL+u-boot가 이미 정상. blank 모듈용 vendor ISP �
 2. backup(§3·§7 게이트) 후, u-boot SPL의 **serial(ymodem `loady`) 또는 ethernet TFTP**로 rescue kernel 부팅 → UBI 재구성.
 3. **SSD202D는 DT를 명시해야 함**: `bootm ${loadaddr}#ssd202d-som2d01` 안 하면 커널 부팅 중 락업.
 
-## 9. 참고 리포 (`~/repos/3rd/`, clone 완료 2026-06-22)
+## 9. 참고 리포 세트 (`~/repos/3rd/tuya/`, 활성도 점검 2026-06-22)
 
-| 리포 | 역할 |
-|---|---|
-| `buildroot_idosom2d01` (fifteenhex) | **SSD202D SoM용 Buildroot — identity/1차 후보.** README에 UART/ymodem/UBI/TFTP 전체 bring-up 절차 |
-| `linux-chenxing.org` | infinity2(SSD20x) 문서·핀아웃·ISP·boot ROM. `infinity2/ido-som2d01/`·`ip/commonpins.md` |
-| `openwrt-ssd20x` (wireless-tag) | vendor sstar u-boot/kernel SDK — bring-up oracle/드라이버 참고 |
+**결론: 커뮤니티 *코드* 포크는 대부분 동면(2022~23). 단단한 베이스는 mainline 자체.** 마지막 커밋 기준 등급:
+
+### 살아있는 단단한 베이스 (upstream, 활발) — 로컬 클론 아님, 빌드 시 사용
+- **Linux mainline** (torvalds/kernel.org) — SSD202D `infinity2m` DTS + 드라이버 **in-tree**(`arch/arm/boot/dts/sigmastar/`, ido-som2d01 포함). 6.16(2025) 등 활발. ← 커널 베이스.
+- **U-Boot mainline** — sstar/SSD20x SPL upstream(2021~). ← 부트로더 베이스.
+- **Buildroot mainline** (2025.x, 활발) — ssd202d defconfig 없음 → som2d01 보드파일을 포팅해 사용.
+
+### 참고용 클론 (유용하나 정체/정적 — 포팅 레시피·드라이버 diff)
+| 디렉토리 (origin) | 최신 커밋 | 역할 |
+|---|---|---|
+| `linux-chenxing.org` | 2026-05 ✅ | infinity2 문서·핀아웃·ISP·boot ROM (문서만 활발). `infinity2/ido-som2d01/`·`ip/commonpins.md` |
+| `SigmaStar-SSD202D-Docs` (iscle) | 정적 archive | **주변장치 datasheet PDF**: EMAC(ethernet)/GPIO/I2C/UART/RTC/PWM — 드라이버·DT 작업에 핵심 |
+| `buildroot_idosom2d01` (fifteenhex) | 2023-06 | SoM Buildroot 레시피(UART/ymodem/UBI/TFTP 절차). **mainline 위로 포팅** |
+| `linux-chenxing-kernel` (mstar_v6_7_rebase) | 2023-12 | mainline에 아직 없는 WIP 드라이버 diff 참고. rebase가 v6.7에서 멈춤 |
+
+### oracle (base 아님)
+- **vendor SSD202 SDK** (8ms/Sigmastar): first-boot oracle / partition·driver 참고. git URL·라이선스 확정 후 `tuya/`에 **read-only 클론 예정**. ⚠️ **공개 repo(homeagent-config)에 SDK 파일/패치 반입 금지.**
+
+### 강등 (죽음/저품질)
+- `buildbot` (2022-02, 죽은 CI), `openwrt-ssd20x` (2022-02, 커뮤니티 평 "hacky"). 역사적 참고만.
+- Miyoo Mini buildroot: 활발하나 게임기 특화 + "not ready" → 게이트웨이 베이스로 부적합.
+
+THP23 최근접 DT(mainline/chenxing 공통): `mstar-infinity2m-ssd202d-wirelesstag-ido-som2d01.dtsi`(동일 모듈) + 게이트웨이형 `...-gw302.dts`. bootm 노드명 `ssd202d-som2d01`.
 
 ## 10. LAN 정찰 결과 (2026-06-22, 무땜)
 

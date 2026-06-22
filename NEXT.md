@@ -13,7 +13,7 @@
 Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual Cortex-A7 1.2GHz / **128MB** / onboard **EFR32**/Gecko-class radio / Wi-Fi TY001 + Ethernet). 목표는 Tuya stock 펌웨어를 **오픈소스 포크로 교체**해 보드를 소유하는 것. comparison ceiling이 아니라 SMHUB 도착 전 실제 해방 작업.
 
 - **상세 SSOT**: `docs/THP23-LIBERATION.md` (데스크 리서치 1차 완료).
-- **결정**: **Buildroot 1차.** 경로 우선순위 — linux-chenxing(mainline, 최장기 소유) → vendor SSD202 SDK(빠른 bring-up·드라이버 참고) → OpenWrt-ssd20x(18.06 구식, 후순위). SMHUB(SG2000 `duo-buildroot-sdk`)와는 *빌드시스템 수준* 정합(arch는 ARMv7 vs RISC-V/aarch64로 다름).
+- **결정(활성도 점검 후)**: 단단한 베이스 = **mainline Linux + U-Boot + Buildroot 2025.x**(SSD202D DTS in-tree, 활발). 커뮤니티 포크(buildroot_idosom2d01/chenxing kernel/openwrt-ssd20x)는 2022~23 정체 → **포팅 레시피·드라이버 diff로 강등**. 빠른 첫 부팅엔 vendor SSD202 SDK를 oracle로. 등급표: `docs/THP23-LIBERATION.md` §9. SMHUB(SG2000 `duo-buildroot-sdk`)와는 *빌드시스템 수준* 정합(arch ARMv7 vs RISC-V/aarch64).
 - **해방 저위험**: Tuya 공식 문서에 U-Boot 진입(`nvram set persist.uboot.enter on`)·TFTP `nand write` 플래시 절차 공개. glitch/exploit 불필요.
 - **부팅 사실**: SSD202D는 **SPI NAND 부팅(SD/eMMC 부팅 불가)**. 복구 = U-Boot + UART SPL 재주입 + TFTP.
 - **⚠️ erase 전 백업**: stock NAND 덤프 + nvram 인증키(`UUID`/`AUTHKEY`/`master_mac`/`bsn`). 분실 시 stock·Tuya 복귀 불가.
@@ -22,7 +22,7 @@ Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual
   - [x] 물리 검사 — `THP23-X_V1.3.0`: SSD202D + **EFR32MG21** + TY001 + SPI NAND + RJ45 + 좌하단 4핀 UART 후보
   - [x] 오픈소스 포크 리서치 + 시리얼 연결법 + LAN 정찰 → `docs/THP23-LIBERATION.md`
   - [ ] 🔧 **아웃소싱(맡김)**: 좌하단 4핀 UART 확정(§11 멀티미터/USB-serial) + **핀헤더 4핀 납땜** → boot log 산출. (GLG 땜 불가)
-  - [ ] **GLG self (지금·무땜)**: 3.3V USB-Serial 어댑터 확보 + TFTP 서버 셋업(192.168.0.x) + `buildroot_idosom2d01` desk build
+  - [ ] **GLG self (지금·무땜)**: 3.3V USB-Serial 어댑터 확보 + TFTP 서버 셋업(192.168.0.x) + desk build(mainline+Buildroot 2025.x, som2d01 레시피 참고; 빠른 부팅 필요시 vendor SDK)
   - [ ] **GLG self (헤더 오면)**: stock u-boot 진입(`nvram set persist.uboot.enter on`) + `help/printenv/mtdparts/nand info` 캡처 → stock NAND+nvram 백업(§7 게이트)
   - [ ] **GLG self**: rescue 부팅(`bootm ...#ssd202d-som2d01`) → UBI 재구성 → open image flash
   - [ ] onboard EFR32 detection + reset/bootloader path

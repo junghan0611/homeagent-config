@@ -134,6 +134,57 @@ stock 출하품이라 IPL+u-boot가 이미 정상. blank 모듈용 vendor ISP �
 | `linux-chenxing.org` | infinity2(SSD20x) 문서·핀아웃·ISP·boot ROM. `infinity2/ido-som2d01/`·`ip/commonpins.md` |
 | `openwrt-ssd20x` (wireless-tag) | vendor sstar u-boot/kernel SDK — bring-up oracle/드라이버 참고 |
 
+## 10. LAN 정찰 결과 (2026-06-22, 무땜)
+
+stock 보드를 이더넷에 연결하고 스캔:
+
+- 식별: 호스트네임 **`SmartGateway-BDE2`** (MAC `00:33:7A:3B:BD:E2`, 끝자리 BDE2 일치), DHCP IP **192.168.0.134**, ping ttl=64(Linux).
+- `nmap -sT -p-` 전체 포트: **`6668/tcp` 단 하나만 open** = **Tuya 로컬 제어 프로토콜**(암호화 디바이스 제어). SSH(22)·telnet(23)·web(80)·2333 전부 닫힘.
+- **결론: LAN-only 해방 불가.** 6668은 셸/root를 주지 않는다. 펌웨어 교체용 네트워크 진입로 없음 → **시리얼 콘솔 필수.**
+- 부수효과: 6668 open = stock 정상 부팅 중. 그리고 u-boot 진입 후 **이미지 전송은 이 LAN(TFTP)으로** 하면 빠르다.
+
+## 11. UART 4핀 헤더 확정법 (땜 없이)
+
+좌하단 4핀 through-hole이 정말 UART인지 가리는 절차:
+
+1. **GND 찾기** (멀티미터 도통, 전원 OFF): 확실한 GND(USB-C 쉴드/RJ45 쉘/전해캡 −/코인셀 −)와 4핀 각각 도통 → 삑- 울리는 핀 = GND(보통 끝핀).
+2. **VCC/TX/RX 구분** (DC 전압, 전원 ON, 검은 프로브=GND핀):
+   - **VCC** = 3.3V 고정(안 흔들림)
+   - **TX 후보** = 평상 3.3V인데 **부팅 순간 비동기 버스트**(데이터 전송). 단 I2C 등도 부팅 중 activity가 있을 수 있으니 전압/버스트는 *후보 식별*까지 — **최종 판정은 3단계 boot log.**
+   - **RX** = 3.3V 풀업, 잔잔
+3. **결정타** (USB-Serial 3.3V, 무땜): GND 연결 + 어댑터 **RX**만 TX 후보 핀에 점퍼핀 임시접촉 → `screen /dev/ttyUSB0 115200` + 전원 인가 → **boot log(SigmaStar/U-Boot 배너) 뜨는 핀 = TX = UART 확정.**
+   - 어댑터 TX(출력)는 핀 확정 전 연결 금지(읽기 먼저). 핀 피치 2.54mm면 dupont 그대로 사용.
+
+## 12. 작업 분담 — 아웃소싱 vs GLG self
+
+GLG는 납땜을 직접 못 함 → 물리/납땜은 외주, 나머지는 무땜으로 GLG가 직접.
+
+| 구분 | 항목 | 비고 |
+|---|---|---|
+| **아웃소싱(맡김)** | 좌하단 4핀 UART 확정(§11) + **핀헤더 4핀 납땜** | 산출물: boot log + 안 끊기는 시리얼 헤더. §11 절차를 작업지시서로 전달 |
+| **GLG self (무땜)** | 3.3V USB-Serial 어댑터 확보 | CP2102/CH340/FT232 3.3V |
+| **GLG self** | TFTP 서버 셋업(192.168.0.x) | 이미지 전송용 |
+| **GLG self** | `buildroot_idosom2d01` desk build | u-boot/kernel/rescue/rootfs FIT 산출 |
+| **GLG self** | (헤더 오면) stock u-boot 진입 + `help/printenv/mtdparts/nand info/nand bad` 캡처 → stock NAND+nvram 백업(§7 게이트) | 시리얼+LAN |
+| **GLG self** | rescue 부팅(`bootm ...#ssd202d-som2d01`) → UBI 재구성 → open image flash | §8 경로 |
+
+> GLG self 선행작업은 "읽기/빌드/전송 인프라 준비"까지. **실보드 write/erase는 stock 백업 게이트(§7) 전 금지.**
+
+### 아웃소싱 작업지시 — 산출물 (받을 것)
+
+- 4핀 헤더 핀맵 사진: 보드 방향 기준 `GND / TX(board→adapter RX) / RX(adapter TX→board) / VCC?` 라벨링
+- 각 핀 측정값: 전원 OFF 도통, 전원 ON DC 전압, 부팅 시 TX 후보 변화 여부
+- **boot log 텍스트(또는 캡처)**: Boot ROM/IPL/U-Boot 배너 보이는 115200 8N1 로그
+- 납땜 후 사진: 헤더 방향/핀1 표시/쇼트 없음
+- 핀 피치 실측(2.54mm 여부, 아니면 규격 기록)
+
+### 아웃소싱 금지사항
+
+- USB-Serial **VCC를 보드에 연결 금지** — 보드 전원은 자체 USB-C
+- 확정 전 **어댑터 TX를 보드에 연결 금지** — 먼저 GND + adapter RX만으로 board TX 읽기
+- **5V TTL 어댑터 금지, 3.3V logic만**
+- **ISP/flash/write 금지** — 외주 범위는 *UART 확인 + 헤더 납땜 + boot log 산출까지만*
+
 ## Sources
 
 - [linux-chenxing.org — infinity2 / SSD202](http://linux-chenxing.org/infinity2/)

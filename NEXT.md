@@ -1,7 +1,7 @@
 # NOW — THP23-ZB-X 오픈소스 해방 (SMHUB 도착 전 현재 작업)
 
 - **현재**: living doc set 재정렬 완료, `v2026.6.22` 릴리즈 태깅됨(`a3c8db1`). 최신 로컬 커밋들은 push 대기; 지금은 THP23-ZB-X 해방 레인 진행 중.
-- **바로 다음**: **THP23-ZB-X**(Tuya 제품, THP23-X-M 모듈 기반 / SSD202D + onboard EFR32 / 128MB) bring-up. **이미 in hand.** Tuya stock 펌웨어를 오픈소스 포크(Buildroot/OpenWrt/linux-chenxing)로 교체해 보드를 소유하고 로컬 컨트롤. SMHUB Nano 도착 전에 진행.
+- **바로 다음**: **THP23-ZB-X** 해방(in hand). LAN-only는 불가 확정(시리얼 필수) → **UART 확정+납땜은 아웃소싱**, GLG는 무땜으로 어댑터/TFTP/`buildroot_idosom2d01` desk build를 병행 준비. 헤더 오면 stock 백업 → open image flash. 상세·분담은 `docs/THP23-LIBERATION.md` §11·§12.
 - **Blocker(THP23 아님)**: SMHUB Nano + Milk-V Duo 개발보드는 배송 대기 — 별도 레인. THP23-ZB-X는 막혀 있지 않다.
 - **읽을 곳**: `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
 - **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지.
@@ -17,13 +17,14 @@ Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual
 - **해방 저위험**: Tuya 공식 문서에 U-Boot 진입(`nvram set persist.uboot.enter on`)·TFTP `nand write` 플래시 절차 공개. glitch/exploit 불필요.
 - **부팅 사실**: SSD202D는 **SPI NAND 부팅(SD/eMMC 부팅 불가)**. 복구 = U-Boot + UART SPL 재주입 + TFTP.
 - **⚠️ erase 전 백업**: stock NAND 덤프 + nvram 인증키(`UUID`/`AUTHKEY`/`master_mac`/`bsn`). 분실 시 stock·Tuya 복귀 불가.
+- **LAN 정찰 완료(무땜)**: 보드 `SmartGateway-BDE2`(192.168.0.134). nmap 전체포트 `6668/tcp`(Tuya 제어)만 open → SSH/telnet/web 닫힘. **LAN-only 해방 불가, 시리얼 필수** 확정.
 - Criteria:
-  - [x] 물리 검사 — 보드 `THP23-X_V1.3.0`. SSD202D + **EFR32MG21**(Zigbee) + TY001 Wi-Fi + SPI NAND + RJ45 + 좌하단 4핀 UART 헤더 확인
-  - [x] 오픈소스 포크 리서치 + 시리얼 연결법 → `docs/THP23-LIBERATION.md` (PM_UART, ttyS0 115200 8N1, IDO-SOM2D01 동일 SoM)
-  - [ ] **다음**: 좌하단 4핀 헤더 핀순서 멀티미터로 확정(GND/TX/RX) → USB-Serial **3.3V, GND/TX/RX만**(VCC 미연결, 전원은 USB-C) 연결 → boot log 확보
-  - [ ] stock u-boot interrupt(`nvram set persist.uboot.enter on`) + 백업(§7 게이트)
-  - [ ] U-Boot/recovery path 파악, stock 백업
-  - [ ] 오픈소스 image(linux-chenxing/OpenWrt/Buildroot) boot or flash
+  - [x] 물리 검사 — `THP23-X_V1.3.0`: SSD202D + **EFR32MG21** + TY001 + SPI NAND + RJ45 + 좌하단 4핀 UART 후보
+  - [x] 오픈소스 포크 리서치 + 시리얼 연결법 + LAN 정찰 → `docs/THP23-LIBERATION.md`
+  - [ ] 🔧 **아웃소싱(맡김)**: 좌하단 4핀 UART 확정(§11 멀티미터/USB-serial) + **핀헤더 4핀 납땜** → boot log 산출. (GLG 땜 불가)
+  - [ ] **GLG self (지금·무땜)**: 3.3V USB-Serial 어댑터 확보 + TFTP 서버 셋업(192.168.0.x) + `buildroot_idosom2d01` desk build
+  - [ ] **GLG self (헤더 오면)**: stock u-boot 진입(`nvram set persist.uboot.enter on`) + `help/printenv/mtdparts/nand info` 캡처 → stock NAND+nvram 백업(§7 게이트)
+  - [ ] **GLG self**: rescue 부팅(`bootm ...#ssd202d-som2d01`) → UBI 재구성 → open image flash
   - [ ] onboard EFR32 detection + reset/bootloader path
   - [ ] Zigbee NCP proof with one paired device
   - [ ] RSS/process evidence on 128MB

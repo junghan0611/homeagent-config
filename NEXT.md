@@ -1,14 +1,28 @@
-# NOW — v2026.6.22 release 후 핸드오프 정합
+# NOW — THP23-ZB-X 오픈소스 해방 (SMHUB 도착 전 현재 작업)
 
-- **현재**: living doc set 재정렬 완료. `v2026.6.22` 릴리즈가 `a3c8db1`에 태깅됨(GitHub Release 노트까지 완료). 최신 `ae6e98f`는 run.sh→just 공존 결정 기록. main clean, origin/main 동기화.
-- **바로 다음**: run.sh → just 공존→점진 이관 1단계 — `justfile` skeleton + read-only/status 명령부터 recipe화. 빅뱅 금지, run.sh 유지/위임.
-- **Blocker**: SMHUB Nano + Milk-V Duo 개발보드 배송 대기. 실물 bring-up은 보드 도착 후.
+- **현재**: living doc set 재정렬 완료, `v2026.6.22` 릴리즈 태깅됨(`a3c8db1`). 최신 후속 정리는 `197f02e`(local, 미푸시); 지금은 THP23-ZB-X 해방 레인으로 재범위 중.
+- **바로 다음**: **THP23-ZB-X**(Tuya 제품, THP23-X-M 모듈 기반 / SSD202D + onboard EFR32 / 128MB) bring-up. **이미 in hand.** Tuya stock 펌웨어를 오픈소스 포크(Buildroot/OpenWrt/linux-chenxing)로 교체해 보드를 소유하고 로컬 컨트롤. SMHUB Nano 도착 전에 진행.
+- **Blocker(THP23 아님)**: SMHUB Nano + Milk-V Duo 개발보드는 배송 대기 — 별도 레인. THP23-ZB-X는 막혀 있지 않다.
 - **읽을 곳**: `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
 - **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지.
 
 # ACTIVE
 
-## 1. run.sh 고도화 — just 공존→점진 이관 (결정됨)
+## 1. THP23-ZB-X 오픈소스 해방 — in hand, 현재 메인 작업
+
+Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual Cortex-A7 1.2GHz / **128MB** / onboard **EFR32**/Gecko-class radio / Wi-Fi TY001 + Ethernet). 목표는 Tuya stock 펌웨어를 **오픈소스 포크로 교체**해 보드를 소유하는 것. comparison ceiling이 아니라 SMHUB 도착 전 실제 해방 작업.
+
+- 오픈소스 경로: **linux-chenxing**(SSD20x mainline 노력) + **OpenWrt** + **Buildroot** 중 가장 진척된 포크 채택.
+- bring-up 자산(datasheet): 디버그 UART `PM_UART_RX/TX`, onboard SD/USB2.0 플래시 매체, Ethernet.
+- Criteria:
+  - [ ] UART debug console 진입 + boot log 확보
+  - [ ] U-Boot/recovery path 파악, stock 백업
+  - [ ] 오픈소스 image(linux-chenxing/OpenWrt/Buildroot) boot or flash
+  - [ ] onboard EFR32 detection + reset/bootloader path
+  - [ ] Zigbee NCP proof with one paired device
+  - [ ] RSS/process evidence on 128MB
+
+## 2. run.sh 고도화 — just 공존→점진 이관 (결정됨, 급하지 않음)
 
 run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계.
 
@@ -21,8 +35,9 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
 - Janet: **올인 아님.** 진짜 런타임 로직은 이미 Go 자리. 특정 gnarly 스크립트 1개(예: `hub-radio` 펌웨어 전환)가 bash를 넘어설 때만 Janet 파일럿. 리포 재현성을 niche 툴체인에 베팅하지 않는다.
 - 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
 
-## 2. Board bring-up — after hardware arrives
-- Targets: **SMHUB Nano(SG2000)** / **Milk-V Duo SDK board** / **THP23-ZB-X(SSD202D comparison)**
+## 3. Board bring-up — SMHUB Nano / Milk-V Duo (after hardware arrives)
+- Targets: **SMHUB Nano(SG2000)** / **Milk-V Duo SDK board**
+- Blocker: 개발보드 배송 대기. 실물 bring-up은 보드 도착 후.
 - Criteria:
   - [ ] UART console + U-Boot/recovery path
   - [ ] Buildroot/OpenWrt open image boot or flash

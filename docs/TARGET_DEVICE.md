@@ -56,7 +56,7 @@ SG2000 is a practical middle point for a small hub:
 
 ## 128MB Ceiling — THP23-ZB-X
 
-Tuya THP23-ZB-X is valuable because it is in hand and hub-shaped, but it is not the main target.
+Tuya THP23-ZB-X is the current in-hand liberation target: it is the board we own and bring up *before* the SMHUB-class hubs arrive. SMHUB-class (SG2000 / 512MB) remains the product-size center, but THP23-ZB-X is where the actual open-source bring-up work happens now.
 
 | Item | Implication |
 |------|-------------|

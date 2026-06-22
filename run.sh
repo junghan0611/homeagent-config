@@ -16,62 +16,69 @@ YOCTO_DIR="${SCRIPT_DIR}/yocto"
 SOURCES_DIR="${YOCTO_DIR}/sources"
 BUILD_DIR="${YOCTO_DIR}/build"
 
+# ============================================================================
+# Tier-2 — 미니멀 허브 (Buildroot / SG2000) · 현재 주력 lane · NEW DEVICE WORK
+# ----------------------------------------------------------------------------
+# 새 보드(SMHUB Nano / Milk-V Duo S / THP23-ZB-X) bring-up 명령은 여기에 추가한다.
+# origin lane(Yocto/Docker)과 섞지 말 것. 명명 규칙:
+#   cmd_hub_build   — public Buildroot SDK 기준 이미지 빌드
+#   cmd_hub_flash   — 보드 flash (SD / eMMC / U-Boot)
+#   cmd_hub_radio   — 온보드 EFR32 감지 + 펌웨어 전환 (Zigbee NCP ↔ Thread RCP)
+#   cmd_hub_status  — 보드 런타임 상태 (MQTT / Z2M / matter.js RSS 근거)
+# 방향·acceptance: docs/TARGET_DEVICE.md · VERSION.md · NEXT.md
+# 하드웨어 도착 전: SDK/문서 준비만. USB 동글은 proof 전용, 목표는 온보드 라디오.
+# (아래 함수들은 보드 도착 후 채운다.)
+# ============================================================================
+
 help() {
-    echo -e "${CYAN}HomeAgent Config${NC} — 크로스플랫폼 스마트홈 에이전트"
+    echo -e "${CYAN}HomeAgent Config${NC} — minimal open hub BSP"
     echo ""
     echo "Usage: ./run.sh <command> [args]"
     echo ""
-    echo -e "${GREEN}=== 빌드 ===${NC}"
+    echo -e "${CYAN}■ Tier-2 — 미니멀 허브 (Buildroot / SG2000) · 현재 주력${NC}"
+    echo "  새 보드 bring-up 명령은 이 lane에 추가한다 (cmd_hub_* 규칙)."
+    echo "  하드웨어 도착 후 추가 예정: hub-build / hub-flash / hub-radio / hub-status"
+    echo "  방향·acceptance: docs/TARGET_DEVICE.md · VERSION.md · NEXT.md"
+    echo "  USB 동글은 proof 전용. 목표는 온보드 EFR32."
+    echo ""
+    echo -e "${GREEN}=== 코드 / 빌드 (shared) ===${NC}"
     echo "  go-build        Go arm64 크로스컴파일 (정적 바이너리)"
     echo "  go-dev [args]   Go 로컬 개발 실행"
-    echo "  ui-build        Lit 프론트엔드 빌드 (npm run build)"
-    echo ""
-    echo -e "${GREEN}=== Flutter ===${NC}"
-    echo "  flutter-run       Linux desktop 실행 (hot reload)"
-    echo "  flutter-build     Linux desktop 빌드"
-    echo "  flutter-exec      빌드된 바이너리 실행"
-    echo "  flutter-server    Go 로컬 서버 (Flutter 개발용)"
-    echo "  flutter-analyze   코드 분석"
-    echo "  apk-build       APK 릴리즈 빌드"
-    echo "  apk-go          Go arm64 Android 크로스컴파일"
-    echo ""
-    echo -e "${GREEN}=== 배포 (Docker 기반 — RPi5) ===${NC}"
-    echo "  ha-deploy [IP]  전체 배포 (빌드+Docker+Go→디바이스→시작)"
-    echo "  ha-start  [IP]  Docker 스택 + Go 시작"
-    echo "  ha-stop   [IP]  전체 스택 종료"
-    echo "  ha-status [IP]  컨테이너/서비스 상태"
-    echo "  ha-logs [IP] [target]  로그 (go/matter/otbr/all)"
-    echo "  go-deploy [IP]  Go 바이너리만 배포"
-    echo ""
-    echo -e "${GREEN}=== 배포 (Yocto 네이티브 — OPi5) ===${NC}"
-    echo "  opi5-deploy     Go+UI+aliases 배포 (Docker 불필요)"
-    echo "  opi5-start      Go 서버 시작"
-    echo "  opi5-stop       Go 서버 종료"
-    echo "  opi5-status     서비스 상태 (systemd + Go)"
-    echo ""
-    echo -e "${GREEN}=== Yocto 빌드 ===${NC}"
-    echo "  bb [target]          RPi5 빌드 (기본: core-image-weston)"
-    echo "  bb-opi5 [target]     OPi5 빌드 (기본: core-image-minimal)"
-    echo "  bb-cmd <args>        RPi5 bitbake 직접 실행"
-    echo "  bb-cmd-opi5 <args>   OPi5 bitbake 직접 실행"
-    echo "  bb-clean [target]    RPi5 클린 빌드"
-    echo "  bb-clean-opi5 [target]  OPi5 클린 빌드"
-    echo "  bb-resume            RPi5 빌드 이어하기"
-    echo "  bb-resume-opi5       OPi5 빌드 이어하기"
+    echo "  ui-build        Lit 프론트엔드 빌드"
+    echo "  bundle          백엔드 번들 (scripts/bundle-backend.sh)"
     echo ""
     echo -e "${GREEN}=== 디바이스 ===${NC}"
     echo "  ssh [IP|name] [cmd]  SSH 접속 (opi5, rpi5, IP 직접)"
     echo "  setup-key [IP|name]  SSH 공개키 등록"
-    echo "  set-ip <ip>          디바이스 IP 설정"
+    echo "  set-ip <ip>          기본 디바이스 IP 설정"
+    echo "  thread-init [IP]     Thread 네트워크 초기화 + SRP"
+    echo ""
+    echo -e "${GREEN}=== Git ===${NC}"
+    echo "  diff / commit   변경사항 / 커밋 상태"
+    echo ""
+    echo -e "${YELLOW}─── Tier-1 origin lane (Yocto RPi5/OPi5 — 검증 보존, 신규 1순위 아님) ───${NC}"
+    echo ""
+    echo -e "${GREEN}=== Yocto 빌드 (RPi5) ===${NC}"
+    echo "  bb [target]          RPi5 빌드 (기본: core-image-weston)"
+    echo "  bb-cmd <args>        RPi5 bitbake 직접 실행"
+    echo "  bb-clean [target]    RPi5 클린 빌드"
+    echo "  bb-resume            RPi5 빌드 이어하기"
+    echo "  shell / status / layers / clean   Yocto 환경/레이어/정리"
+    echo "  image / flash /dev/sdX / deploy [host]   RPi5 이미지/플래시"
+    echo "  npm-shrinkwrap <pkg> / npm-build <pkg>   z2m·matterjs 레시피"
+    echo "  otbr-build           OTBR 빌드 (matterjs 구성)"
+    echo ""
+    echo -e "${GREEN}=== Yocto 빌드/배포 (OPi5 lab) ===${NC}"
+    echo "  bb-opi5 [target]     OPi5 빌드 (기본: core-image-minimal)"
+    echo "  bb-cmd-opi5 <args>   OPi5 bitbake 직접 실행"
+    echo "  bb-clean-opi5 [target] / bb-resume-opi5"
     echo "  flash-opi5 /dev/sdX  OPi5 SD카드 플래싱 (SSH 키 자동 주입)"
+    echo "  opi5-deploy / opi5-start / opi5-stop / opi5-status"
     echo ""
-    echo -e "${GREEN}=== Android (레거시) ===${NC}"
-    echo "  android <cmd>   Android 직접 배포 (scripts/android-deploy.sh)"
-    echo ""
-    echo -e "${GREEN}=== 이슈/Git ===${NC}"
-    echo "  issues          br 이슈 목록"
-    echo "  issue <id>      br 이슈 상세"
-    echo "  diff / commit   변경사항 / 커밋"
+    echo -e "${GREEN}=== 클라이언트 / Go 배포 (origin) ===${NC}"
+    echo "  flutter-run / flutter-build / flutter-exec / flutter-server / flutter-analyze"
+    echo "  go-deploy [IP]  Go 바이너리만 배포"
+    echo "  go-test [IP]    원격 health check"
     echo ""
 }
 
@@ -171,8 +178,6 @@ cmd_bb_resume() {
 }
 
 # === OPi5 빌드 명령 (build-opi5 디렉토리 사용) ===
-
-# === OPi5 빌드 명령 (build-opi5 디렉토리 사용) ===
 # oe-init-build-env는 yocto/ 디렉토리에서 실행, build-opi5를 인자로 전달
 
 cmd_bb_opi5() {
@@ -238,14 +243,6 @@ cmd_clean() {
     echo -e "${GREEN}[DONE]${NC} 정리 완료"
 }
 
-cmd_issues() {
-    br list
-}
-
-cmd_issue() {
-    br show "$1"
-}
-
 cmd_diff() {
     git -C "$SCRIPT_DIR" status
     echo ""
@@ -253,8 +250,7 @@ cmd_diff() {
 }
 
 cmd_commit() {
-    br sync --flush-only 2>/dev/null || true
-    echo -e "${YELLOW}[INFO]${NC} git add/commit 직접 실행하세요"
+    echo -e "${YELLOW}[INFO]${NC} NEXT.md / CHANGELOG.md 확인 후 git add/commit 직접 실행하세요"
     git -C "$SCRIPT_DIR" status
 }
 
@@ -703,303 +699,6 @@ cmd_ui_build() {
     echo -e "${GREEN}[DONE]${NC} ui/dist/ ($(du -sh dist | awk '{print $1}'))"
 }
 
-# 전체 빌드 + 배포 + 시작
-cmd_ha_deploy() {
-    local IP=$(get_device_ip "$1")
-    if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"
-        echo "  ./run.sh ha-deploy 192.168.69.6"
-        exit 1
-    fi
-    check_ssh_key
-
-    echo -e "${CYAN}══════════════════════════════════════${NC}"
-    echo -e "${CYAN}  HomeAgent 전체 배포 → $IP${NC}"
-    echo -e "${CYAN}══════════════════════════════════════${NC}"
-
-    # 1. Go 빌드
-    cmd_go_build
-
-    # 2. UI 빌드
-    cmd_ui_build
-
-    # 3. 기존 프로세스 정지
-    cmd_ha_stop "$IP" 2>/dev/null || true
-
-    # 4. 파일 전송
-    echo -e "${GREEN}[UPLOAD]${NC} 바이너리 + UI + aliases + docker-compose..."
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "mkdir -p /opt/homeagent/ui"
-    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/go/bin/homeagent" root@"$IP":/opt/homeagent/homeagent
-    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/aliases.json" root@"$IP":/opt/homeagent/aliases.json
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "rm -rf /opt/homeagent/ui/*"
-    scp -i "$SSH_KEY" $SSH_OPTS -r "$SCRIPT_DIR/ui/dist/"* root@"$IP":/opt/homeagent/ui/
-
-    # 5. Docker 설정 배포
-    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/docker-compose.yml" root@"$IP":/opt/homeagent/
-    scp -i "$SSH_KEY" $SSH_OPTS "$SCRIPT_DIR/.env.docker.rpi5" root@"$IP":/opt/homeagent/.env
-
-    # .env에 LLM 키 추가
-    if [[ -f "$HOME/.env.local" ]]; then
-        local _key
-        _key=$(grep -m1 '^export OPENROUTER_API_KEY=' "$HOME/.env.local" 2>/dev/null | sed 's/^export //' || true)
-        [[ -n "$_key" ]] && ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" "echo '$_key' >> /opt/homeagent/.env"
-    fi
-
-    # 6. 시작
-    cmd_ha_start "$IP"
-
-    echo -e "${CYAN}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}[DONE]${NC} 배포 완료! http://$IP:8080"
-    echo -e "${CYAN}══════════════════════════════════════${NC}"
-}
-
-# Docker 기반 전체 스택 시작
-cmd_ha_start() {
-    local IP=$(get_device_ip "$1")
-    if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
-    fi
-    check_ssh_key
-
-    echo -e "${GREEN}[START]${NC} Docker 스택 시작 ($IP)..."
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'STARTEOF'
-set -e
-export PATH="/opt/docker:$PATH"
-HA_DIR="/opt/homeagent"
-
-log()  { echo -e "\033[0;32m[start]\033[0m $*"; }
-warn() { echo -e "\033[0;33m[start]\033[0m $*"; }
-
-# --- 1. Docker Engine ---
-if ! docker info > /dev/null 2>&1; then
-    log "containerd 시작..."
-    containerd --root /opt/docker-data/containerd --state /run/containerd > /tmp/containerd.log 2>&1 &
-    sleep 3
-    log "dockerd 시작..."
-    dockerd --data-root /opt/docker-data --userland-proxy-path /opt/docker/docker-proxy --iptables=false > /tmp/dockerd.log 2>&1 &
-    for i in $(seq 1 15); do
-        docker info > /dev/null 2>&1 && break
-        sleep 2
-    done
-    docker info > /dev/null 2>&1 || { echo "Docker 시작 실패"; exit 1; }
-    log "Docker Engine 준비 완료"
-else
-    log "Docker 이미 실행 중"
-fi
-
-# --- 2. 컨테이너 (OTBR + python-matter-server) ---
-log "컨테이너 시작..."
-cd "$HA_DIR"
-docker-compose up -d 2>&1
-
-# --- 3. Thread Dataset ---
-log "Thread 설정..."
-DATASET_FILE="$HA_DIR/thread-dataset.hex"
-
-# hex 유효성 체크 함수 (순수 hex 문자열인지)
-is_valid_hex() { echo "$1" | grep -qE '^[0-9a-fA-F]{20,}$'; }
-
-# OTBR 준비 대기
-for i in $(seq 1 30); do
-    docker exec otbr ot-ctl state > /dev/null 2>&1 && break
-    sleep 1
-done
-
-STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
-
-if [ "$STATE" = "leader" ] || [ "$STATE" = "router" ]; then
-    log "Thread 이미 활성: $STATE"
-    _hex=$(docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r')
-    is_valid_hex "$_hex" && echo "$_hex" > "$DATASET_FILE"
-elif [ -f "$DATASET_FILE" ] && is_valid_hex "$(cat "$DATASET_FILE" | tr -d '\r\n')"; then
-    HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
-    log "Thread dataset 복원 시도 (${#HEX}자)..."
-    docker exec otbr ot-ctl dataset set active "$HEX"
-    docker exec otbr ot-ctl dataset commit active
-    docker exec otbr ot-ctl ifconfig up
-    docker exec otbr ot-ctl thread start
-    # 복원 후 leader 대기 (최대 20초)
-    _restored=false
-    for i in $(seq 1 20); do
-        STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
-        if [ "$STATE" = "leader" ] || [ "$STATE" = "router" ]; then _restored=true; break; fi
-        sleep 1
-    done
-    if [ "$_restored" != "true" ]; then
-        warn "복원 실패 (detached) → 새 Thread 네트워크 생성"
-        docker exec otbr ot-ctl thread stop 2>/dev/null
-        docker exec otbr ot-ctl ifconfig down 2>/dev/null
-        docker exec otbr ot-ctl dataset init new
-        docker exec otbr ot-ctl dataset commit active
-        docker exec otbr ot-ctl ifconfig up
-        docker exec otbr ot-ctl thread start
-    fi
-else
-    log "새 Thread 네트워크 생성..."
-    docker exec otbr ot-ctl dataset init new
-    docker exec otbr ot-ctl dataset commit active
-    docker exec otbr ot-ctl ifconfig up
-    docker exec otbr ot-ctl thread start
-fi
-
-# leader 대기
-for i in $(seq 1 20); do
-    STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "")
-    [ "$STATE" = "leader" ] || [ "$STATE" = "router" ] && break
-    sleep 1
-done
-log "Thread: $STATE"
-
-docker exec otbr ot-ctl srp server enable 2>/dev/null || true
-
-# dataset 백업 (유효한 hex만 저장)
-_hex=$(docker exec otbr ot-ctl dataset active -x 2>/dev/null | grep -v Done | tr -d '\r')
-if is_valid_hex "$_hex"; then
-    echo "$_hex" > "$DATASET_FILE"
-else
-    warn "dataset 백업 스킵 (아직 없음)"
-fi
-
-# 새 Thread 네트워크 생성 시 matter-data 초기화 (캐시 불일치 방지)
-if [ "$_restored" != "true" ] 2>/dev/null; then
-    log "새 Thread 네트워크 → matter-data 초기화"
-    docker exec matter-server rm -rf /data/chip.json /data/chip_config.ini 2>/dev/null || true
-    docker restart matter-server 2>/dev/null
-    for i in $(seq 1 30); do
-        docker logs matter-server 2>&1 | grep -q "successfully initialized" && break
-        sleep 1
-    done
-fi
-
-# --- 4. Thread Dataset → python-matter-server ---
-log "matter-server 준비 대기..."
-for i in $(seq 1 60); do
-    docker logs matter-server 2>&1 | grep -q "successfully initialized" && break
-    sleep 1
-done
-# WS 포트 열림 대기
-for i in $(seq 1 15); do
-    docker exec matter-server python3 -c "
-import socket; s=socket.socket(); s.settimeout(1)
-try: s.connect(('127.0.0.1',5580)); s.close(); exit(0)
-except: exit(1)
-" 2>/dev/null && break
-    sleep 1
-done
-
-HEX=""
-[ -f "$DATASET_FILE" ] && HEX=$(cat "$DATASET_FILE" | tr -d '\r\n')
-if is_valid_hex "$HEX"; then
-    log "Thread dataset → matter-server 주입..."
-    docker exec matter-server python3 -c "
-import json, asyncio
-from aiohttp import ClientSession
-async def inject():
-    async with ClientSession() as s:
-        async with s.ws_connect('ws://localhost:5580/ws') as ws:
-            await ws.receive()
-            await ws.send_str(json.dumps({'message_id':'t','command':'set_thread_dataset','args':{'dataset':'$HEX'}}))
-            await ws.receive()
-            print('OK')
-asyncio.run(inject())
-" 2>&1
-else
-    warn "Thread dataset 주입 스킵 (유효한 hex 없음)"
-fi
-
-# --- 5. Go HomeAgent ---
-if pidof homeagent > /dev/null 2>&1; then
-    log "homeagent 이미 실행 중"
-else
-    log "homeagent 시작..."
-    cd "$HA_DIR"
-    [ -f "$HA_DIR/.env" ] && { set -a; . "$HA_DIR/.env"; set +a; }
-
-    HOMEAGENT_HTTP_ADDR="${HOMEAGENT_HTTP_ADDR:-:8080}" \
-    HOMEAGENT_MATTER_WS="${HOMEAGENT_MATTER_WS:-ws://localhost:5580}" \
-    HOMEAGENT_UI_DIR="${HOMEAGENT_UI_DIR:-$HA_DIR/ui}" \
-    HOMEAGENT_ALIASES_FILE="${HOMEAGENT_ALIASES_FILE:-$HA_DIR/aliases.json}" \
-    nohup ./homeagent > /tmp/homeagent.log 2>&1 &
-    sleep 3
-fi
-
-log "=== 완료 ==="
-grep "connected:" /tmp/homeagent.log 2>/dev/null || true
-STARTEOF
-}
-
-cmd_ha_stop() {
-    local IP=$(get_device_ip "$1")
-    if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
-    fi
-    check_ssh_key
-    echo -e "${YELLOW}[STOP]${NC} 전체 스택 종료 ($IP)..."
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'STOPEOF'
-export PATH="/opt/docker:$PATH"
-kill $(pidof homeagent) 2>/dev/null && echo "homeagent stopped" || echo "homeagent not running"
-cd /opt/homeagent && docker-compose down 2>/dev/null && echo "containers stopped" || echo "no containers"
-STOPEOF
-}
-
-cmd_ha_logs() {
-    local IP=$(get_device_ip "$1")
-    local TARGET="${2:-all}"
-    if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
-    fi
-    check_ssh_key
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s "$TARGET" <<'LOGSEOF'
-export PATH="/opt/docker:$PATH"
-TARGET="$1"
-case "$TARGET" in
-    go|homeagent) tail -50 /tmp/homeagent.log ;;
-    matter*)      docker logs --tail 50 matter-server 2>&1 ;;
-    otbr)         docker logs --tail 50 otbr 2>&1 ;;
-    docker*)      tail -30 /tmp/dockerd.log ;;
-    *)
-        echo "=== homeagent ===" && tail -20 /tmp/homeagent.log
-        echo "" && echo "=== matter-server ===" && docker logs --tail 10 matter-server 2>&1
-        echo "" && echo "=== otbr ===" && docker logs --tail 10 otbr 2>&1
-        ;;
-esac
-LOGSEOF
-}
-
-cmd_ha_status() {
-    local IP=$(get_device_ip "$1")
-    if [[ -z "$IP" ]]; then
-        echo -e "${RED}[ERROR]${NC} IP를 지정하세요"; exit 1
-    fi
-    check_ssh_key
-    echo -e "${CYAN}[STATUS]${NC} $IP"
-    ssh -i "$SSH_KEY" $SSH_OPTS root@"$IP" bash -s <<'EOF'
-export PATH="/opt/docker:$PATH"
-echo "=== Docker ==="
-docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || echo "  Docker 미실행"
-
-echo ""
-echo "=== 서비스 ==="
-pidof homeagent > /dev/null 2>&1 && echo "  homeagent: ✅" || echo "  homeagent: ❌"
-
-echo ""
-echo "=== Thread ==="
-STATE=$(docker exec otbr ot-ctl state 2>/dev/null | grep -v Done | tr -d '\r' || echo "unknown")
-echo "  state: $STATE"
-docker exec otbr ot-ctl srp server state 2>/dev/null | grep -v Done | tr -d '\r' | sed 's/^/  SRP: /'
-
-echo ""
-echo "=== 디바이스 ==="
-wget -qO- http://localhost:8080/api/devices 2>/dev/null || echo "  (API 응답 없음)"
-
-echo ""
-echo "=== 디스크 ==="
-df -h / | tail -1 | awk '{print "  "$3"/"$2" ("$5")"}'
-echo -n "  mem: "; free -m 2>/dev/null | awk '/Mem/{print $3"/"$2"M"}' || echo "(N/A)"
-echo -n "  uptime: "; uptime | sed 's/.*up //' | sed 's/,.*//'
-EOF
-}
-
 # ─── Go 빌드/배포 (기존) ───
 
 cmd_go_build() {
@@ -1306,12 +1005,6 @@ case "${1:-help}" in
     clean)
         cmd_clean
         ;;
-    issues)
-        cmd_issues
-        ;;
-    issue)
-        cmd_issue "$2"
-        ;;
     diff)
         cmd_diff
         ;;
@@ -1349,21 +1042,6 @@ case "${1:-help}" in
     npm-build)
         cmd_npm_build "$2"
         ;;
-    ha-deploy)
-        cmd_ha_deploy "$2"
-        ;;
-    ha-start)
-        cmd_ha_start "$2"
-        ;;
-    ha-stop)
-        cmd_ha_stop "$2"
-        ;;
-    ha-status)
-        cmd_ha_status "$2"
-        ;;
-    ha-logs)
-        cmd_ha_logs "$2" "$3"
-        ;;
     ui-build)
         cmd_ui_build
         ;;
@@ -1391,10 +1069,6 @@ case "${1:-help}" in
         ;;
     opi5-status)
         cmd_opi5_status
-        ;;
-    flash-rcp|build-chip-tool|deploy-chip-tool)
-        echo -e "${RED}[DEPRECATED]${NC} 이 명령은 제거됐습니다. scripts/deprecated/ 참고"
-        exit 1
         ;;
     flutter-run)
         echo -e "${GREEN}Flutter Linux Desktop — hot reload${NC}"
@@ -1426,46 +1100,8 @@ case "${1:-help}" in
     flutter-analyze)
         nix develop "${SCRIPT_DIR}#dev" --command bash -c "cd ${SCRIPT_DIR}/flutter && flutter analyze"
         ;;
-    apk-build)
-        SERVER_HOST="${2:-localhost}"
-        echo -e "${GREEN}[APK]${NC} Android APK 릴리즈 빌드 (server: ${SERVER_HOST})..."
-        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
-            cd ${SCRIPT_DIR}/flutter && flutter build apk --release --dart-define=SERVER_HOST=${SERVER_HOST} --dart-define=NATIVE_UI=true
-        "
-        APK="${SCRIPT_DIR}/flutter/build/app/outputs/flutter-apk/app-release.apk"
-        if [[ -f "$APK" ]]; then
-            echo -e "${GREEN}[APK]${NC} 빌드 완료: $(ls -lh "$APK" | awk '{print $5}')"
-            echo "  $APK"
-        fi
-        ;;
-    apk-debug)
-        echo -e "${YELLOW}[DEPRECATED]${NC} 'apk-debug' → './run.sh android build-apk' 사용"
-        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
-            cd ${SCRIPT_DIR}/flutter && flutter build apk --debug
-        "
-        ;;
-    apk-go)
-        echo -e "${GREEN}[APK]${NC} Go 바이너리 Android arm64 크로스컴파일..."
-        OUTDIR="${SCRIPT_DIR}/dist"
-        mkdir -p "$OUTDIR"
-        nix develop "${SCRIPT_DIR}#dev" --impure --command bash -c "
-            cd ${SCRIPT_DIR}/go
-            GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -ldflags='-s -w' -o ${OUTDIR}/homeagent-android-arm64 ./cmd/homeagent/
-        "
-        if [[ -f "$OUTDIR/homeagent-android-arm64" ]]; then
-            echo -e "${GREEN}[APK]${NC} Go 바이너리: $(ls -lh "$OUTDIR/homeagent-android-arm64" | awk '{print $5}')"
-            echo "  $OUTDIR/homeagent-android-arm64"
-        fi
-        ;;
-    android)
-        shift
-        "${SCRIPT_DIR}/scripts/android-deploy.sh" "${@:-help}"
-        ;;
     otbr-build)
-        # OTBR_BBR=on  → python-matter-server 구성 (BBR + mDNS proxy)
-        # OTBR_BBR=off → matterjs 구성 (기본값)
-        # 사용: ./run.sh otbr-build          (BBR OFF, matterjs)
-        #       OTBR_BBR=on ./run.sh otbr-build  (BBR ON, python-matter-server)
+        # matterjs 구성 OTBR 빌드 (python-matter-server BBR 경로는 폐기됨)
         exec nix develop .#dev --impure --command bash "${SCRIPT_DIR}/scripts/build-otbr.sh"
         ;;
     bundle)

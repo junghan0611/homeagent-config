@@ -1,26 +1,14 @@
-# NOW — homeagent-config 문서 세트 조이기
+# NOW — v2026.6.22 release 후 핸드오프 정합
 
-- **현재**: living set을 `README.md` / `AGENTS.md` / `NEXT.md` / `CHANGELOG.md` / `ROADMAP.md`로 정리했다.
-- **바로 다음**: commit 전 최종 diff review → release-prep commit → maintainer 승인 후 CalVer tag `v2026.6.22`.
+- **현재**: living doc set 재정렬 완료. `v2026.6.22` 릴리즈가 `a3c8db1`에 태깅됨(GitHub Release 노트까지 완료). 최신 `ae6e98f`는 run.sh→just 공존 결정 기록. main clean, origin/main 동기화.
+- **바로 다음**: run.sh → just 공존→점진 이관 1단계 — `justfile` skeleton + read-only/status 명령부터 recipe화. 빅뱅 금지, run.sh 유지/위임.
 - **Blocker**: SMHUB Nano + Milk-V Duo 개발보드 배송 대기. 실물 bring-up은 보드 도착 후.
 - **읽을 곳**: `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
-- **금지**: br/beads 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지.
+- **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지.
 
 # ACTIVE
 
-## 1. Release prep review
-- Criteria:
-  - [x] `AGENTS.md` is week-stable and compact.
-  - [x] `README.md` is a compact public landing.
-  - [x] `ROADMAP.md` holds phase direction.
-  - [x] `VERSION.md` absorbs stack + physical device matrix.
-  - [x] `HARDWARE.md` and `INVARIANTS.md` are removed after absorption.
-  - [x] br/beads helpers and state are removed.
-  - [x] final human/peer diff review (Opus review pass).
-  - [x] commit release prep.
-  - [ ] tag `v2026.6.22` after maintainer approval.
-
-## 2. run.sh 고도화 — just 공존→점진 이관 (결정됨)
+## 1. run.sh 고도화 — just 공존→점진 이관 (결정됨)
 
 run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계.
 
@@ -33,7 +21,7 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
 - Janet: **올인 아님.** 진짜 런타임 로직은 이미 Go 자리. 특정 gnarly 스크립트 1개(예: `hub-radio` 펌웨어 전환)가 bash를 넘어설 때만 Janet 파일럿. 리포 재현성을 niche 툴체인에 베팅하지 않는다.
 - 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
 
-## 3. Board bring-up — after hardware arrives
+## 2. Board bring-up — after hardware arrives
 - Targets: **SMHUB Nano(SG2000)** / **Milk-V Duo SDK board** / **THP23-ZB-X(SSD202D comparison)**
 - Criteria:
   - [ ] UART console + U-Boot/recovery path
@@ -44,6 +32,8 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
   - [ ] RSS/process evidence for 512MB lower-bound
 
 # RECENT
+- 2026-06-22: Released `v2026.6.22`, tagged at `a3c8db1` (living doc set 재정렬). GitHub Release 노트 완료.
+- 2026-06-22: `ae6e98f` records run.sh→just coexistence decision (post-release follow-up).
 - 2026-06-22: Re-centered repo from RPi5/Yocto/Hailo first to minimal open hub BSP.
 - 2026-06-22: Compressed root docs into living set: README / AGENTS / NEXT / CHANGELOG / ROADMAP.
 - 2026-06-22: Merged hardware/version state into VERSION.md; removed HARDWARE.md and INVARIANTS.md.

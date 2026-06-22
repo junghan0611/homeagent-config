@@ -2,7 +2,7 @@
 
 SMHUB Nano 도착 전, 손에 있는 Tuya 제품 **THP23-ZB-X**(모듈 THP23-X-M 기반)를 오픈소스 포크로 해방·소유하기 위한 조사 정리. NEXT.md ACTIVE #1의 상세 SSOT.
 
-> 상태: 데스크 리서치 1차 완료(2026-06-22). 실보드 물리 검사·UART 진입은 미진행.
+> 상태: 데스크 리서치 1차 완료(2026-06-22). 실보드 물리 검사는 1차 완료, UART 진입은 미진행.
 
 ## 1. 하드웨어 사실
 
@@ -92,6 +92,47 @@ Tuya 자체 문서(THP23-X-D firmware flashing)에 U-Boot 진입·플래시 절�
 - **U-Boot 백업 명령 가용성** — Tuya 문서의 TFTP `nand write`는 공개돼 있으나, 업로드/덤프(`tftpput`/`nand read`/`md`)는 stock U-Boot 빌드에 따라 없을 수 있다. 첫 UART 세션의 `help` 캡처로 가용 명령을 먼저 확인. 없으면 SPL/mainline U-Boot 재주입 후 덤프 경로를 따로 마련.
 - **OpenWrt 포크 구식** — SSD202D 미명시 + 18.06. 검증 비용 큼, 후순위.
 - **EFR32 라디오 펌웨어** — Tuya stock의 EFR32 펌웨어/연결 방식 미확인. **stock radio가 EZSP/NCP로 바로 쓰인다는 전제는 두지 않는다.** 필요 시 MG24/Gecko NCP 펌웨어(EmberZNet/EZSP) 재플래시는 별도 단계로 본다.
+
+## 8. 실보드 확인 + 시리얼 연결 (2026-06-22, 검증됨)
+
+실보드 분해 + 클론 리포 대조로 확정. 보드 실크 **`THP23-X_V1.3.0`** (Model `THP23-X`, P/N `2.05.08.01628`).
+
+확인된 부품: 중앙 **SSD202D**(코어) / 하단 **EFR32MG21**(Zigbee, 실드 안) / 우상단 **TY001 Wi-Fi**(IPEX) / 코어 옆 **SPI NAND** / 좌상 **RJ45**+마그네틱 / 좌 **USB-C**(전원) + 우 **USB-A** / CR1632 RTC / **좌하단 4핀 through-hole 헤더(UART 후보)**.
+
+### 시리얼 연결 (동일 SSD202D SoM = IDO-SOM2D01 기준, linux-chenxing 검증)
+
+부트 ROM·u-boot·커널이 공통으로 쓰는 콘솔은 **PM_UART**:
+
+| 보드 | USB-Serial 어댑터 |
+|---|---|
+| `PM_UART_RX` (모듈 pin 25) | ← 어댑터 **TX** |
+| `PM_UART_TX` (모듈 pin 26) | → 어댑터 **RX** |
+| `GND` | ↔ GND |
+
+- **콘솔: `ttyS0`, 115200 8N1.** (buildroot_idosom2d01 README·infinity2 로그 다중 확인)
+- **3.3V 로직** — 5V 금지. **보드 전원은 자체 USB-C로 공급하고, 어댑터 VCC는 연결하지 않는다(GND/TX/RX만).**
+- 좌하단 4핀 헤더의 핀 순서는 **멀티미터로 확정할 것**: **GND**(보드 GND/USB 쉴드와 도통), **TX**(평상 3.3V 하이·부팅 시 버스트), **RX**, (VCC). RX/TX 헷갈리면 한 번 바꿔 연결.
+- 주의: PM_UART 핀에는 ISP용 i2c slave도 물려 있음(SPI NOR/NAND 갱신용). 콘솔과 공유.
+
+### 플래시 레이아웃 (SPI NAND, ISP 기준)
+
+- `GCIS/CIS` @ `0x0` · `IPL` @ `0x140000` · `u-boot SPL` @ `0x200000` · 나머지 = **UBI**.
+- UBI 볼륨: `uboot`(1MiB,static) / `env`(256KiB) / `kernel`(16MiB) / `rescue`(16MiB) / `rootfs`(나머지).
+
+### THP23는 blank 모듈이 아님 (중요)
+
+stock 출하품이라 IPL+u-boot가 이미 정상. blank 모듈용 vendor ISP 플래시는 **brick 시 fallback**. 정상 경로:
+1. **stock u-boot interrupt** — Tuya 공식 `nvram set persist.uboot.enter on && nvram commit` → 재부팅 중 Enter (§3).
+2. backup(§3·§7 게이트) 후, u-boot SPL의 **serial(ymodem `loady`) 또는 ethernet TFTP**로 rescue kernel 부팅 → UBI 재구성.
+3. **SSD202D는 DT를 명시해야 함**: `bootm ${loadaddr}#ssd202d-som2d01` 안 하면 커널 부팅 중 락업.
+
+## 9. 참고 리포 (`~/repos/3rd/`, clone 완료 2026-06-22)
+
+| 리포 | 역할 |
+|---|---|
+| `buildroot_idosom2d01` (fifteenhex) | **SSD202D SoM용 Buildroot — identity/1차 후보.** README에 UART/ymodem/UBI/TFTP 전체 bring-up 절차 |
+| `linux-chenxing.org` | infinity2(SSD20x) 문서·핀아웃·ISP·boot ROM. `infinity2/ido-som2d01/`·`ip/commonpins.md` |
+| `openwrt-ssd20x` (wireless-tag) | vendor sstar u-boot/kernel SDK — bring-up oracle/드라이버 참고 |
 
 ## Sources
 

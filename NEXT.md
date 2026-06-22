@@ -18,9 +18,10 @@ Tuya 제품 **THP23-ZB-X** (모듈 THP23-X-M 기반 / Sigmastar **SSD202D** dual
 - **부팅 사실**: SSD202D는 **SPI NAND 부팅(SD/eMMC 부팅 불가)**. 복구 = U-Boot + UART SPL 재주입 + TFTP.
 - **⚠️ erase 전 백업**: stock NAND 덤프 + nvram 인증키(`UUID`/`AUTHKEY`/`master_mac`/`bsn`). 분실 시 stock·Tuya 복귀 불가.
 - Criteria:
-  - [ ] 물리 검사 (GLG, 진행 중): 칩 마킹(SSD202D/EFR32)·SPI NAND·UART 패드·SoC↔EFR32 연결·점퍼
-  - [x] 오픈소스 포크 리서치 → `docs/THP23-LIBERATION.md`
-  - [ ] UART debug console 진입 + boot log 확보 (보레이트 115200 우선)
+  - [x] 물리 검사 — 보드 `THP23-X_V1.3.0`. SSD202D + **EFR32MG21**(Zigbee) + TY001 Wi-Fi + SPI NAND + RJ45 + 좌하단 4핀 UART 헤더 확인
+  - [x] 오픈소스 포크 리서치 + 시리얼 연결법 → `docs/THP23-LIBERATION.md` (PM_UART, ttyS0 115200 8N1, IDO-SOM2D01 동일 SoM)
+  - [ ] **다음**: 좌하단 4핀 헤더 핀순서 멀티미터로 확정(GND/TX/RX) → USB-Serial **3.3V, GND/TX/RX만**(VCC 미연결, 전원은 USB-C) 연결 → boot log 확보
+  - [ ] stock u-boot interrupt(`nvram set persist.uboot.enter on`) + 백업(§7 게이트)
   - [ ] U-Boot/recovery path 파악, stock 백업
   - [ ] 오픈소스 image(linux-chenxing/OpenWrt/Buildroot) boot or flash
   - [ ] onboard EFR32 detection + reset/bootloader path

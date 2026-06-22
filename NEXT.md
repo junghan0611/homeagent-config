@@ -20,15 +20,18 @@
   - [x] commit release prep.
   - [ ] tag `v2026.6.22` after maintainer approval.
 
-## 2. run.sh 고도화 — justfile 이행 (다음 큰 사이클)
+## 2. run.sh 고도화 — just 공존→점진 이관 (결정됨)
 
-run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계. 방향: **justfile 색인 + scripts/ 로직, lane별 import**.
+run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계.
+
+**결정 (2026-06-22)**: 프론트도어를 **just**로. 단 **빅뱅 금지 — run.sh와 공존하다 점진 이관**. 리포 의존성은 키우지 않는다(just는 nixos-config로 설치됨, v1.43.1, 리포 의존성 추가 아님).
 
 - 목표 구조: `justfile`(import만) + `just/{hub,device,go,origin}.just` + `scripts/*.sh`(heredoc/flash/deploy 본체).
 - 이점: `just --list` 자동 디스커버리 → help stale 버그 영구 제거. 100KB 분할. legoagent-config(이미 just)와 일관.
-- 단계: ① 무거운 로직을 scripts/로 추출(run.sh 먼저 얇아짐) → ② justfile+just/ 도입, recipe는 scripts/ 호출 → ③ AGENTS/README 진입점 안내를 just 기준으로 갱신.
-- 주의: run.sh는 실장비를 건드린다. 한 번에 갈아엎지 말고 단계별로 장비 테스트. `exec nix run .#yocto`(FHS 재진입)·SSH heredoc은 scripts/로 옮겨 정석 bash로.
-- 대안 검토했으나 보류: 순수 bash lib/ source 분할 — 자동 디스커버리가 없어 help stale 문제가 남는다.
+- 이관 방식: 한 번에 갈아엎지 않는다. ① just로 커버되는 단순 명령부터 recipe로 옮기고 run.sh는 유지/위임 → ② 무거운 로직은 scripts/로 추출(run.sh·just 양쪽이 호출) → ③ 충분히 안정되면 run.sh를 얇은 shim/제거 → ④ AGENTS/README 진입점 안내 갱신.
+- 주의: run.sh는 실장비를 건드린다. 단계별 장비 테스트. `exec nix run .#yocto`(FHS 재진입)·SSH heredoc은 scripts/로 옮겨 정석 bash로.
+- Janet: **올인 아님.** 진짜 런타임 로직은 이미 Go 자리. 특정 gnarly 스크립트 1개(예: `hub-radio` 펌웨어 전환)가 bash를 넘어설 때만 Janet 파일럿. 리포 재현성을 niche 툴체인에 베팅하지 않는다.
+- 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
 
 ## 3. Board bring-up — after hardware arrives
 - Targets: **SMHUB Nano(SG2000)** / **Milk-V Duo SDK board** / **THP23-ZB-X(SSD202D comparison)**

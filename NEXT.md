@@ -15,8 +15,9 @@
 
 보드(**Milk-V Duo S / SMHUB Nano MG24**) 도착 시 부트로더→커널→애플리케이션을 공개 리포에서 재현한다. 중심: **ARM A53 boot 고정** + **Zig 100ms `homeagentd` 상태머신**(L3) + **C906 FreeRTOS mailbox 코프로세서 베이스**(L2, 공개 쇼케이스) + EFR32MG24 radio(L0). 8051 always-on(L1)은 후순위.
 
-- **SSOT**: `runtime/README.md` (L0–L4, ARM 결정, C906 mailbox, phased plan).
-- **무하드웨어 선행작업**: Milk-V Duo S ARM boot 절차 + C906 FreeRTOS mailbox 공식 예제/문서 조사; `homeagentd.zig` 100ms 루프 스켈레톤(timerfd/epoll/monotonic) 설계; "나는 허브다 → MG24/MQTT/Z2M alive? → 상태 → 복구" 첫 마일스톤 정의.
+- **SSOT**: `runtime/README.md` (L0–L4, ARM 결정, **BSP 베이스 dev-vs-제품 diff**, C906 mailbox, phased plan).
+- **BSP 베이스 확정**: `milkv-duo/duo-buildroot-sdk-v2` **develop** 브랜치(fsbl/opensbi/u-boot-2021.10/linux_5.10/ramdisk/**freertos** 한 트리). 클론됨 `~/repos/3rd/milkv/`. 제품(SMHUB Nano)은 mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — **dev SDK로 올린 뒤 제품 튜닝 diff**. Duo S + Nano 둘 다 구매(배송 대기).
+- **무하드웨어 선행작업**: dev SDK develop ARM A53 빌드 절차 정리(`build.sh`에서 `-arm64-` 보드 config; 검증=부트로그 첫 줄 `B`); `duo-buildroot-sdk-v2/freertos` + `duo-examples/mailbox-test`(8B cmdqu) 구조 파악(C906 L2 베이스); `homeagentd.zig` 100ms 루프 스켈레톤(timerfd/epoll/monotonic) 설계; 첫 마일스톤 "나는 허브다 → MG24/MQTT/Z2M alive? → 상태 → 복구" 정의.
 - **Criteria**:
   - [ ] **Phase 0**: ARM firmware + serial boot log + `uname`/arch + eMMC layout + package manager + GPIO/UART/MG24 device 확인
   - [ ] **Phase 1**: `homeagentd.zig` 100ms tick + state table + event queue + MQTT in/out + MG24 presence + watchdog heartbeat
@@ -55,6 +56,7 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
 - 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
 
 # RECENT
+- 2026-06-23: BSP 베이스 확정 — `duo-buildroot-sdk-v2` develop(linux 5.10/u-boot 2021.10/freertos 한 트리). SMHUB Nano 제품은 mainline 6.18/OpenSBI 1.8/U-Boot 2026.04/Buildroot 2025.11로 별도 튜닝 확인 → dev-then-diff 방법론. slzb-os-scripts는 BSP 아님(Berry L4 자동화 API). `runtime/README.md`·TARGET_DEVICE·VERSION 반영. (디스크: yocto/flutter 캐시 33G 정리, 35G→2.0G.)
 - 2026-06-23: 방향 전환 — Tuya/THP23 능동 작업 중단(128MB 증거로 파킹). SG2000 런타임 stratification(ARM A53 boot 고정 + Zig 100ms 상태머신 + C906 FreeRTOS mailbox 베이스)을 새 메인 레인으로. 새 SSOT `runtime/README.md`; ROADMAP/AGENTS/TARGET_DEVICE/docs README 반영.
 - 2026-06-22: Released `v2026.6.22`, tagged at `a3c8db1` (living doc set 재정렬). GitHub Release 노트 완료.
 - 2026-06-22: `ae6e98f` records run.sh→just coexistence decision (post-release follow-up).

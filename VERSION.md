@@ -38,9 +38,10 @@
 
 | Item | Value |
 |------|-------|
-| Public SDK | <https://github.com/milkv-duo/duo-buildroot-sdk-v2> |
+| Public SDK | <https://github.com/milkv-duo/duo-buildroot-sdk-v2> (`develop`: linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos) |
 | Docs | <https://milkv.io/docs/duo/getting-started/buildroot-sdk> |
-| First proof | stock image build, boot log, serial recovery |
+| SMHUB product reference | mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — diff target (see `runtime/README.md`) |
+| First proof | dev SDK (develop) ARM A53 image build, boot log, serial recovery |
 | Second proof | minimal packages for MQTT / radio / Zigbee2MQTT / matter.js |
 | Device facts | record here after hardware arrives |
 

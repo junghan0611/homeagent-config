@@ -44,6 +44,23 @@ RISC-V is interesting, but the center of this portfolio is **product-shaped loca
 hub optimization**, not exotic-ISA novelty. The C906 cores still matter — just as
 the **real-time / always-on layer below Linux**, not as the application head.
 
+How ARM boot is selected and verified (from the Milk-V docs):
+
+- **Build**: SDK V2 supports both cores (recommended for Duo S). Pick an **`arm64`
+  board config** in `build.sh` (board names carry `-arm64-`, e.g. the published
+  `milkv-duo256m-glibc-arm64-sd`); Docker build is recommended.
+- **Physical switch**: Duo S selects RISC-V vs ARM with an **on-board switch** — it must
+  match the firmware, or the board will not boot.
+- **Verify**: the **first line of the boot log** starts with `B` for the ARM core and
+  `C` for the RISC-V core. Phase 0 success = a `B` boot log.
+
+RISC-V is not dismissed — it is kept as a **future open-ISA comparison lane**, because the
+same SoC opens it for the price of a boot switch and a second rootfs. ARM gives open
+software on a licensed ISA; the RISC-V option closes the **"open all the way down"** loop
+(open ISA → open bootloader → open kernel → open runtime → open A2A/A2UI agent surface)
+that the rest of this project already lives by. Rationale and the roadmap placement are in
+[`../ROADMAP.md`](../ROADMAP.md) (*ISA Lanes*). For the product runtime now, ARM is fixed.
+
 ---
 
 ## Runtime stratification (L0–L4)
@@ -183,9 +200,46 @@ recovery. It is the hub's autonomic nervous system.
 
 It is **too low to host the application** and is deliberately deferred. Early
 portfolio value is fully carried by **ARM A53 + C906 + MG24**; 8051 is documented
-as a future recovery layer, not a Phase-1 task.
+as a future recovery layer, not a Phase-1 task. Starting point when it is time:
+`milkv-duo/duo-8051` (SDCC build; SRAM-mode firmware ≤ 8KB; its own Mailbox IP).
 
 ---
+
+## BSP base — Milk-V dev SDK, then diff the SMHUB product
+
+The base is **`milkv-duo/duo-buildroot-sdk-v2` (`develop` branch)**. It carries the
+**whole boot chain in one tree** — `fsbl`, `opensbi`, `u-boot-2021.10`, `linux_5.10`,
+`ramdisk`, and crucially **`freertos`** for the C906 small core (the L2 mailbox base
+starts here). We boot the **Milk-V Duo S dev board** from the bootloader up on this SDK
+first, in ARM A53 mode.
+
+Both boards were bought: **Milk-V Duo S (dev)** and **SMHUB Nano MG24 (product)**. The
+SMHUB Nano is a Duo S / SG2000 product, but SMLIGHT does **not** ship the vendor SDK as
+is — they run a **separate, more mainline product Buildroot set**. From the SMHUB-OS
+release notes:
+
+| Layer | Milk-V dev SDK (`duo-buildroot-sdk-v2` develop) | SMHUB Nano product (SMLIGHT) |
+|-------|--------------------------------------------------|-------------------------------|
+| Kernel | linux **5.10** (vendor/cvitek) | linux **6.18** (was vendor 5.4.x) |
+| Bootloader | u-boot **2021.10** + opensbi + fsbl (vendor) | mainline **OpenSBI 1.8 + U-Boot 2026.04** |
+| Buildroot | SDK-bundled | **2025.11.x** |
+| Tuning | — | F2FS (eMMC), zRAM, BFG scheduler, HW crypto (AES/SHA256), HW RNG, ds1307 RTC, opkg, OTA kernel flashing, Nano MG24 radio flashing |
+
+Methodology: **build from the dev SDK first** (own the full vendor boot chain incl. the
+C906 FreeRTOS), **then diff against the SMHUB product** to learn exactly what the vendor
+tuned to reach mainline kernel 6.18 + mainline bootloader + Buildroot 2025.11. That diff
+is itself portfolio content: "here is what a shipped product changed over the dev SDK."
+
+Reference clones (local, `~/repos/3rd/milkv/`, not vendored into this repo):
+
+| Repo | Role |
+|------|------|
+| `milkv-duo/duo-buildroot-sdk-v2` (`develop`) | the BSP base — full boot chain + C906 FreeRTOS |
+| `milk-v/milkv.io` | Milk-V official docs. Key pages under `docs/duo/getting-started/`: `duos.md` (ARM/RISC-V switch), `boot.md` (L0), `rtoscore.md` (C906 FreeRTOS mailbox, L2), `8051core.md` (L1), `buildroot-sdk.md` (build) |
+| `milkv-duo/duo-examples` → `mailbox-test` | concrete big-core-Linux → C906-FreeRTOS mailbox example (L2 starting point) |
+| `milkv-duo/duo-8051` | 8051 firmware source (SDCC; L1 starting point) |
+| `smlight-tech/slzb-os-scripts` | **L4 reference only** — Berry-language on-device automation API for SLZB/SLZB-OS coordinators, *not* a build system |
+| SMHUB-OS release notes (`smhub-os-release-notes.org`) | product version/tuning evidence (the table above) |
 
 ## Phased plan (hardware-gated)
 
@@ -193,7 +247,7 @@ Boards are on the way; nothing here requires them until Phase 0.
 
 | Phase | Name | Goal |
 |------:|------|------|
-| 0 | **ARM boot lane fixed** | ARM firmware, serial boot log, `uname`/arch, eMMC layout, package manager, GPIO/UART/MG24 device visible |
+| 0 | **ARM boot lane fixed** | Build `duo-buildroot-sdk-v2` (develop) for Duo S in ARM A53 mode; serial boot log, `uname`/arch, eMMC layout, package manager, GPIO/UART/MG24 device visible |
 | 1 | **Zig `homeagentd`** | 100ms tick, state table, event queue, MQTT in/out, MG24 presence check, watchdog heartbeat |
 | 2 | **C906 mailbox base** | ARM ↔ C906 FreeRTOS mailbox (`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — the public showcase |
 | 3 | **8051 always-on** | sleep/wake + RTC + emergency recovery (later) |

@@ -46,13 +46,21 @@ HEARTBEAT_QUERY
 ```
 
 This command set is the shared contract with `../../zig/homeagentd/src/mailbox.zig`.
+It extends the vendor `CMD_DUO_LED` / `param_ptr` pattern from the mailbox example.
+
+**Frame constraint (from Milk-V docs):** the command queue unit (`cmdqu`) is **8 bytes**
+— the mailbox buffer size. Keep each message within that frame.
 
 ## Approach
 
-- Start from the **official Milk-V / SG2000 big-core-Linux → small-core-FreeRTOS mailbox
-  example** and preserve its structure first.
+- Start from the FreeRTOS tree already in the BSP base: **`duo-buildroot-sdk-v2/freertos`**
+  (develop branch), and the working **`milkv-duo/duo-examples` → `mailbox-test`** example
+  (big-core Linux app → mailbox driver → C906 FreeRTOS toggles the LED). Docs:
+  `milkv.io/docs/duo/getting-started/rtoscore.md`. Preserve their structure first.
 - The C906 side may start in **C** before any attempt to bring Zig onto the small core.
 - Shape the vendor example into a **hub lifecycle supervisor**, not a demo.
+- Note: the stock firmware blinks the LED from a big-core boot script; disable it before
+  testing the mailbox path (per `rtoscore.md`).
 
 ## Board-less prep (do now)
 

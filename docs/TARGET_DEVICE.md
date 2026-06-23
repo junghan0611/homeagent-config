@@ -108,16 +108,20 @@ USB dongles are still useful for firmware and protocol proof. The current target
 
 ## Buildroot / BSP Path
 
+BSP base: **`milkv-duo/duo-buildroot-sdk-v2`, `develop` branch** (full boot chain in one
+tree — fsbl/opensbi/u-boot-2021.10/linux_5.10/ramdisk/freertos). The dev-SDK-vs-SMHUB
+version diff and methodology live in [`../runtime/README.md`](../runtime/README.md).
+
 Public reference:
 
-- <https://github.com/milkv-duo/duo-buildroot-sdk-v2>
+- <https://github.com/milkv-duo/duo-buildroot-sdk-v2> (`develop`)
 - <https://milkv.io/docs/duo/getting-started/buildroot-sdk>
 
 Initial BSP goals:
 
-1. Build a stock SDK image for the closest SG2000 board.
+1. Build the dev SDK (develop) for Duo S in **ARM A53 mode**, bootloader up.
 2. Confirm boot log, kernel version, rootfs layout, package manager story, and serial recovery.
-3. Diff SMHUB image behavior only after the public SDK baseline is understood.
+3. Diff against the SMHUB Nano product (mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11) to learn product tuning — only after the dev SDK baseline is understood.
 4. Add only the minimum packages needed for radio and service proof.
 5. Keep board-specific facts in `VERSION.md` once physical devices arrive.
 

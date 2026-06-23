@@ -1,0 +1,23 @@
+diff --git a/build/envsetup_milkv.sh b/build/envsetup_milkv.sh
+index d9a2e104f..580c14012 100644
+--- a/build/envsetup_milkv.sh
++++ b/build/envsetup_milkv.sh
+@@ -640,6 +640,10 @@ function build_all()
+   if [[ "$BOARD" != "fpga" ]] && [[ "$BOARD" != "palladium" ]]; then
+     build_osdrv || return $?
+     build_3rd_party || return $?
++    # HOMEAGENT_HUB_MINIMAL=1 skips the CVITEK camera/ISP/RTSP/AI vision stack.
++    # A smart-home hub has no camera/display; this middleware is dead weight and
++    # its sensor HALs do not build cleanly outside the vendor Docker. See bsp/.
++    if [ "${HOMEAGENT_HUB_MINIMAL:-0}" != 1 ]; then
+     build_middleware || return $?
+     build_cvi_rtsp || return $?
+     build_tpu_sdk || return $?
+@@ -649,6 +653,7 @@ function build_all()
+       build_tdl_sdk || return $?
+     fi
+     build_pqtool_server || return $?
++    fi
+   fi
+   pack_cfg || return $?
+   pack_rootfs || return $?

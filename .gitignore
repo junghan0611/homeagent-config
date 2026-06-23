@@ -116,3 +116,7 @@ flutter/android/app/libs/jniLibs/
 yocto/sources/meta-rockchip.jeffycn/
 
 PRIVATE.md
+
+# buildroot SDK working tree (cloned by bsp/setup.sh, pinned, not committed)
+bsp/sdk/
+bsp/out/

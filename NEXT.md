@@ -2,8 +2,8 @@
 
 - **리포 핵심 정의 (2026-06-23)**: 이 리포의 본질은 **전체 플랫폼을 풀로 빌드해 이미지를 뽑아내는 것**이다 — yocto를 `nix run .#yocto`로 재현가능하게 돌리듯, **`duo-buildroot-sdk-v2`(부트로더→커널→rootfs→freertos)를 flake.nix로 이 리포에서 재현가능하게 빌드**한다. Zig 상태머신·애플리케이션은 *그 이미지 위에서* 하는 다음 단계. 이미지 빌드는 **하드웨어 불필요** → 배송 대기와 무관하게 지금 진행.
 - **핵심 결정**: SG2000/Duo S **ARM A53 boot lane 고정**(RISC-V 아님). 아키텍처 SSOT = `runtime/README.md`(L0–L4, ARM Linux + Zig + **C906L** 코프로세서). big-core=C906B(RISC-V/ARM app), small-core RTOS=C906L(L2).
-- **바로 다음 (무하드웨어, 지금)**: ACTIVE #1 — 기존 `flake.nix`의 yocto FHS 패턴(`buildFHSEnv` + `packages.yocto` + `nix run .#yocto`)을 거울삼아 **buildroot FHS 환경 + `packages.buildroot` 추가**, `milkv-duos-glibc-arm64-emmc` config로 `build.sh` 재현 빌드 → 검증=부트로그 첫 줄 `B`(ARM big core). **확인 필요한 설계점**: SDK 소싱 방식(flake input으로 upstream `milkv-duo/duo-buildroot-sdk-v2` 커밋 핀 vs git submodule vs vendor). 로컬 클론은 `~/repos/3rd/milkv/`(PRIVATE.md)지만 공개 재현은 upstream 핀이 정석.
-- **그 다음**: 이미지가 재현 빌드되면 → Zig 100ms `homeagentd` 스켈레톤(L3) → ARM↔C906L mailbox 베이스(L2).
+- **달성 (2026-06-23)**: **이미지 재현 빌드 성공** — `bsp/` + 공식 Docker(`milkvtech/milkv-duo`)로 `milkv-duos-glibc-arm64-emmc` eMMC 이미지(55MB) 산출. FHS(nix)는 부트체인+커널+freertos까지 갔으나 buildroot 단계에서 Ubuntu-전용 호스트 마찰(libpcre.so.3, buildroot conf 링커) 누적 → milkv 문서대로 **공식 Docker로 피벗**(AOSP 패턴과 동일). 우리 커스텀(`bsp/board` defconfig 카메라 제외 + `bsp/patches` 비전 스택 스킵)은 컨테이너 안에서 주입, host UID 매칭(`--user`)으로 산출물 host 소유.
+- **그 다음**: Zig 100ms `homeagentd` 스켈레톤(L3) → ARM↔C906L mailbox 베이스(L2). 빌드 인프라는 `bsp/README.md` 참고.
 - **Blocker (런타임 bring-up만)**: SMHUB Nano + Milk-V Duo S 배송 대기. **이미지 빌드는 게이트 아님.** 실보드 bring-up(Phase 0)·MG24·watchdog만 하드웨어 게이트.
 - **THP23**: 파킹됨. `docs/THP23-LIBERATION.md`는 128MB 하한 증거 참고로만 보존(능동 작업 아님).
 - **읽을 곳**: `flake.nix`, `runtime/README.md`, `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`, `PRIVATE.md`(로컬 의존 경로).
@@ -12,24 +12,25 @@
 
 # ACTIVE
 
-## 1. flake.nix 재현가능 buildroot-sdk-v2 빌드 — 리포의 핵심 (무하드웨어, 지금)
+## 1. 재현가능 SG2000 이미지 빌드 — 리포의 핵심 (✅ 첫 이미지 달성, 2026-06-23)
 
-**이 리포의 본질**: 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 빌드해 SG2000 이미지를 뽑아내는 것. yocto가 `nix run .#yocto`로 재현되듯, buildroot-sdk-v2도 flake.nix로 이 리포에서 재현 빌드한다. 애플리케이션은 그 위에서.
+**이 리포의 본질**: 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 빌드해 SG2000 이미지를 뽑아내는 것. 애플리케이션은 그 위에서.
 
-- **거울 패턴**: 기존 `flake.nix`의 `yoctoFhs = pkgs.buildFHSEnv {...}` + `packages.yocto` + `nix run .#yocto -- -c "...bitbake..."` 골격. buildroot용 `buildrootFhs` + `packages.buildroot`를 같은 방식으로 추가(buildroot 호스트 deps: make/gcc/bison/flex/ncurses/perl/rsync/cpio/file/wget/unzip/bc/git 등 — 상당수 yoctoFhs와 겹침).
-- **타깃 config**: `milkv-duos-glibc-arm64-emmc`(또는 `-sd`). `build.sh`가 board config로 한 트리 빌드(fsbl/opensbi→u-boot→linux_5.10→rootfs→freertos). Docker 권장이나 FHS로 대체.
-- **검증(무하드웨어)**: 이미지 산출물 존재 + `build.sh` 무에러 완주 + (가능하면) 부트로더 산출물의 ARM A53 표식. 실보드 부트로그 첫 줄 `B`는 하드웨어 도착 후 Phase 0.
-- **⚠️ 설계 결정 (GLG 확인 필요)**: 공개 재현을 위한 **SDK 소싱**:
-  - (A) **flake input**으로 upstream `milkv-duo/duo-buildroot-sdk-v2` 특정 커밋 핀(yocto/sources 핀과 동형, 가장 재현적) —
-  - (B) git submodule,
-  - (C) vendor(트리 복사, 비대).
-  - 로컬 클론 `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(develop)는 작업 oracle일 뿐, 공개 트리엔 경로 노출 금지(PRIVATE.md).
+- **빌드 경로 = 공식 Docker** (`milkvtech/milkv-duo:latest`). milkv 문서가 "Ubuntu 22.04 전용 또는 Docker"라 명시 — vendor SDK는 호스트 환경 가정이 많아 nix FHS로는 buildroot 단계에서 마찰 누적. GLG의 사내 AOSP/Rockchip 빌드 패턴(vendor Ubuntu 이미지 + host UID 매칭 빌더 유저)과 동일한 접근. 참고 경로는 PRIVATE.md.
+- **인프라 (committed, 재현 SSOT)**:
+  - `bsp/setup.sh` — upstream `duo-buildroot-sdk-v2` develop `ad920f8` 핀 clone(gitignored `bsp/sdk/`; 로컬 oracle은 `HOMEAGENT_BSP_SDK`).
+  - `bsp/build.sh` — 공식 Docker로 빌드. `--user $(id -u):$(id -g)`(host 소유), `bsp/`를 `/bsp` ro 마운트, 컨테이너 안에서 defconfig+patch 주입 후 `./build.sh`.
+  - `bsp/board/milkv-duos-glibc-arm64-emmc/defconfig` — 카메라 센서·MIPI 패널 제외(hub 커스텀).
+  - `bsp/patches/0001-hub-minimal-skip-vision-stack.patch` — `build_all`에서 CVITEK 카메라/ISP/RTSP/AI(`cvi_mpi`/tpu/tdl) 스킵(`HOMEAGENT_HUB_MINIMAL=1`).
+  - `flake.nix packages.buildroot` — FHS는 보존(실험/일부 단계용)이나 풀 이미지 빌드 경로는 아님.
+- **검증됨**: `out/milkv-duos-glibc-arm64-emmc_*.zip`(eMMC upgrade, ~55MB) 산출. 부트체인(fip.bin)+커널+rtos_cmdqu(mailbox)+freertos C906L 포함. 실보드 부트로그 첫 줄 `B`(ARM)는 하드웨어 도착 후 Phase 0.
 - **Criteria**:
-  - [ ] flake.nix에 buildroot FHS + `packages.buildroot` (+ `run.sh`/`devShells` 진입점)
-  - [ ] SDK 소싱 방식 확정·구현(A/B/C)
-  - [ ] `milkv-duos-glibc-arm64-emmc` config 재현 빌드 무에러 완주 → 이미지 산출
-  - [ ] 빌드 절차를 `runtime/README.md`(또는 `docs/BUILD.md` 신규 SG2000 섹션)에 문서화
-  - [ ] 제품(SMHUB Nano: mainline 6.18/OpenSBI 1.8/U-Boot 2026.04/Buildroot 2025.11) diff는 dev SDK 빌드 성공 후 별도 레인
+  - [x] `bsp/` 인프라(setup/build/board/patches) + 공식 Docker 빌드
+  - [x] 카메라/AI 비전 스택 제외(hub minimal) — 우리 defconfig+patch
+  - [x] `milkv-duos-glibc-arm64-emmc` 재현 빌드 무에러 완주 → eMMC 이미지 산출
+  - [ ] 공개 재현용 SDK 소싱 확정: `bsp/setup.sh` 핀 clone(gitignored) — 현재 로컬 oracle로 검증, 공개시 fresh clone 재현 테스트 필요
+  - [ ] 빌드 절차 문서화: `bsp/README.md`(완료) + `docs/BUILD.md`/`runtime/README.md` 교차링크
+  - [ ] `-sd` SD 이미지 변형 + 제품(SMHUB Nano) diff는 별도 레인
 
 ## 2. SG2000 런타임 stratification — 이미지 위 애플리케이션 (런타임 bring-up은 보드 대기)
 

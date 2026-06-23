@@ -1,0 +1,26 @@
+# HomeAgent hub board config — SG2000 / Milk-V Duo S class, ARM A53 boot, eMMC.
+# Committed SSOT (reproducible): bsp/build.sh injects this onto the upstream SDK's
+#   build/boards/cv181x/sg2000_milkv_duos_glibc_arm64_emmc/<...>_defconfig
+# before building. Diff vs stock = our hub customizations (kept minimal + commented).
+#
+# HUB CUSTOMIZATION (vs stock milkv-duos-glibc-arm64-emmc):
+#   - dropped camera image sensors  CONFIG_SENSOR_GCORE_GC2083 / GCORE_GC4653 / OV_OV5647
+#   - dropped MIPI display panel     CONFIG_MIPI_PANEL_MILKV_8HD
+#   A smart-home hub has no camera/display; the CVITEK vision middleware (cvi_mpi
+#   ISP sensor HALs) is dead weight. This is the "minimal hub BSP" thesis in config.
+CONFIG_CHIP_sg2000=y
+CONFIG_BOARD_milkv_duos_glibc_arm64_emmc=y
+CONFIG_DDR_CFG_ddr3_1866_x16=y
+CONFIG_CC_OPTIMIZE_FOR_SIZE=y
+CONFIG_KERNEL_ENTRY_HACK=y
+CONFIG_KERNEL_ENTRY_HACK_ADDR="0x80108000"
+CONFIG_BOOT_IMAGE_SINGLE_DTB=y
+CONFIG_STORAGE_TYPE_emmc=y
+CONFIG_UBOOT_2021_10=y
+CONFIG_KERNEL_SRC_5.10=y
+CONFIG_KERNEL_LZMA=y
+CONFIG_SKIP_RAMDISK=y
+CONFIG_BUILDROOT_FS=y
+CONFIG_ENABLE_FREERTOS=y
+CONFIG_ENABLE_RTOS_DUMP_PRINT=y
+CONFIG_DUMP_PRINT_SZ_IDX=17

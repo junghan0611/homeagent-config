@@ -123,10 +123,92 @@
             exec bash "$@"
           '';
         };
+        # `python` → python3 별칭 (buildroot/CVITEK 스크립트가 `python` 호출; apt의 python-is-python3 동등)
+        pythonAlias = pkgs.writeShellScriptBin "python" ''exec ${pkgs.python3}/bin/python3 "$@"'';
+
+        # Debian soname compat for the SDK's Ubuntu-built prebuilt host tools
+        # (build/tools/common/prebuild/make_ext4fs 등). Debian의 libpcre.so.3 == pcre1
+        # (nix는 libpcre.so.1); ABI 동일하므로 soname 심볼릭으로 충족.
+        # 단순 심볼릭은 ldconfig가 원본 SONAME(libpcre.so.1)으로만 색인해 .so.3을 못 찾음.
+        # 실제 파일을 복사하고 patchelf로 SONAME을 libpcre.so.3으로 바꿔 색인되게 한다.
+        debianCompat = pkgs.runCommand "homeagent-debian-soname-compat"
+          { nativeBuildInputs = [ pkgs.patchelf ]; } ''
+          mkdir -p $out/lib
+          cp ${pkgs.pcre.out}/lib/libpcre.so.1.2.13 $out/lib/libpcre.so.3
+          chmod +w $out/lib/libpcre.so.3
+          patchelf --set-soname libpcre.so.3 $out/lib/libpcre.so.3
+        '';
+
+        # Buildroot SDK V2 FHS 환경 (yoctoFhs 패턴 거울)
+        # 공식 의존성: milkv.io docs/duo/getting-started/buildroot-sdk.md (Ubuntu 22.04 apt 목록)
+        # 빌드는 in-tree(쓰기 가능 트리 필요) + 첫 빌드 시 host-tools 프리빌트 GCC(~840MB) git clone.
+        buildrootFhs = pkgs.buildFHSEnv {
+          name = "homeagent-buildroot";
+
+          targetPkgs = pkgs: with pkgs; [
+            # build-essential 동등 + 핵심 빌드 도구
+            gcc gnumake binutils ninja automake autoconf libtool pkg-config
+            bison flex cmake scons
+            # 압축/이미지 도구
+            squashfsTools genext2fs cpio rsync unzip dosfstools mtools
+            android-tools  # libsparse: img2simg / simg2img
+            # 라이브러리/헤더
+            openssl openssl.dev zlib zstd bc
+            glibc.dev linuxHeaders
+            ncurses' (ncurses'.override { unicodeSupport = false; })
+            libxcrypt libxcrypt-legacy lz4'
+            # 유틸
+            wget curl git jq tree parallel which file fakeroot
+            dtc tcl expect openssh patch util-linux
+            # python (setuptools=distutils shim / pip / jinja2; python-is-python3)
+            (python3.withPackages (ps: [ ps.setuptools ps.jinja2 ps.pip ]))
+            pythonAlias
+            # SDK 프리빌트 호스트 툴용 Debian soname compat (libpcre.so.3)
+            debianCompat
+            # 편의
+            ripgrep fd gh
+          ];
+
+          multiPkgs = pkgs: [ ];
+          extraOutputsToInstall = [ "dev" ];
+
+          runScript = pkgs.writeShellScript "homeagent-buildroot-init" ''
+            unset LD_LIBRARY_PATH
+
+            # host-tools 프리빌트 GCC가 FHS /lib ld-linux로 동작 (buildFHSEnv 제공)
+            export FORCE_UNSAFE_CONFIGURE=1
+            export HOMEAGENT_FHS=1
+            export PATH="$PATH:$HOME/.local/bin:/etc/profiles/per-user/$USER/bin"
+
+            # SDK working tree (gitignored clone) — bsp/setup.sh가 핀 clone, env로 재지정 가능
+            export HOMEAGENT_BSP_SDK="''${HOMEAGENT_BSP_SDK:-$PWD/bsp/sdk}"
+
+            echo ""
+            echo "  HomeAgent buildroot FHS — SG2000 (ARM A53 / C906L)"
+            echo "  SDK: $HOMEAGENT_BSP_SDK"
+            echo "  빌드: ./bsp/build.sh milkv-duos-glibc-arm64-emmc"
+            echo ""
+
+            exec bash "$@"
+          '';
+        };
       in
       {
         # Yocto FHS 패키지 (nix build으로 빌드 가능)
         packages.yocto = yoctoFhs;
+
+        # Buildroot SDK V2 FHS 패키지
+        packages.buildroot = buildrootFhs;
+
+        devShells.buildroot = pkgs.mkShell {
+          name = "homeagent-buildroot";
+          shellHook = ''
+            if [[ -z "$HOMEAGENT_FHS" ]]; then
+              export HOMEAGENT_FHS=1
+              exec ${buildrootFhs}/bin/homeagent-buildroot
+            fi
+          '';
+        };
 
         # nix develop → mkShell shellHook에서 FHS로 exec
         devShells.default = pkgs.mkShell {

@@ -114,3 +114,5 @@ tmp
 flutter/android/app/libs/*.jar
 flutter/android/app/libs/jniLibs/
 yocto/sources/meta-rockchip.jeffycn/
+
+PRIVATE.md

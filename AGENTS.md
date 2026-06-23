@@ -117,8 +117,9 @@ Do not say:
 1. `NEXT.md`
 2. `README.md`
 3. `ROADMAP.md`
-4. `runtime/README.md` for the SG2000 runtime (Zig + C906)
+4. `runtime/README.md` for the SG2000 runtime (Zig + C906L)
 5. `VERSION.md`
 6. `docs/TARGET_DEVICE.md` when board/radio details matter
+7. `PRIVATE.md`
 
-For code changes, inspect the relevant source and tests directly. Do not rely on stale prose when the code is the source of truth. Zig hub logic lives in `runtime/zig/homeagentd/`; the C906 FreeRTOS mailbox base in `runtime/c906/rtos-agent/` — both SG2000-only (Milk-V Duo S / SMHUB Nano).
+For code changes, inspect the relevant source and tests directly. Do not rely on stale prose when the code is the source of truth. Zig hub logic lives in `runtime/zig/homeagentd/`; the C906L FreeRTOS mailbox base in `runtime/c906/rtos-agent/` — both SG2000-only (Milk-V Duo S / SMHUB Nano).

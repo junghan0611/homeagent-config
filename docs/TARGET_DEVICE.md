@@ -37,8 +37,8 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 
 | Board | SoC | CPU | RAM / storage | Radio | Role | Status |
 |------|-----|-----|---------------|-------|------|--------|
-| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906 RTOS coprocessor | 512MB-class | board-dependent | active BSP + runtime build board | delivery pending |
-| **SMHUB Nano MG24** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906 RTOS coprocessor | **512MB / 8GB eMMC** | **EFR32MG24** | primary product-shaped minimal hub | delivery pending |
+| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906L RTOS coprocessor | 512MB-class | board-dependent | active BSP + runtime build board | delivery pending |
+| **SMHUB Nano MG24** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906L RTOS coprocessor | **512MB / 8GB eMMC** | **EFR32MG24** | primary product-shaped minimal hub | delivery pending |
 | **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 4×A76 | 8GB | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4×A76 + 4×A55 | 4GB | USB EFR32 proof | lab target | SSH/GPU verified |
@@ -50,7 +50,7 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 SG2000 is a practical middle point for a small hub:
 
 1. **512MB RAM** — enough room to test Zigbee2MQTT, MQTT, matter.js, and a small Go bridge without pretending a 128MB ceiling is enough.
-2. **64-bit ARM** — the big core is booted in **ARM Cortex-A53 mode** (RISC-V boot is available but not used for the hub runtime), making newer Linux/userland paths less awkward than ARMv7-only parts. The C906 RISC-V cores are kept as the real-time / always-on coprocessor layer. See [`../runtime/README.md`](../runtime/README.md).
+2. **64-bit ARM** — the big core is booted in **ARM Cortex-A53 mode** (RISC-V boot is available but not used for the hub runtime), making newer Linux/userland paths less awkward than ARMv7-only parts. The C906L RISC-V small core is kept as the real-time / always-on coprocessor layer. See [`../runtime/README.md`](../runtime/README.md).
 3. **Public SDK path** — Milk-V Duo Buildroot SDK v2 gives a starting point even if a commercial hub ships a different private image.
 4. **Hub-shaped I/O** — Ethernet/PoE/WiFi/eMMC-class integration is closer to a product hub than a loose dev-board stack.
 

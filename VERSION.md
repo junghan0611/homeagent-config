@@ -11,7 +11,7 @@
 | Main lane | **minimal open hub BSP + runtime stratification** |
 | Host class | SOPHGO **SG2000** / Milk-V Duo S class |
 | Big-core boot | **ARM Cortex-A53, fixed** (not RISC-V) |
-| Runtime | **Zig 100ms `homeagentd` on Linux + C906 FreeRTOS mailbox coprocessor base** |
+| Runtime | **Zig 100ms `homeagentd` on Linux + C906L FreeRTOS mailbox coprocessor base** |
 | Main candidate | **SMHUB Nano MG24** |
 | Public BSP base | Milk-V Duo **Buildroot SDK v2** |
 | RAM target | **512MB-class** for Z2M + MQTT + matter.js/Go measurement |
@@ -25,8 +25,8 @@
 
 | Device | SoC | RAM | BSP / OS path | Radio | Role | State |
 |--------|-----|-----|---------------|-------|------|-------|
-| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (ARM A53 boot + C906 RTOS) | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | active BSP + runtime build board | ordered / pending |
-| **SMHUB Nano MG24** | SOPHGO SG2000 (ARM A53 boot + C906 RTOS) | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary product-shaped minimal hub | ordered / pending |
+| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (ARM A53 boot + C906L RTOS) | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | active BSP + runtime build board | ordered / pending |
+| **SMHUB Nano MG24** | SOPHGO SG2000 (ARM A53 boot + C906L RTOS) | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary product-shaped minimal hub | ordered / pending |
 | **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research (parked) | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 8GB | Yocto Scarthgap | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4GB | Yocto Scarthgap, mainline 6.14 | USB EFR32 proof | lab target | SSH/GPU/HDMI verified, NPU parked |

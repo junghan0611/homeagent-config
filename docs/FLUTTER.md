@@ -1,5 +1,9 @@
 # Flutter Shell — 크로스플랫폼 배포 계층
 
+> **Scope: origin lane.** Flutter/Android는 high-spec origin lane 클라이언트 실험이다.
+> 활성 메인 레인(SG2000 ARM Linux + Zig + C906L)은 [`../runtime/README.md`](../runtime/README.md) 참고.
+> 본문의 `ha-ldi.1` 등 beads 흔적은 origin-lane 이력 보존용이다.
+
 Flutter는 HomeAgent의 **배포 셸(delivery shell)**이다.
 UI 로직은 서버(Go)가 결정하고([A2UI](A2UI.md)), Flutter는 그 결과물을 WebView 또는 네이티브 위젯으로 보여줄 뿐이다.
 

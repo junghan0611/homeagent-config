@@ -1,4 +1,4 @@
-# HomeAgent Runtime Stratification — ARM Linux + Zig state machine + C906 coprocessor
+# HomeAgent Runtime Stratification — ARM Linux + Zig state machine + C906L coprocessor
 
 This document is the **architecture center** for the SG2000 hub lane. It is the
 public-portfolio reconstruction of a hub runtime that was previously built and
@@ -6,7 +6,7 @@ shipped as proprietary work: a deterministic Zig state machine on an embedded
 SigmaStar-class platform. The production repository is closed; the *architecture
 idea* is not. HomeAgent rebuilds that idea in the open.
 
-The showcase target of this lane is a clean, public **ARM Linux ↔ C906 FreeRTOS
+The showcase target of this lane is a clean, public **ARM Linux ↔ C906L FreeRTOS
 mailbox integration base** — not a benchmark, but a readable reference for how a
 hub splits its life across an application core and a real-time coprocessor.
 
@@ -29,8 +29,10 @@ where 512MB RAM, eMMC, and a multi-core SoC make a product-shaped hub realistic.
 
 ## Decision: boot SG2000 in ARM mode
 
-SG2000 / Duo S can boot its big core as **RISC-V (C906) or ARM (Cortex-A53)**.
-For HomeAgent the big core is **fixed to ARM A53**.
+SG2000 / Duo S can boot its big core (**C906B**) as **RISC-V (C906B) or ARM
+(Cortex-A53)**. For HomeAgent the big core is **fixed to ARM A53**. The small
+real-time core (**C906L**) always runs FreeRTOS — that is HomeAgent's L2
+coprocessor base, distinct from the big-core C906B RISC-V app lane.
 
 | Reason | Why ARM A53 wins for this hub |
 |--------|-------------------------------|
@@ -41,7 +43,7 @@ For HomeAgent the big core is **fixed to ARM A53**.
 | Portfolio read | "product-shaped ARM Linux hub", not "rare-ISA experiment" |
 
 RISC-V is interesting, but the center of this portfolio is **product-shaped local
-hub optimization**, not exotic-ISA novelty. The C906 cores still matter — just as
+hub optimization**, not exotic-ISA novelty. The C906L small core still matters — just as
 the **real-time / always-on layer below Linux**, not as the application head.
 
 How ARM boot is selected and verified (from the Milk-V docs):
@@ -72,7 +74,7 @@ Linux blob.
 |-------|---------------|----------------|
 | **L4** Agent / orchestration | ARM Linux | HomeAgent policy, local API, logs, cloudless orchestration, garden/agent connection |
 | **L3** Application | ARM Cortex-A53 Linux | `homeagentd` (Zig), MQTT, Zigbee2MQTT, Matterbridge / matter.js, update / storage / SSH |
-| **L2** Real-time control | C906 FreeRTOS small core | 100ms tick, heartbeat, watchdog, LED/button, radio reset, MG24 bootloader pins |
+| **L2** Real-time control | C906L FreeRTOS small core | 100ms tick, heartbeat, watchdog, LED/button, radio reset, MG24 bootloader pins |
 | **L1** Always-on | 8051 RTC domain | sleep/wake, RTC, power state, emergency recovery (future) |
 | **L0** Radio | EFR32MG24 | Zigbee NCP **or** Thread RCP, firmware-switched |
 
@@ -129,10 +131,10 @@ if needed, issue a recovery command
 
 ---
 
-## L2 — the C906 FreeRTOS integration base (the showcase)
+## L2 — the C906L FreeRTOS integration base (the showcase)
 
 This is the part of the lane meant to be a **great public base**: the ARM Linux
-application core and the C906 FreeRTOS small core cooperating over the SoC
+application core and the C906L FreeRTOS small core cooperating over the SoC
 **mailbox**.
 
 Big core (ARM Linux) does the thinking:
@@ -146,7 +148,7 @@ OTA / update
 rule evaluation
 ```
 
-Small core (C906 FreeRTOS) does short, hard, deterministic work:
+Small core (C906L FreeRTOS) does short, hard, deterministic work:
 
 ```text
 100ms heartbeat
@@ -165,7 +167,7 @@ Wiring:
 homeagentd.zig  (ARM Linux, L3)
       │  mailbox commands
       ▼
-rtos-agent      (C906 FreeRTOS, L2)
+rtos-agent      (C906L FreeRTOS, L2)
       │  GPIO / reset / LED / watchdog
       ▼
 physical hub body
@@ -187,7 +189,7 @@ pins. Vendor mailbox examples (big-core Linux app → small-core FreeRTOS LED
 control) are the starting reference; HomeAgent shapes them into a hub lifecycle
 supervisor.
 
-The C906 side may start in **C** (preserve the official FreeRTOS example
+The C906L side may start in **C** (preserve the official FreeRTOS example
 structure first) before any attempt to bring Zig onto the small core.
 
 ---
@@ -199,7 +201,7 @@ everything else is asleep: sleep/wake conditions, RTC, power state, emergency
 recovery. It is the hub's autonomic nervous system.
 
 It is **too low to host the application** and is deliberately deferred. Early
-portfolio value is fully carried by **ARM A53 + C906 + MG24**; 8051 is documented
+portfolio value is fully carried by **ARM A53 + C906L + MG24**; 8051 is documented
 as a future recovery layer, not a Phase-1 task. Starting point when it is time:
 `milkv-duo/duo-8051` (SDCC build; SRAM-mode firmware ≤ 8KB; its own Mailbox IP).
 
@@ -209,7 +211,7 @@ as a future recovery layer, not a Phase-1 task. Starting point when it is time:
 
 The base is **`milkv-duo/duo-buildroot-sdk-v2` (`develop` branch)**. It carries the
 **whole boot chain in one tree** — `fsbl`, `opensbi`, `u-boot-2021.10`, `linux_5.10`,
-`ramdisk`, and crucially **`freertos`** for the C906 small core (the L2 mailbox base
+`ramdisk`, and crucially **`freertos`** for the C906L small core (the L2 mailbox base
 starts here). We boot the **Milk-V Duo S dev board** from the bootloader up on this SDK
 first, in ARM A53 mode.
 
@@ -226,7 +228,7 @@ release notes:
 | Tuning | — | F2FS (eMMC), zRAM, BFG scheduler, HW crypto (AES/SHA256), HW RNG, ds1307 RTC, opkg, OTA kernel flashing, Nano MG24 radio flashing |
 
 Methodology: **build from the dev SDK first** (own the full vendor boot chain incl. the
-C906 FreeRTOS), **then diff against the SMHUB product** to learn exactly what the vendor
+C906L FreeRTOS), **then diff against the SMHUB product** to learn exactly what the vendor
 tuned to reach mainline kernel 6.18 + mainline bootloader + Buildroot 2025.11. That diff
 is itself portfolio content: "here is what a shipped product changed over the dev SDK."
 
@@ -234,9 +236,9 @@ Reference clones (local, `~/repos/3rd/milkv/`, not vendored into this repo):
 
 | Repo | Role |
 |------|------|
-| `milkv-duo/duo-buildroot-sdk-v2` (`develop`) | the BSP base — full boot chain + C906 FreeRTOS |
-| `milk-v/milkv.io` | Milk-V official docs. Key pages under `docs/duo/getting-started/`: `duos.md` (ARM/RISC-V switch), `boot.md` (L0), `rtoscore.md` (C906 FreeRTOS mailbox, L2), `8051core.md` (L1), `buildroot-sdk.md` (build) |
-| `milkv-duo/duo-examples` → `mailbox-test` | concrete big-core-Linux → C906-FreeRTOS mailbox example (L2 starting point) |
+| `milkv-duo/duo-buildroot-sdk-v2` (`develop`) | the BSP base — full boot chain + C906L FreeRTOS |
+| `milk-v/milkv.io` | Milk-V official docs. Key pages under `docs/duo/getting-started/`: `duos.md` (ARM/RISC-V switch), `boot.md` (L0), `rtoscore.md` (C906L FreeRTOS mailbox, L2), `8051core.md` (L1), `buildroot-sdk.md` (build) |
+| `milkv-duo/duo-examples` → `mailbox-test` | concrete big-core-Linux → C906L-FreeRTOS mailbox example (L2 starting point) |
 | `milkv-duo/duo-8051` | 8051 firmware source (SDCC; L1 starting point) |
 | `smlight-tech/slzb-os-scripts` | **L4 reference only** — Berry-language on-device automation API for SLZB/SLZB-OS coordinators, *not* a build system |
 | SMHUB-OS release notes (`smhub-os-release-notes.org`) | product version/tuning evidence (the table above) |
@@ -249,7 +251,7 @@ Boards are on the way; nothing here requires them until Phase 0.
 |------:|------|------|
 | 0 | **ARM boot lane fixed** | Build `duo-buildroot-sdk-v2` (develop) for Duo S in ARM A53 mode; serial boot log, `uname`/arch, eMMC layout, package manager, GPIO/UART/MG24 device visible |
 | 1 | **Zig `homeagentd`** | 100ms tick, state table, event queue, MQTT in/out, MG24 presence check, watchdog heartbeat |
-| 2 | **C906 mailbox base** | ARM ↔ C906 FreeRTOS mailbox (`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — the public showcase |
+| 2 | **C906 mailbox base** | ARM ↔ C906L FreeRTOS mailbox (`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — the public showcase |
 | 3 | **8051 always-on** | sleep/wake + RTC + emergency recovery (later) |
 
 Do not pull all of Matter in at Phase 1. Start from the well-understood state
@@ -273,7 +275,7 @@ THP23-ZB-X (public)
 
 SMHUB Nano MG24 / Milk-V Duo S (public, active)
   - SG2000 / ARM A53 / 512MB / EFR32MG24
-  - Zig HomeAgent runtime + C906 FreeRTOS coprocessor base
+  - Zig HomeAgent runtime + C906L FreeRTOS coprocessor base
   - product-shaped minimal open hub
 ```
 
@@ -283,7 +285,7 @@ One sentence:
 > machine on an embedded SigmaStar-class platform. Because the production
 > repository is proprietary, HomeAgent reconstructs the same architecture in
 > public: an ARM Linux smart-home hub where a Zig runtime is the 100ms hub state
-> machine, while SG2000's C906 FreeRTOS / 8051 cores and the EFR32MG24 radio form
+> machine, while SG2000's C906L FreeRTOS / 8051 cores and the EFR32MG24 radio form
 > the lower control, recovery, and radio layers.
 
 See [`../docs/TARGET_DEVICE.md`](../docs/TARGET_DEVICE.md) for board/radio strategy and
@@ -292,4 +294,4 @@ See [`../docs/TARGET_DEVICE.md`](../docs/TARGET_DEVICE.md) for board/radio strat
 Code in this folder:
 
 - [`zig/homeagentd/`](zig/homeagentd/) — L3 Zig 100ms hub state machine (SG2000 / Milk-V Duo S / SMHUB Nano only).
-- [`c906/rtos-agent/`](c906/rtos-agent/) — L2 C906 FreeRTOS mailbox coprocessor base (the public showcase).
+- [`c906/rtos-agent/`](c906/rtos-agent/) — L2 C906L FreeRTOS mailbox coprocessor base (the public showcase).

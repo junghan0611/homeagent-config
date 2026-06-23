@@ -15,12 +15,12 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | Doc | Role | Read when |
 |-----|------|-----------|
 | [`../VERSION.md`](../VERSION.md) | stack / version / physical device matrix | checking current board/runtime state |
-| [`../runtime/README.md`](../runtime/README.md) | ARM Linux + Zig state machine + C906 coprocessor architecture | the SG2000 runtime center (ARM boot, L0–L4, C906 base) |
+| [`../runtime/README.md`](../runtime/README.md) | ARM Linux + Zig state machine + C906L coprocessor architecture | the SG2000 runtime center (ARM boot, L0–L4, C906 base) |
 | [`TARGET_DEVICE.md`](TARGET_DEVICE.md) | board and radio strategy details | SG2000 / SSD202D / EFR32 decisions |
 | [`THP23-LIBERATION.md`](THP23-LIBERATION.md) | THP23-ZB-X liberation research (parked 128MB evidence) | reference for the parked 128MB lower-bound lane |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | ADRs and structure decisions | changing process/backend boundaries |
 | [`API.md`](API.md) | REST/SSE API notes | changing clients or routes |
-| [`BUILD.md`](BUILD.md) | build workflow notes | changing build/release tooling |
+| [`BUILD.md`](BUILD.md) | **origin-lane** build workflow notes (RPi5/Android/Yocto) | origin-lane build/release tooling — not the SG2000 runtime build |
 | [`MATTER.md`](MATTER.md) | Matter backend strategy | changing matter.js / commissioning paths |
 | [`THREAD.md`](THREAD.md) | OTBR/RCP notes | changing Thread/RCP paths |
 | [`EDGE-ZIGBEE.md`](EDGE-ZIGBEE.md) | hub ↔ edge/Zigbee boundary | touching ESP32/Zigbee/MQTT interfaces |
@@ -44,4 +44,4 @@ These are not first-read docs for new work:
 
 ## Current Direction
 
-HomeAgent is a **minimal open hub BSP** project first. The active runtime lane is SG2000 / Milk-V Duo S / SMHUB Nano class on the **ARM Cortex-A53 boot mode**, with a **Zig 100ms state machine on Linux + a C906 FreeRTOS mailbox coprocessor base** (see `../runtime/README.md`), onboard EFR32, and Buildroot lineage. Tuya THP23-ZB-X is parked as 128MB lower-bound evidence. RPi5/Yocto/Hailo, OPi5, and Android/RK work remain preserved origin or compatibility evidence.
+HomeAgent is a **minimal open hub BSP** project first. The active runtime lane is SG2000 / Milk-V Duo S / SMHUB Nano class on the **ARM Cortex-A53 boot mode**, with a **Zig 100ms state machine on Linux + a C906L FreeRTOS mailbox coprocessor base** (see `../runtime/README.md`), onboard EFR32, and Buildroot lineage. Tuya THP23-ZB-X is parked as 128MB lower-bound evidence. RPi5/Yocto/Hailo, OPi5, and Android/RK work remain preserved origin or compatibility evidence.

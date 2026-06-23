@@ -2,7 +2,7 @@
 
 **Minimal open-source smart-home hub BSP.**
 
-Buildroot · SG2000 (ARM A53) · Zig state machine · C906 FreeRTOS coprocessor · onboard EFR32 · Zigbee · Matter · matter.js · Go · Yocto origin lane
+Buildroot · SG2000 (ARM A53) · Zig state machine · C906L FreeRTOS coprocessor · onboard EFR32 · Zigbee · Matter · matter.js · Go · Yocto origin lane
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -16,7 +16,7 @@ The work is not to invent a new Matter or Zigbee stack. Buildroot, Linux, Silico
 
 > boot a small hub-class board with an open image, own the onboard radio, and document a reproducible path from BSP to Matter/Zigbee services.
 
-On SG2000-class hardware the big core is booted in **ARM Cortex-A53 mode**, with a **Zig 100ms hub state machine** on Linux and a **C906 FreeRTOS coprocessor base** owning the real-time pins over the SoC mailbox. This is the public reconstruction of a hub state machine that was previously shipped as proprietary work — the architecture is open even though the production code is not. See [`runtime/README.md`](runtime/README.md).
+On SG2000-class hardware the big core is booted in **ARM Cortex-A53 mode**, with a **Zig 100ms hub state machine** on Linux and a **C906L FreeRTOS coprocessor base** owning the real-time pins over the SoC mailbox. This is the public reconstruction of a hub state machine that was previously shipped as proprietary work — the architecture is open even though the production code is not. See [`runtime/README.md`](runtime/README.md).
 
 RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js, OTBR, Go controller, Flutter/Lit UI, Hailo/sLLM experiments, and recovery patterns. The current product-size hypothesis is smaller: **SG2000-class, 512MB, onboard EFR32**.
 
@@ -29,7 +29,7 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 | Main lane | minimal hub BSP + runtime stratification |
 | Host | SOPHGO SG2000 / Milk-V Duo S class |
 | Big-core boot | **ARM Cortex-A53, fixed** (not RISC-V) |
-| Runtime | **Zig 100ms state machine on Linux + C906 FreeRTOS mailbox coprocessor base** |
+| Runtime | **Zig 100ms state machine on Linux + C906L FreeRTOS mailbox coprocessor base** |
 | Main candidate | SMHUB Nano MG24 |
 | BSP | Buildroot SDK lineage, public baseline first |
 | RAM target | 512MB-class for Z2M + MQTT + matter.js/Go evidence |
@@ -51,7 +51,7 @@ The runtime architecture lives in [`runtime/README.md`](runtime/README.md).
 | [`CHANGELOG.md`](CHANGELOG.md) | closed work / CalVer notes |
 | [`ROADMAP.md`](ROADMAP.md) | phase direction |
 | [`VERSION.md`](VERSION.md) | stack, version, and physical device matrix |
-| [`runtime/README.md`](runtime/README.md) | SG2000 runtime architecture + Zig/C906 code home |
+| [`runtime/README.md`](runtime/README.md) | SG2000 runtime architecture + Zig/C906L code home |
 | [`docs/TARGET_DEVICE.md`](docs/TARGET_DEVICE.md) | board/radio strategy details |
 | [`docs/README.md`](docs/README.md) | docs map |
 
@@ -122,9 +122,10 @@ Treat RPi5 deploy and Yocto commands as origin-lane tools unless the task says o
 
 ```text
 homeagent-config/
-├── go/                       # Go controller / hub surface
-├── flutter/                  # Flutter client experiments
-├── ui/                       # Lit frontend
+├── runtime/                  # SG2000 runtime stratification (main lane: ARM Linux + Zig + C906L)
+├── go/                       # Go controller / hub surface (origin lane)
+├── flutter/                  # Flutter client experiments (origin lane)
+├── ui/                       # Lit frontend (origin lane)
 ├── scripts/                  # build/deploy helpers
 ├── yocto/                    # high-spec origin lane
 ├── deprecated/android-docker/ # archived compatibility path

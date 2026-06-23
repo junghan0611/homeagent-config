@@ -4,6 +4,35 @@
 
 - Nothing yet.
 
+## v2026.6.23 — SG2000 runtime pivot + RISC-V open-ISA roadmap
+
+### Added
+
+- Added `runtime/` as the SG2000 hub-runtime home (separate from the `go/` origin lane), with the architecture doc moved there as the folder front-door: `runtime/README.md` (L0–L4 stratification, ARM Cortex-A53 boot decision, Zig 100ms `homeagentd` state machine, C906 FreeRTOS mailbox base as the public showcase).
+- Scaffolded `runtime/zig/homeagentd/` and `runtime/c906/rtos-agent/` with first-milestone and board-less prep checklists, fixed to SG2000-class only (Milk-V Duo S / SMHUB Nano).
+- Rebuilt `ROADMAP.md` into the standard dashboard pattern (blurb header → Now → Near-term lane → Big direction → Target boards → Frozen invariants → Measured evidence → Deprecated → Reference paths).
+- Added the `Big direction — ISA Lanes` section: ARM A53 as the product lane now, RISC-V C906 as a future open-ISA comparison north star, tied to the open-all-the-way-down thesis (open ISA → bootloader → kernel → runtime → A2A/A2UI agent surface).
+- Captured the Tuya THP23-ZB-X liberation research in `docs/THP23-LIBERATION.md` (board teardown, serial console, repo-set freshness grading, LAN recon) before parking it.
+
+### Changed
+
+- Pivoted the active main lane from Tuya THP23 liberation to the SG2000-class runtime (Milk-V Duo S / SMHUB Nano MG24), with the big core fixed to ARM Cortex-A53 boot.
+- Grounded the BSP base on `milkv-duo/duo-buildroot-sdk-v2` (`develop`) with the full boot chain in one tree (fsbl/opensbi/u-boot-2021.10/linux_5.10/ramdisk/freertos).
+- Documented the SMHUB Nano product diff (mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11) and the build-from-dev-SDK-then-diff-the-product methodology.
+- Added concrete L0–L2 references: ARM `-arm64-` board build + boot-log `B`/`C` verification, `duo-examples/mailbox-test` (8-byte cmdqu), and `duo-8051` for the always-on layer.
+- Corrected the `slzb-os-scripts` classification to an L4 Berry-language automation API reference (not a build system).
+- Repointed every doc reference to `runtime/README.md` and realigned `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `NEXT.md`, and `docs/` to the SG2000 runtime lane.
+- Pivoted the parked THP23 base to mainline Linux/U-Boot/Buildroot 2025.x after grading the cloned repo set for freshness.
+- Recorded the `run.sh` → `just` coexistence (gradual migration) decision.
+
+### Parked
+
+- Parked active Tuya THP23-ZB-X liberation to 128MB lower-bound evidence only; the research stays reachable in `docs/THP23-LIBERATION.md`.
+
+### Ops
+
+- Reclaimed ~33G of regenerable build caches (`yocto/downloads`, `yocto/sstate-cache`, `flutter/build`); working tree 35G → 2.0G. No tracked files removed.
+
 ## v2026.6.22 — Minimal hub BSP re-center
 
 ### Changed

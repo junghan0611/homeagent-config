@@ -6,7 +6,7 @@
 - **Blocker**: SMHUB Nano + Milk-V Duo S 배송 대기. Phase 0 이후는 하드웨어 게이트.
 - **THP23**: 파킹됨. `docs/THP23-LIBERATION.md`는 128MB 하한 증거 참고로만 보존(능동 작업 아님).
 - **읽을 곳**: `runtime/README.md`, `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
-- **상태**: 최신 로컬 커밋들 push 대기. living doc set은 방향 전환 반영 완료.
+- **상태**: `v2026.6.23` 릴리즈됨 (SG2000 런타임 피벗 + RISC-V open-ISA 로드맵, ROADMAP 표준패턴 재작성). 닫힌 변경은 `CHANGELOG.md`.
 - **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지. SG2000 RISC-V boot로 런타임 올리지 말 것(ARM 고정).
 
 # ACTIVE
@@ -56,16 +56,11 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
 - 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
 
 # RECENT
-- 2026-06-23: BSP 베이스 확정 — `duo-buildroot-sdk-v2` develop(linux 5.10/u-boot 2021.10/freertos 한 트리). SMHUB Nano 제품은 mainline 6.18/OpenSBI 1.8/U-Boot 2026.04/Buildroot 2025.11로 별도 튜닝 확인 → dev-then-diff 방법론. slzb-os-scripts는 BSP 아님(Berry L4 자동화 API). `runtime/README.md`·TARGET_DEVICE·VERSION 반영. (디스크: yocto/flutter 캐시 33G 정리, 35G→2.0G.)
-- 2026-06-23: 방향 전환 — Tuya/THP23 능동 작업 중단(128MB 증거로 파킹). SG2000 런타임 stratification(ARM A53 boot 고정 + Zig 100ms 상태머신 + C906 FreeRTOS mailbox 베이스)을 새 메인 레인으로. 새 SSOT `runtime/README.md`; ROADMAP/AGENTS/TARGET_DEVICE/docs README 반영.
-- 2026-06-22: Released `v2026.6.22`, tagged at `a3c8db1` (living doc set 재정렬). GitHub Release 노트 완료.
-- 2026-06-22: `ae6e98f` records run.sh→just coexistence decision (post-release follow-up).
-- 2026-06-22: Re-centered repo from RPi5/Yocto/Hailo first to minimal open hub BSP.
-- 2026-06-22: Compressed root docs into living set: README / AGENTS / NEXT / CHANGELOG / ROADMAP.
-- 2026-06-22: Merged hardware/version state into VERSION.md; removed HARDWARE.md and INVARIANTS.md.
-- 2026-06-22: Removed br/beads workflow references from docs and run.sh.
-- 2026-06-22: Restructured run.sh into Tier-2 (Buildroot/SG2000) + Tier-1 origin lanes; removed Android and python-matter-server command surface (never again). 1464→1116 lines.
-- 2026-06-22: Restored EFR32 firmware filenames, OTBR backbone iface, and USB power note into VERSION.md.
+
+Closed work lives in `CHANGELOG.md` (latest: `v2026.6.23`). Keep only the last 1–2
+in-flight notes here.
+
+- 2026-06-23: `v2026.6.23` cut — SG2000 runtime pivot + RISC-V open-ISA roadmap + ROADMAP standard-pattern rebuild. milkv sources cloned to `~/repos/3rd/milkv/`. (Disk: yocto/flutter caches cleared, 35G→2.0G.)
 
 # LEDGER
 - RPi5/Yocto/Hailo remains high-spec origin evidence, not current product center.

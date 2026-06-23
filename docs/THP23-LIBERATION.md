@@ -1,8 +1,13 @@
-# THP23-ZB-X Liberation — Research Notes
+# THP23-ZB-X Liberation — Research Notes (PARKED)
 
-SMHUB Nano 도착 전, 손에 있는 Tuya 제품 **THP23-ZB-X**(모듈 THP23-X-M 기반)를 오픈소스 포크로 해방·소유하기 위한 조사 정리. NEXT.md ACTIVE #1의 상세 SSOT.
+> ⏸ **PARKED (2026-06-23).** 능동 해방 작업은 중단됐다. THP23-ZB-X는 이제
+> **128MB 하한 증거**로만 보존하며, 현재 런타임 레인은 SG2000-class(Milk-V Duo S /
+> SMHUB Nano)다 — `../runtime/README.md` 참고. 아래는 재개 시 쓸 수 있도록
+> 보존한 리서치이며, 능동 작업 항목(UART 납땜·desk build·flash)은 더 이상 NEXT가 아니다.
 
-> 상태: 데스크 리서치 1차 완료(2026-06-22). 실보드 물리 검사는 1차 완료, UART 진입은 미진행.
+손에 있는 Tuya 제품 **THP23-ZB-X**(모듈 THP23-X-M 기반)를 오픈소스 포크로 해방·소유하기 위한 조사 정리.
+
+> 상태: 데스크 리서치 1차 완료(2026-06-22). 실보드 물리 검사는 1차 완료, UART 진입은 미진행. **이후 파킹.**
 
 ## 1. 하드웨어 사실
 

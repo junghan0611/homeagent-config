@@ -11,12 +11,14 @@ HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동�
 | Axis | Decision |
 |------|----------|
 | Main target | **SMHUB Nano MG24 / SOPHGO SG2000 class** |
+| Active build lane | **Milk-V Duo S** — public Buildroot SDK v2 + the board the runtime gets built on |
+| **Big-core boot mode** | **ARM Cortex-A53, fixed** (not RISC-V) — see [`../runtime/README.md`](../runtime/README.md) |
 | Public BSP reference | **Milk-V Duo Buildroot SDK v2** (`milkv-duo/duo-buildroot-sdk-v2`) |
 | Minimum RAM class | **512MB** for Zigbee2MQTT + MQTT + matter.js/Go experiments |
 | Radio | **Onboard Silicon Labs EFR32/Gecko**, preferably MG24-class |
 | Protocol posture | Zigbee NCP **or** Thread RCP by firmware switching; no concurrent assumption |
 | USB coordinator | Proof/origin tool only, not final product shape |
-| In-hand liberation target | Tuya THP23-ZB-X / SSD202D / 128MB, current bring-up + 128MB ceiling evidence |
+| Parked evidence board | Tuya THP23-ZB-X / SSD202D / 128MB — 128MB lower-bound evidence only, **not active** |
 
 ---
 
@@ -35,9 +37,9 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 
 | Board | SoC | CPU | RAM / storage | Radio | Role | Status |
 |------|-----|-----|---------------|-------|------|--------|
-| **SMHUB Nano MG24** | **SOPHGO SG2000** | C906 RISC-V + Cortex-A53 selectable | **512MB / 8GB eMMC** | **EFR32MG24** | primary minimal hub | delivery pending |
-| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | C906 RISC-V + Cortex-A53 selectable | 512MB-class | board-dependent | public BSP reference / dev board | delivery pending |
-| **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | current liberation target / 128MB ceiling evidence | in hand |
+| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906 RTOS coprocessor | 512MB-class | board-dependent | active BSP + runtime build board | delivery pending |
+| **SMHUB Nano MG24** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906 RTOS coprocessor | **512MB / 8GB eMMC** | **EFR32MG24** | primary product-shaped minimal hub | delivery pending |
+| **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 4×A76 | 8GB | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4×A76 + 4×A55 | 4GB | USB EFR32 proof | lab target | SSH/GPU verified |
 
@@ -48,15 +50,15 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 SG2000 is a practical middle point for a small hub:
 
 1. **512MB RAM** — enough room to test Zigbee2MQTT, MQTT, matter.js, and a small Go bridge without pretending a 128MB ceiling is enough.
-2. **64-bit capable** — RISC-V or ARM A53 boot modes make newer Linux/userland paths less awkward than ARMv7-only parts.
+2. **64-bit ARM** — the big core is booted in **ARM Cortex-A53 mode** (RISC-V boot is available but not used for the hub runtime), making newer Linux/userland paths less awkward than ARMv7-only parts. The C906 RISC-V cores are kept as the real-time / always-on coprocessor layer. See [`../runtime/README.md`](../runtime/README.md).
 3. **Public SDK path** — Milk-V Duo Buildroot SDK v2 gives a starting point even if a commercial hub ships a different private image.
 4. **Hub-shaped I/O** — Ethernet/PoE/WiFi/eMMC-class integration is closer to a product hub than a loose dev-board stack.
 
 ---
 
-## 128MB Ceiling — THP23-ZB-X
+## 128MB Ceiling — THP23-ZB-X (parked)
 
-Tuya THP23-ZB-X is the current in-hand liberation target: it is the board we own and bring up *before* the SMHUB-class hubs arrive. SMHUB-class (SG2000 / 512MB) remains the product-size center, but THP23-ZB-X is where the actual open-source bring-up work happens now.
+Tuya THP23-ZB-X is in hand, but it is **no longer the active bring-up lane**. It is kept only as **128MB lower-bound evidence**: proof of how far an open Linux hub *can* be liberated at the bottom of the spec range. Active Tuya liberation work is parked; the runtime lane is SG2000-class (Milk-V Duo S / SMHUB Nano MG24) on the ARM boot lane.
 
 | Item | Implication |
 |------|-------------|
@@ -67,7 +69,7 @@ Tuya THP23-ZB-X is the current in-hand liberation target: it is the board we own
 
 Expected outcome:
 
-- If it boots open Linux and exposes the radio, it is a success as the **current in-hand liberation target**. See [`THP23-LIBERATION.md`](THP23-LIBERATION.md) for the bring-up plan.
+- If it ever boots open Linux and exposes the radio, that stands as the **128MB lower-bound evidence**. See [`THP23-LIBERATION.md`](THP23-LIBERATION.md) for the parked bring-up plan.
 - If matter.js/Zigbee2MQTT do not fit comfortably, that confirms the 512MB lower-bound target rather than invalidating the project.
 
 ---
@@ -97,7 +99,7 @@ USB dongles are still useful for firmware and protocol proof. The current target
 | Product | Host | Radio | Notes |
 |---------|------|-------|-------|
 | **SMHUB Nano MG24** | SG2000 | EFR32MG24 | primary target, 512MB-class |
-| THP23-ZB-X | SSD202D | EFR32/Gecko-class | current liberation target, 128MB ceiling |
+| THP23-ZB-X | SSD202D | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) |
 | SONOFF Dongle Plus MG24 | none | EFR32MG24 | good proof coordinator, USB only |
 | Home Assistant Connect ZBT-2 | bridge MCU | EFR32MG24 | proof/reference coordinator |
 | SLZB-MR3 | coordinator box | multi-radio | useful reference, not the integrated hub target |

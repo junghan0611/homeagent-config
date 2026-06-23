@@ -4,27 +4,30 @@
 
 ---
 
-## Target Strategy (2026-06-22)
+## Target Strategy (2026-06-23)
 
 | Axis | Current value |
 |------|---------------|
-| Main lane | **minimal open hub BSP** |
+| Main lane | **minimal open hub BSP + runtime stratification** |
 | Host class | SOPHGO **SG2000** / Milk-V Duo S class |
+| Big-core boot | **ARM Cortex-A53, fixed** (not RISC-V) |
+| Runtime | **Zig 100ms `homeagentd` on Linux + C906 FreeRTOS mailbox coprocessor base** |
 | Main candidate | **SMHUB Nano MG24** |
 | Public BSP base | Milk-V Duo **Buildroot SDK v2** |
 | RAM target | **512MB-class** for Z2M + MQTT + matter.js/Go measurement |
 | Radio | **onboard EFR32/Gecko**, preferably MG24-class |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching |
-| In-hand liberation target | Tuya THP23-ZB-X / SSD202D / 128MB (current bring-up) |
+| Parked evidence | Tuya THP23-ZB-X / SSD202D / 128MB lower-bound (not active) |
 | Preserved lane | RPi5/Yocto/Hailo/RK evidence as high-spec origin |
+| Architecture SSOT | `runtime/README.md` |
 
 ## Device Matrix
 
 | Device | SoC | RAM | BSP / OS path | Radio | Role | State |
 |--------|-----|-----|---------------|-------|------|-------|
-| **SMHUB Nano MG24** | SOPHGO SG2000 | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary minimal hub | ordered / pending |
-| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | public Buildroot reference | ordered / pending |
-| **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research path | EFR32/Gecko-class | current liberation target / 128MB ceiling evidence | in hand |
+| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (ARM A53 boot + C906 RTOS) | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | active BSP + runtime build board | ordered / pending |
+| **SMHUB Nano MG24** | SOPHGO SG2000 (ARM A53 boot + C906 RTOS) | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary product-shaped minimal hub | ordered / pending |
+| **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research (parked) | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 8GB | Yocto Scarthgap | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4GB | Yocto Scarthgap, mainline 6.14 | USB EFR32 proof | lab target | SSH/GPU/HDMI verified, NPU parked |
 | RK3576 Android board | RK3576 | board-specific | Android 15 | ESP32-H2 proof | compatibility evidence | archived/secondary |

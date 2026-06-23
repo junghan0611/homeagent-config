@@ -1,27 +1,47 @@
-# NOW — SG2000 런타임 stratification (보드 배송 대기 중 설계 레인)
+# NOW — flake.nix로 SG2000 이미지 재현가능 빌드 (이 리포의 핵심, 무하드웨어)
 
-- **방향 전환 (2026-06-23)**: Tuya/THP23 능동 해방은 **중단**. 진짜 작업은 보드 오면 **Milk-V Duo S + SMHUB Nano**로 제대로 한다. 이 리포 = 공개 포트폴리오. 부트로더→커널→애플리케이션 전부 여기서 재현하고, **Zig 100ms 상태머신** + **C906 FreeRTOS mailbox 연동**을 멋진 공개 베이스로 만든다.
-- **핵심 결정**: SG2000/Duo S **ARM A53 boot lane 고정**(RISC-V 아님). 새 아키텍처 SSOT = `runtime/README.md`(L0–L4, ARM Linux + Zig + C906 코프로세서).
-- **바로 다음 (보드 도착 전, 무하드웨어)**: `runtime/README.md`를 기준으로 (1) Phase 0/1/2 작업 항목 구체화, (2) Milk-V Duo S ARM boot + C906 FreeRTOS mailbox 공식 예제·문서 조사, (3) `homeagentd.zig` 100ms 루프 스켈레톤 설계(timerfd/epoll). 실보드 bring-up은 Phase 0(보드 도착)부터.
-- **Blocker**: SMHUB Nano + Milk-V Duo S 배송 대기. Phase 0 이후는 하드웨어 게이트.
+- **리포 핵심 정의 (2026-06-23)**: 이 리포의 본질은 **전체 플랫폼을 풀로 빌드해 이미지를 뽑아내는 것**이다 — yocto를 `nix run .#yocto`로 재현가능하게 돌리듯, **`duo-buildroot-sdk-v2`(부트로더→커널→rootfs→freertos)를 flake.nix로 이 리포에서 재현가능하게 빌드**한다. Zig 상태머신·애플리케이션은 *그 이미지 위에서* 하는 다음 단계. 이미지 빌드는 **하드웨어 불필요** → 배송 대기와 무관하게 지금 진행.
+- **핵심 결정**: SG2000/Duo S **ARM A53 boot lane 고정**(RISC-V 아님). 아키텍처 SSOT = `runtime/README.md`(L0–L4, ARM Linux + Zig + **C906L** 코프로세서). big-core=C906B(RISC-V/ARM app), small-core RTOS=C906L(L2).
+- **바로 다음 (무하드웨어, 지금)**: ACTIVE #1 — 기존 `flake.nix`의 yocto FHS 패턴(`buildFHSEnv` + `packages.yocto` + `nix run .#yocto`)을 거울삼아 **buildroot FHS 환경 + `packages.buildroot` 추가**, `milkv-duos-glibc-arm64-emmc` config로 `build.sh` 재현 빌드 → 검증=부트로그 첫 줄 `B`(ARM big core). **확인 필요한 설계점**: SDK 소싱 방식(flake input으로 upstream `milkv-duo/duo-buildroot-sdk-v2` 커밋 핀 vs git submodule vs vendor). 로컬 클론은 `~/repos/3rd/milkv/`(PRIVATE.md)지만 공개 재현은 upstream 핀이 정석.
+- **그 다음**: 이미지가 재현 빌드되면 → Zig 100ms `homeagentd` 스켈레톤(L3) → ARM↔C906L mailbox 베이스(L2).
+- **Blocker (런타임 bring-up만)**: SMHUB Nano + Milk-V Duo S 배송 대기. **이미지 빌드는 게이트 아님.** 실보드 bring-up(Phase 0)·MG24·watchdog만 하드웨어 게이트.
 - **THP23**: 파킹됨. `docs/THP23-LIBERATION.md`는 128MB 하한 증거 참고로만 보존(능동 작업 아님).
-- **읽을 곳**: `runtime/README.md`, `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`.
-- **상태**: `v2026.6.23` 릴리즈됨 (SG2000 런타임 피벗 + RISC-V open-ISA 로드맵, ROADMAP 표준패턴 재작성). 닫힌 변경은 `CHANGELOG.md`.
-- **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail 반입 금지. SG2000 RISC-V boot로 런타임 올리지 말 것(ARM 고정).
+- **읽을 곳**: `flake.nix`, `runtime/README.md`, `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`, `PRIVATE.md`(로컬 의존 경로).
+- **상태**: `6647abb` push됨 (C906L/C906B 구분 + runtime/ layout + origin-lane 게이트 + PRIVATE.md). 직전 릴리즈 `v2026.6.23`. 닫힌 변경은 `CHANGELOG.md`.
+- **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail, PRIVATE.md 경로 반입 금지. SG2000 RISC-V boot로 런타임 올리지 말 것(ARM 고정).
 
 # ACTIVE
 
-## 1. SG2000 런타임 stratification — 새 메인 레인 (보드 배송 대기)
+## 1. flake.nix 재현가능 buildroot-sdk-v2 빌드 — 리포의 핵심 (무하드웨어, 지금)
 
-보드(**Milk-V Duo S / SMHUB Nano MG24**) 도착 시 부트로더→커널→애플리케이션을 공개 리포에서 재현한다. 중심: **ARM A53 boot 고정** + **Zig 100ms `homeagentd` 상태머신**(L3) + **C906 FreeRTOS mailbox 코프로세서 베이스**(L2, 공개 쇼케이스) + EFR32MG24 radio(L0). 8051 always-on(L1)은 후순위.
+**이 리포의 본질**: 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 빌드해 SG2000 이미지를 뽑아내는 것. yocto가 `nix run .#yocto`로 재현되듯, buildroot-sdk-v2도 flake.nix로 이 리포에서 재현 빌드한다. 애플리케이션은 그 위에서.
 
-- **SSOT**: `runtime/README.md` (L0–L4, ARM 결정, **BSP 베이스 dev-vs-제품 diff**, C906 mailbox, phased plan).
+- **거울 패턴**: 기존 `flake.nix`의 `yoctoFhs = pkgs.buildFHSEnv {...}` + `packages.yocto` + `nix run .#yocto -- -c "...bitbake..."` 골격. buildroot용 `buildrootFhs` + `packages.buildroot`를 같은 방식으로 추가(buildroot 호스트 deps: make/gcc/bison/flex/ncurses/perl/rsync/cpio/file/wget/unzip/bc/git 등 — 상당수 yoctoFhs와 겹침).
+- **타깃 config**: `milkv-duos-glibc-arm64-emmc`(또는 `-sd`). `build.sh`가 board config로 한 트리 빌드(fsbl/opensbi→u-boot→linux_5.10→rootfs→freertos). Docker 권장이나 FHS로 대체.
+- **검증(무하드웨어)**: 이미지 산출물 존재 + `build.sh` 무에러 완주 + (가능하면) 부트로더 산출물의 ARM A53 표식. 실보드 부트로그 첫 줄 `B`는 하드웨어 도착 후 Phase 0.
+- **⚠️ 설계 결정 (GLG 확인 필요)**: 공개 재현을 위한 **SDK 소싱**:
+  - (A) **flake input**으로 upstream `milkv-duo/duo-buildroot-sdk-v2` 특정 커밋 핀(yocto/sources 핀과 동형, 가장 재현적) —
+  - (B) git submodule,
+  - (C) vendor(트리 복사, 비대).
+  - 로컬 클론 `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(develop)는 작업 oracle일 뿐, 공개 트리엔 경로 노출 금지(PRIVATE.md).
+- **Criteria**:
+  - [ ] flake.nix에 buildroot FHS + `packages.buildroot` (+ `run.sh`/`devShells` 진입점)
+  - [ ] SDK 소싱 방식 확정·구현(A/B/C)
+  - [ ] `milkv-duos-glibc-arm64-emmc` config 재현 빌드 무에러 완주 → 이미지 산출
+  - [ ] 빌드 절차를 `runtime/README.md`(또는 `docs/BUILD.md` 신규 SG2000 섹션)에 문서화
+  - [ ] 제품(SMHUB Nano: mainline 6.18/OpenSBI 1.8/U-Boot 2026.04/Buildroot 2025.11) diff는 dev SDK 빌드 성공 후 별도 레인
+
+## 2. SG2000 런타임 stratification — 이미지 위 애플리케이션 (런타임 bring-up은 보드 대기)
+
+이미지가 재현 빌드된 위에서: **ARM A53 boot 고정** + **Zig 100ms `homeagentd` 상태머신**(L3) + **C906L FreeRTOS mailbox 코프로세서 베이스**(L2, 공개 쇼케이스) + EFR32MG24 radio(L0). 8051 always-on(L1)은 후순위. 실보드 bring-up은 **Milk-V Duo S / SMHUB Nano MG24** 도착 후.
+
+- **SSOT**: `runtime/README.md` (L0–L4, ARM 결정, **BSP 베이스 dev-vs-제품 diff**, C906L mailbox, phased plan).
 - **BSP 베이스 확정**: `milkv-duo/duo-buildroot-sdk-v2` **develop** 브랜치(fsbl/opensbi/u-boot-2021.10/linux_5.10/ramdisk/**freertos** 한 트리). 클론됨 `~/repos/3rd/milkv/`. 제품(SMHUB Nano)은 mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — **dev SDK로 올린 뒤 제품 튜닝 diff**. Duo S + Nano 둘 다 구매(배송 대기).
-- **무하드웨어 선행작업**: dev SDK develop ARM A53 빌드 절차 정리(`build.sh`에서 `-arm64-` 보드 config; 검증=부트로그 첫 줄 `B`); `duo-buildroot-sdk-v2/freertos` + `duo-examples/mailbox-test`(8B cmdqu) 구조 파악(C906 L2 베이스); `homeagentd.zig` 100ms 루프 스켈레톤(timerfd/epoll/monotonic) 설계; 첫 마일스톤 "나는 허브다 → MG24/MQTT/Z2M alive? → 상태 → 복구" 정의.
+- **무하드웨어 선행작업**: dev SDK develop ARM A53 빌드 절차 정리(`build.sh`에서 `-arm64-` 보드 config; 검증=부트로그 첫 줄 `B`); `duo-buildroot-sdk-v2/freertos` + `duo-examples/mailbox-test`(8B cmdqu) 구조 파악(C906L L2 베이스); `homeagentd.zig` 100ms 루프 스켈레톤(timerfd/epoll/monotonic) 설계; 첫 마일스톤 "나는 허브다 → MG24/MQTT/Z2M alive? → 상태 → 복구" 정의.
 - **Criteria**:
   - [ ] **Phase 0**: ARM firmware + serial boot log + `uname`/arch + eMMC layout + package manager + GPIO/UART/MG24 device 확인
   - [ ] **Phase 1**: `homeagentd.zig` 100ms tick + state table + event queue + MQTT in/out + MG24 presence + watchdog heartbeat
-  - [ ] **Phase 2**: ARM ↔ C906 FreeRTOS mailbox 베이스(`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — 공개 쇼케이스
+  - [ ] **Phase 2**: ARM ↔ C906L FreeRTOS mailbox 베이스(`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — 공개 쇼케이스
   - [ ] **Phase 3**: 8051 always-on (sleep/wake + RTC + emergency recovery, 후순위)
   - [ ] onboard EFR32MG24 detection + reset/bootloader path
   - [ ] Zigbee NCP proof with one paired device
@@ -42,7 +62,7 @@ Tuya **THP23-ZB-X** (Sigmastar **SSD202D** dual Cortex-A7 1.2GHz / **128MB** / o
   - [x] 오픈소스 포크 리서치 + 시리얼 연결법 + LAN 정찰 → `docs/THP23-LIBERATION.md`
   - ⏸ **나머지(UART 납땜·desk build·stock 백업·flash) 전부 파킹.** 재개하려면 의식적으로 결정. 절차는 `docs/THP23-LIBERATION.md`에 보존.
 
-## 2. run.sh 고도화 — just 공존→점진 이관 (결정됨, 급하지 않음)
+## 3. run.sh 고도화 — just 공존→점진 이관 (결정됨, 급하지 않음)
 
 run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계.
 
@@ -60,11 +80,14 @@ run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작
 Closed work lives in `CHANGELOG.md` (latest: `v2026.6.23`). Keep only the last 1–2
 in-flight notes here.
 
+- 2026-06-23: `6647abb` — C906L/C906B 명칭 구분(milkv 공식 확인), README runtime/ layout, origin-lane docs 게이트, PRIVATE.md(로컬 의존 경로) scaffolding. NOW 재구성: 리포 핵심 = flake.nix 재현 빌드.
 - 2026-06-23: `v2026.6.23` cut — SG2000 runtime pivot + RISC-V open-ISA roadmap + ROADMAP standard-pattern rebuild. milkv sources cloned to `~/repos/3rd/milkv/`. (Disk: yocto/flutter caches cleared, 35G→2.0G.)
 
 # LEDGER
+- **리포 핵심 (durable)**: 이 리포의 본질은 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 재현 빌드해 SG2000 이미지를 뽑아내는 것. yocto(`nix run .#yocto`)와 동형으로 buildroot-sdk-v2를 flake.nix로 빌드. 애플리케이션(Zig 상태머신 등)은 그 이미지 위. 이미지 빌드는 무하드웨어.
+- 코어 명칭 (durable): big-core **C906B**(RISC-V/ARM app, ARM A53 고정), small-core RTOS **C906L**(L2 FreeRTOS mailbox 코프로세서, 공개 쇼케이스). milkv `8051core.md`로 확인. 로컬 의존 경로·private prior-art는 `PRIVATE.md`(git-ignored).
 - RPi5/Yocto/Hailo remains high-spec origin evidence, not current product center.
 - Current product-size hypothesis: SG2000 / SMHUB Nano / Milk-V Duo S class, 512MB, onboard EFR32, Buildroot lineage.
-- Runtime decision (durable): SG2000 big core booted in **ARM A53 mode (fixed)**; **Zig 100ms state machine + C906 FreeRTOS mailbox coprocessor**; C906 mailbox base is the public showcase. SSOT `runtime/README.md`.
+- Runtime decision (durable): SG2000 big core booted in **ARM A53 mode (fixed)**; **Zig 100ms state machine + C906L FreeRTOS mailbox coprocessor**; C906L mailbox base is the public showcase. SSOT `runtime/README.md`.
 - Tuya/THP23 active liberation is parked — kept only as 128MB lower-bound evidence.
 - NEXT pattern SSOT: botlog `~/sync/org/botlog/20260518T181305--*.org`.

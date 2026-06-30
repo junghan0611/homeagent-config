@@ -19,28 +19,39 @@
 - [ ] `collect.sh` 보강: RAUC, `/etc/opkg/*`, app catalog, `/opt/*/package.json`, `/var/log`, HCI/btmgmt, remoteproc/rpmsg/mailbox, zram/F2FS 항목 추가.
 - [ ] 백업 후 **OTA beta5**(Web UI) 진행. Type-C full `emmc.img` flash는 rollback 검증 뒤.
 
-## 1. Version matrix — 출고 0.9.8 vs 최신 beta5
+## 1. 통제 경계 + 재현 세트 매트릭스 — ✅ 1차 산출 (2026-06-30, beta5 이미지 정적 추출)
 
-목표: RISC-V에서 Node.js/matter.js/Zig 개발을 막을 수 있는 버전·ABI·드라이버 정보를 먼저 잡는다. 후보 산출물: `docs/SMHUB-VERSION-MATRIX.md` 또는 `docs/PRODUCT-VERIFY.md`.
+**SSOT = `docs/SMHUB-CONTROL-MAP.md`** (tracked). 각 컴포넌트를 **repo + commit/version +
+벤더 diff** 기준으로 재현 가능성(✅완전/⚠️부분/❌불가) 평가. "없으면 없다"고 명시해 다음
+세션이 공백 때문에 헤매지 않게 함. 원본 아티팩트는 `captures/smhub-beta5-20260630/`
+(git-ignored; 이미지/zip에 벤더 feed 크레덴셜 포함 → **절대 stage 금지**).
 
-| 축 | 0.9.8 출고 | beta5 최신 | 확인 방법 |
-|---|---|---|---|
-| boot | kernel/OpenSBI/U-Boot/FIP | same | `uname`, `strings fip.bin`, boot log |
-| rootfs | Buildroot, ext4/overlay, swap/zram | Buildroot, F2FS/zram 여부 | `os-release`, `mount`, `zramctl` |
-| package | opkg repo/catalog | opkg repo/catalog | `opkg list`, `opkg list-installed` |
-| Node | node.real, npm/pnpm/corepack | same | `node -p`, `ldd`, package dirs |
-| Zig target | n/a | riscv64 deploy target | `zig targets`, static smoke binary |
-| Zigbee | Z2M, MG24 UART, coordinator firmware | same/updated | Z2M log, serial, firmware list |
-| Matter | Matterbridge/matter.js catalog | install/run | native addon, mDNS, IPv6, logs |
-| Thread | OTBR/OpenThread catalog | install/run | RCP firmware, `ot-ctl`, NAT64/firewall |
-| C906L | absent in 0.9.8 | remoteproc/ESPHome/smhub-broker | `/sys/class/remoteproc`, dmesg, ELF |
-| BLE | host bluetoothd/HCI UART | host vs native proxy mode | `btmgmt`, dmesg, broker logs |
+확정된 핵심 버전(beta5): Node `22.22.0` · z2m `2.10.1`(herdsman `10.0.7`/converters
+`26.46.0`) · esphome `2026.5.3` · smhub-broker `1.0.3` · 커널 `6.18.17` · Buildroot
+`2026.02-18` · 카탈로그 matterbridge `3.5.5`/OTBR `0.3.1-5`/zwavejsui `11.19.0`.
 
-Known corrections from GPT review:
-- 0.9.8 has **no zRAM/swap** (`SwapTotal=0`, `/proc/swaps` empty). zRAM is beta-line feature until remeasured.
-- 0.9.8 `node.real :8080` is **Zigbee2MQTT**, not Node-RED. Node-RED is installed but not running.
-- matterbridge/OTBR/zwavejs are **catalog/image facts**, not installed facts on 0.9.8.
-- `/etc/ssh` writeability is not proven; proven fact is host keys are 0-byte and temporary host key was used.
+- ✅ **완전 재현**: node + z2m/herdsman/converters/frontend — 공개 OSS, z2m는
+  `pnpm-lock.yaml`까지 확보.
+- ⚠️ **설치 후 확인**: matterbridge/OTBR/zwavejs — 카탈로그 버전은 확보했지만 미설치라
+  lock/내부 commit/native 의존은 live install 뒤 확정.
+- ⚠️ **부분**: 베이스 OS(부트/커널/rootfs) — upstream(`sophgo/bootloader-riscv`,
+  `milkv-duo/duo-buildroot-sdk-v2`, buildroot, mainline 6.18) 공개나 벤더 defconfig/.config/
+  DT diff 비공개. C906L RTOS ELF(esphome+벤더 컴포넌트), smhub-services(Python 평문).
+- ❌ **불가(바이너리만)**: smhub-broker/rtos-logger/rtos-notify 소스, 벤더 ESPHome 컴포넌트
+  (`sg2000_*`/`smhub_*`), MG24 `.gbl` 펌웨어, matter.js 정확 버전.
+- **C906L 통신 = 표준 RPMsg/remoteproc**(`/dev/rpmsg*`, `remoteproc0/state`,
+  `/opt/firmware/smhub-rtos.elf` 슬롯) → 비밀 mailbox 아님, 우리 homeagentd/Zig RTOS로
+  끼어들기·교체 가능.
+- **다음(라이브 beta5에서 확정)**: §5 of CONTROL-MAP — remoteproc/rpmsg 라이브, 커널
+  `.config`/DTB, `ezsp version`(MG24 EmberZNet/Gecko), matterbridge 설치 후 `@matter/*`.
+- **재현 공백 7건 = SMLIGHT 연락 후보** (CONTROL-MAP §4): Buildroot defconfig + 커널
+  config/DT diff + MG24 펌웨어 버전 등. 오픈소스 hub 검증 협업 명분으로 직접 요청 가능.
+
+Known corrections (GPT review, 0.9.8 기준 유지):
+- 0.9.8엔 **zRAM/swap 없음**(`SwapTotal=0`). beta5 fstab엔 `/dev/zram0 swap` 존재 — 라인별 차이.
+- 0.9.8 `node.real :8080` = **Zigbee2MQTT**(Node-RED 아님, 미실행).
+- matterbridge/OTBR/zwavejs는 **카탈로그 사실**, 설치 사실 아님(0.9.8·beta5 공장 시드 둘 다 미설치).
+- beta5 **fastboot 이미지(raw 2.02GiB) ≠ 라이브 7.6GB eMMC**. p6 ROOTFS1 비어있음, USER 첫부팅 resize.
 
 ## 2. Product verification — running ≠ working
 
@@ -68,6 +79,9 @@ Make `docs/PRODUCT-VERIFY.md` as a pass/fail table. Each row should include: sou
 
 ## 3. RISC-V `homeagentd` lane
 
+- **개발보드 = Milk-V Duo S** (= SG2000, SMHub 형제; SMHub은 Duo S급 SG2000 베이스 + MG24). SoC·BSP·
+  C906L·RPMsg가 동일하므로 **L2 mailbox + L3 Zig homeagentd를 제품 검수와 병렬로 Duo S에서
+  선행 개발** 가능. MG24 Zigbee/Thread만 SMHub 실기 또는 USB 동글. → `docs/SMHUB-CONTROL-MAP.md` §0.
 - [ ] Build pure Zig smoke binary for `riscv64-linux-musl` first; deploy under user-writable path and run without root.
 - [ ] Skeleton: timerfd/epoll/monotonic 100ms tick, MQTT health read/write, Z2M status read, MG24 presence, watchdog heartbeat.
 - [ ] Avoid libc/native deps until sysroot is known. If linking to system libs, capture Buildroot sysroot/ABI first.
@@ -86,6 +100,7 @@ Do this before or with the next code/doc commit, but keep CHANGELOG history unto
 
 # RECENT
 
+- 2026-06-30: **beta5 이미지 정적 추출 → 통제 경계/재현 세트 매트릭스 `docs/SMHUB-CONTROL-MAP.md` 신설(tracked)**. fastboot zip → simg2img → 파티션 분리 → ext4 debugfs + F2FS mount(-ro)로 소스 없이 버전·repo·재현가능성 확정. 원본은 `captures/smhub-beta5-20260630/`(ignored, GPT 정리 + Opus 검수). C906L=RPMsg/remoteproc 표준 확인. 재현 공백 7건 = SMLIGHT 연락 후보로 명시. (uncommitted — GLG push; docs/만 tracked, captures/는 ignored)
 - 2026-06-30: SMHub Nano Mg24 bring-up. Factory 0.9.8 captured locally; `captures/` added to `.gitignore`. RISC-V confirmed from device (`riscv64`, `thead,c906`) and beta image strings (OpenSBI/riscv). No OS update yet.
 - 2026-06-30: GPT adversarial review corrected the handoff: zRAM absent on 0.9.8, Node-RED not running, app catalog ≠ installed apps, `/etc/ssh` writeability unproven, A/B rollback needs `dd` backup before mutation.
 - 2026-06-23: `v2026.6.23` cut — SG2000 runtime pivot, C906L/C906B naming, buildroot SDK Docker path. Historical ARM image build remains as origin evidence, not the current product lane.

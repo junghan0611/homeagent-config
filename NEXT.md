@@ -1,94 +1,99 @@
-# NOW — flake.nix로 SG2000 이미지 재현가능 빌드 (이 리포의 핵심, 무하드웨어)
+# NOW — SMHub Nano Mg24 제품 검수 → RISC-V Zig 런타임
 
-- **리포 핵심 정의 (2026-06-23)**: 이 리포의 본질은 **전체 플랫폼을 풀로 빌드해 이미지를 뽑아내는 것**이다 — yocto를 `nix run .#yocto`로 재현가능하게 돌리듯, **`duo-buildroot-sdk-v2`(부트로더→커널→rootfs→freertos)를 flake.nix로 이 리포에서 재현가능하게 빌드**한다. Zig 상태머신·애플리케이션은 *그 이미지 위에서* 하는 다음 단계. 이미지 빌드는 **하드웨어 불필요** → 배송 대기와 무관하게 지금 진행.
-- **핵심 결정**: SG2000/Duo S **ARM A53 boot lane 고정**(RISC-V 아님). 아키텍처 SSOT = `runtime/README.md`(L0–L4, ARM Linux + Zig + **C906L** 코프로세서). big-core=C906B(RISC-V/ARM app), small-core RTOS=C906L(L2).
-- **달성 (2026-06-23)**: **이미지 재현 빌드 성공** — `bsp/` + 공식 Docker(`milkvtech/milkv-duo`)로 `milkv-duos-glibc-arm64-emmc` eMMC 이미지(55MB) 산출. FHS(nix)는 부트체인+커널+freertos까지 갔으나 buildroot 단계에서 Ubuntu-전용 호스트 마찰(libpcre.so.3, buildroot conf 링커) 누적 → milkv 문서대로 **공식 Docker로 피벗**(AOSP 패턴과 동일). 우리 커스텀(`bsp/board` defconfig 카메라 제외 + `bsp/patches` 비전 스택 스킵)은 컨테이너 안에서 주입, host UID 매칭(`--user`)으로 산출물 host 소유.
-- **그 다음**: Zig 100ms `homeagentd` 스켈레톤(L3) → ARM↔C906L mailbox 베이스(L2). 빌드 인프라는 `bsp/README.md` 참고.
-- **Blocker (런타임 bring-up만)**: SMHUB Nano + Milk-V Duo S 배송 대기. **이미지 빌드는 게이트 아님.** 실보드 bring-up(Phase 0)·MG24·watchdog만 하드웨어 게이트.
-- **THP23**: 파킹됨. `docs/THP23-LIBERATION.md`는 128MB 하한 증거 참고로만 보존(능동 작업 아님).
-- **읽을 곳**: `flake.nix`, `runtime/README.md`, `README.md`, `AGENTS.md`, `ROADMAP.md`, `VERSION.md`, `docs/TARGET_DEVICE.md`, `PRIVATE.md`(로컬 의존 경로).
-- **상태**: `6647abb` push됨 (C906L/C906B 구분 + runtime/ layout + origin-lane 게이트 + PRIVATE.md). 직전 릴리즈 `v2026.6.23`. 닫힌 변경은 `CHANGELOG.md`.
-- **금지**: br/beads 부활 금지. android/python-matter-server 부활 금지. 공개 리포에 secret, private business logic, closed firmware/blob detail, PRIVATE.md 경로 반입 금지. SG2000 RISC-V boot로 런타임 올리지 말 것(ARM 고정).
+- **Stem**: 벤더 **SMHUB OS는 무수정**으로 쓰고, 제품 기능을 먼저 끝까지 검증한다. 그 결과를 바탕으로 **RISC-V Zig `homeagentd`**(100ms 상태머신)와 C906L mailbox executor를 얹는다.
+- **현재 상태 (2026-06-30)**: 출고 OS **0.9.8** 실기 캡처 완료(`captures/smhub-0.9.8-20260630/`, gitignored). 업데이트는 아직 안 함. 복구 이미지 beta5 + 0.9.9는 로컬 캐시에 sha256 검증 완료. live 좌표/SSH 절차/키 경로는 `PRIVATE.md`만 본다.
+- **결정**: 제품 레인은 **RISC-V 락**. SMHUB OS가 riscv64 실측이므로 on-product Zig `homeagentd`도 `riscv64-linux-*` 타깃. 구 “ARM A53 고정”은 폐기하고, 남은 문서의 ARM 잔재는 다음 세션에서 정리한다.
+- **검증 순서**: ① 0.9.8 비파괴 확인 + 백업 → ② OTA beta5 → ③ beta5 post-capture(C906L/ESPHome/remoteproc) → ④ **Zigbee 먼저**(Z2M + MQTT + 1기기 페어링) → ⑤ **Matter/Thread**(OTBR + Matterbridge/matter.js) → ⑥ `homeagentd` 스켈레톤.
+- **다음 세션 첫 행동 (Opus 권장, 브라우저 admin 대시보드 사용)**: 업데이트하지 말고 먼저 `rauc status --detailed`/`/etc/rauc/system.conf`/`fw_printenv` 확인 후 0.9.8 최소 `dd` 백업을 뜬다. 그 다음에만 Web UI OTA beta5.
+- **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 전제 깨짐). live IP/MAC/SSH 키/기기 좌표를 공개 파일에 쓰지 말 것. “service running”을 “working”으로 판정하지 말 것.
 
 # ACTIVE
 
-## 1. 재현가능 SG2000 이미지 빌드 — 리포의 핵심 (✅ 첫 이미지 달성, 2026-06-23)
+## 0. Mutate 전 안전 게이트 — 0.9.8 보존
 
-**이 리포의 본질**: 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 빌드해 SG2000 이미지를 뽑아내는 것. 애플리케이션은 그 위에서.
+목표: 정확한 출고 0.9.8 이미지는 manifest에서 다시 받을 수 없으므로, OTA 전에 슬롯/RAUC 상태와 최소 백업을 확보한다.
 
-- **빌드 경로 = 공식 Docker** (`milkvtech/milkv-duo:latest`). milkv 문서가 "Ubuntu 22.04 전용 또는 Docker"라 명시 — vendor SDK는 호스트 환경 가정이 많아 nix FHS로는 buildroot 단계에서 마찰 누적. GLG의 사내 AOSP/Rockchip 빌드 패턴(vendor Ubuntu 이미지 + host UID 매칭 빌더 유저)과 동일한 접근. 참고 경로는 PRIVATE.md.
-- **인프라 (committed, 재현 SSOT)**:
-  - `bsp/setup.sh` — upstream `duo-buildroot-sdk-v2` develop `ad920f8` 핀 clone(gitignored `bsp/sdk/`; 로컬 oracle은 `HOMEAGENT_BSP_SDK`).
-  - `bsp/build.sh` — 공식 Docker로 빌드. `--user $(id -u):$(id -g)`(host 소유), `bsp/`를 `/bsp` ro 마운트, 컨테이너 안에서 defconfig+patch 주입 후 `./build.sh`.
-  - `bsp/board/milkv-duos-glibc-arm64-emmc/defconfig` — 카메라 센서·MIPI 패널 제외(hub 커스텀).
-  - `bsp/patches/0001-hub-minimal-skip-vision-stack.patch` — `build_all`에서 CVITEK 카메라/ISP/RTSP/AI(`cvi_mpi`/tpu/tdl) 스킵(`HOMEAGENT_HUB_MINIMAL=1`).
-  - `flake.nix packages.buildroot` — FHS는 보존(실험/일부 단계용)이나 풀 이미지 빌드 경로는 아님.
-- **검증됨**: `out/milkv-duos-glibc-arm64-emmc_*.zip`(eMMC upgrade, ~55MB) 산출. 부트체인(fip.bin)+커널+rtos_cmdqu(mailbox)+freertos C906L 포함. 실보드 부트로그 첫 줄 `B`(ARM)는 하드웨어 도착 후 Phase 0.
-- **Criteria**:
-  - [x] `bsp/` 인프라(setup/build/board/patches) + 공식 Docker 빌드
-  - [x] 카메라/AI 비전 스택 제외(hub minimal) — 우리 defconfig+patch
-  - [x] `milkv-duos-glibc-arm64-emmc` 재현 빌드 무에러 완주 → eMMC 이미지 산출
-  - [ ] 공개 재현용 SDK 소싱 확정: `bsp/setup.sh` 핀 clone(gitignored) — 현재 로컬 oracle로 검증, 공개시 fresh clone 재현 테스트 필요
-  - [ ] 빌드 절차 문서화: `bsp/README.md`(완료) + `docs/BUILD.md`/`runtime/README.md` 교차링크
-  - [ ] `-sd` SD 이미지 변형 + 제품(SMHUB Nano) diff는 별도 레인
+- [ ] `rauc status --detailed` 및 가능하면 JSON 출력 저장.
+- [ ] `/etc/rauc/system.conf`, `/mnt/misc/rauc`, `fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT rauc_slot active_boot_slot root_uuid rootfs0_uuid rootfs1_uuid slot_num` 저장.
+- [ ] 최소 백업: `mmcblk0boot0/1`, `p1 KERNEL0`, `p5 ROOTFS0`, `p3 ENV`, `p4 MISC`, `etc-overlay.img`, Z2M coordinator/network key/configuration backup.
+- [ ] `collect.sh` 보강: RAUC, `/etc/opkg/*`, app catalog, `/opt/*/package.json`, `/var/log`, HCI/btmgmt, remoteproc/rpmsg/mailbox, zram/F2FS 항목 추가.
+- [ ] 백업 후 **OTA beta5**(Web UI) 진행. Type-C full `emmc.img` flash는 rollback 검증 뒤.
 
-## 2. SG2000 런타임 stratification — 이미지 위 애플리케이션 (런타임 bring-up은 보드 대기)
+## 1. Version matrix — 출고 0.9.8 vs 최신 beta5
 
-이미지가 재현 빌드된 위에서: **ARM A53 boot 고정** + **Zig 100ms `homeagentd` 상태머신**(L3) + **C906L FreeRTOS mailbox 코프로세서 베이스**(L2, 공개 쇼케이스) + EFR32MG24 radio(L0). 8051 always-on(L1)은 후순위. 실보드 bring-up은 **Milk-V Duo S / SMHUB Nano MG24** 도착 후.
+목표: RISC-V에서 Node.js/matter.js/Zig 개발을 막을 수 있는 버전·ABI·드라이버 정보를 먼저 잡는다. 후보 산출물: `docs/SMHUB-VERSION-MATRIX.md` 또는 `docs/PRODUCT-VERIFY.md`.
 
-- **SSOT**: `runtime/README.md` (L0–L4, ARM 결정, **BSP 베이스 dev-vs-제품 diff**, C906L mailbox, phased plan).
-- **BSP 베이스 확정**: `milkv-duo/duo-buildroot-sdk-v2` **develop** 브랜치(fsbl/opensbi/u-boot-2021.10/linux_5.10/ramdisk/**freertos** 한 트리). 클론됨 `~/repos/3rd/milkv/`. 제품(SMHUB Nano)은 mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — **dev SDK로 올린 뒤 제품 튜닝 diff**. Duo S + Nano 둘 다 구매(배송 대기).
-- **무하드웨어 선행작업**: dev SDK develop ARM A53 빌드 절차 정리(`build.sh`에서 `-arm64-` 보드 config; 검증=부트로그 첫 줄 `B`); `duo-buildroot-sdk-v2/freertos` + `duo-examples/mailbox-test`(8B cmdqu) 구조 파악(C906L L2 베이스); `homeagentd.zig` 100ms 루프 스켈레톤(timerfd/epoll/monotonic) 설계; 첫 마일스톤 "나는 허브다 → MG24/MQTT/Z2M alive? → 상태 → 복구" 정의.
-- **Criteria**:
-  - [ ] **Phase 0**: ARM firmware + serial boot log + `uname`/arch + eMMC layout + package manager + GPIO/UART/MG24 device 확인
-  - [ ] **Phase 1**: `homeagentd.zig` 100ms tick + state table + event queue + MQTT in/out + MG24 presence + watchdog heartbeat
-  - [ ] **Phase 2**: ARM ↔ C906L FreeRTOS mailbox 베이스(`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — 공개 쇼케이스
-  - [ ] **Phase 3**: 8051 always-on (sleep/wake + RTC + emergency recovery, 후순위)
-  - [ ] onboard EFR32MG24 detection + reset/bootloader path
-  - [ ] Zigbee NCP proof with one paired device
-  - [ ] 512MB service lower-bound 측정 (MQTT/Z2M/matter.js/Go RSS)
+| 축 | 0.9.8 출고 | beta5 최신 | 확인 방법 |
+|---|---|---|---|
+| boot | kernel/OpenSBI/U-Boot/FIP | same | `uname`, `strings fip.bin`, boot log |
+| rootfs | Buildroot, ext4/overlay, swap/zram | Buildroot, F2FS/zram 여부 | `os-release`, `mount`, `zramctl` |
+| package | opkg repo/catalog | opkg repo/catalog | `opkg list`, `opkg list-installed` |
+| Node | node.real, npm/pnpm/corepack | same | `node -p`, `ldd`, package dirs |
+| Zig target | n/a | riscv64 deploy target | `zig targets`, static smoke binary |
+| Zigbee | Z2M, MG24 UART, coordinator firmware | same/updated | Z2M log, serial, firmware list |
+| Matter | Matterbridge/matter.js catalog | install/run | native addon, mDNS, IPv6, logs |
+| Thread | OTBR/OpenThread catalog | install/run | RCP firmware, `ot-ctl`, NAT64/firewall |
+| C906L | absent in 0.9.8 | remoteproc/ESPHome/smhub-broker | `/sys/class/remoteproc`, dmesg, ELF |
+| BLE | host bluetoothd/HCI UART | host vs native proxy mode | `btmgmt`, dmesg, broker logs |
 
-## 1b. THP23-ZB-X — 파킹됨 (128MB 하한 증거, 능동 작업 아님)
+Known corrections from GPT review:
+- 0.9.8 has **no zRAM/swap** (`SwapTotal=0`, `/proc/swaps` empty). zRAM is beta-line feature until remeasured.
+- 0.9.8 `node.real :8080` is **Zigbee2MQTT**, not Node-RED. Node-RED is installed but not running.
+- matterbridge/OTBR/zwavejs are **catalog/image facts**, not installed facts on 0.9.8.
+- `/etc/ssh` writeability is not proven; proven fact is host keys are 0-byte and temporary host key was used.
 
-Tuya **THP23-ZB-X** (Sigmastar **SSD202D** dual Cortex-A7 1.2GHz / **128MB** / onboard EFR32 / Wi-Fi TY001 + Ethernet)은 **능동 해방 작업 중단**. 닫힌 상용 게이트웨이를 128MB에서 얼마나 열 수 있는지의 **하한 증거**로만 보존한다. 리서치는 `docs/THP23-LIBERATION.md`에 남는다. 아래 in hand 사실은 기록 보존:
+## 2. Product verification — running ≠ working
 
-- **상세 SSOT**: `docs/THP23-LIBERATION.md` (데스크 리서치 1차 완료).
-- **결정(활성도 점검 후)**: 단단한 베이스 = **mainline Linux + U-Boot + Buildroot 2025.x**(SSD202D DTS in-tree, 활발). 커뮤니티 포크(buildroot_idosom2d01/chenxing kernel/openwrt-ssd20x)는 2022~23 정체 → **포팅 레시피·드라이버 diff로 강등**. 빠른 첫 부팅엔 vendor SSD202 SDK를 oracle로. 등급표: `docs/THP23-LIBERATION.md` §9. SMHUB(SG2000 `duo-buildroot-sdk`)와는 *빌드시스템 수준* 정합(arch ARMv7 vs RISC-V/aarch64).
-- **해방 저위험**: Tuya 공식 문서에 U-Boot 진입(`nvram set persist.uboot.enter on`)·TFTP `nand write` 플래시 절차 공개. glitch/exploit 불필요.
-- **부팅 사실**: SSD202D는 **SPI NAND 부팅(SD/eMMC 부팅 불가)**. 복구 = U-Boot + UART SPL 재주입 + TFTP.
-- **⚠️ erase 전 백업**: stock NAND 덤프 + nvram 인증키(`UUID`/`AUTHKEY`/`master_mac`/`bsn`). 분실 시 stock·Tuya 복귀 불가.
-- **LAN 정찰 완료(무땜)**: 보드 `SmartGateway-BDE2`(192.168.0.134). nmap 전체포트 `6668/tcp`(Tuya 제어)만 open → SSH/telnet/web 닫힘. **LAN-only 해방 불가, 시리얼 필수** 확정.
-- Criteria:
-  - [x] 물리 검사 — `THP23-X_V1.3.0`: SSD202D + **EFR32MG21** + TY001 + SPI NAND + RJ45 + 좌하단 4핀 UART 후보
-  - [x] 오픈소스 포크 리서치 + 시리얼 연결법 + LAN 정찰 → `docs/THP23-LIBERATION.md`
-  - ⏸ **나머지(UART 납땜·desk build·stock 백업·flash) 전부 파킹.** 재개하려면 의식적으로 결정. 절차는 `docs/THP23-LIBERATION.md`에 보존.
+Make `docs/PRODUCT-VERIFY.md` as a pass/fail table. Each row should include: source/manual, observed version, command/browser proof, expected Event, expected Action, pass/fail, log path.
 
-## 3. run.sh 고도화 — just 공존→점진 이관 (결정됨, 급하지 않음)
+### Zigbee first
 
-run.sh는 작업 스타일상 필연적으로 100KB+로 커진다. help() 수작업 동기화 + 무거운 로직 단일 파일이 한계.
+- [ ] MQTT broker: `mqtt_broker_listening`, `mqtt_pubsub_ok`, auth/bridge behavior.
+- [ ] Z2M: `z2m_process_started`, `z2m_frontend_ready`, `z2m_bridge_online`, `coordinator_serial_opened`, `radio_mode_zigbee`.
+- [ ] Pairing: permit join → one Zigbee device joined → report received → command ack → state survives restart.
+- [ ] Firmware/backup: MG24 coordinator firmware version, IEEE/EUI64, network key, Z2M coordinator backup.
 
-**결정 (2026-06-22)**: 프론트도어를 **just**로. 단 **빅뱅 금지 — run.sh와 공존하다 점진 이관**. 리포 의존성은 키우지 않는다(just는 nixos-config로 설치됨, v1.43.1, 리포 의존성 추가 아님).
+### Then Matter / Thread
 
-- 목표 구조: `justfile`(import만) + `just/{hub,device,go,origin}.just` + `scripts/*.sh`(heredoc/flash/deploy 본체).
-- 이점: `just --list` 자동 디스커버리 → help stale 버그 영구 제거. 100KB 분할. legoagent-config(이미 just)와 일관.
-- 이관 방식: 한 번에 갈아엎지 않는다. ① just로 커버되는 단순 명령부터 recipe로 옮기고 run.sh는 유지/위임 → ② 무거운 로직은 scripts/로 추출(run.sh·just 양쪽이 호출) → ③ 충분히 안정되면 run.sh를 얇은 shim/제거 → ④ AGENTS/README 진입점 안내 갱신.
-- 주의: run.sh는 실장비를 건드린다. 단계별 장비 테스트. `exec nix run .#yocto`(FHS 재진입)·SSH heredoc은 scripts/로 옮겨 정석 bash로.
-- Janet: **올인 아님.** 진짜 런타임 로직은 이미 Go 자리. 특정 gnarly 스크립트 1개(예: `hub-radio` 펌웨어 전환)가 bash를 넘어설 때만 Janet 파일럿. 리포 재현성을 niche 툴체인에 베팅하지 않는다.
-- 보류: 순수 bash lib/ source 분할 — 자동 디스커버리 없어 help stale 잔존.
+- [ ] OTBR: Thread RCP firmware flash, `otbr_agent_running`, active dataset, border router advertised, NAT64/firewall status.
+- [ ] Matterbridge/matter.js: install, start, mDNS advertise, commissioning, plugin load, Matter command → Zigbee command ack.
+- [ ] Node.js native risk: find `.node` addons/prebuilds, verify riscv64 ABI, mDNS/Avahi/IPv6/crypto behavior.
+
+### C906L / ESPHome after beta5
+
+- [ ] `remoteproc0_present`, firmware name/state, dmesg remoteproc/rpmsg/mailbox.
+- [ ] `smhub-broker_socket_ready`, ESPHome RTOS firmware path, RTOS restart works.
+- [ ] BLE proxy native mode: host `bluetoothd` conflict behavior and 16-connection claim.
+- [ ] Treat C906L as **Action executor**, not state owner. Linux `homeagentd` owns HubState.
+
+## 3. RISC-V `homeagentd` lane
+
+- [ ] Build pure Zig smoke binary for `riscv64-linux-musl` first; deploy under user-writable path and run without root.
+- [ ] Skeleton: timerfd/epoll/monotonic 100ms tick, MQTT health read/write, Z2M status read, MG24 presence, watchdog heartbeat.
+- [ ] Avoid libc/native deps until sysroot is known. If linking to system libs, capture Buildroot sysroot/ABI first.
+- [ ] C906L Zig/freestanding is **not first**. First reverse beta5 vendor `remoteproc` + `smhub-broker` + `esphome-bin` ELF loading and mailbox ABI.
+
+## 4. Repo docs punch-list — ARM → RISC-V 정합화
+
+Do this before or with the next code/doc commit, but keep CHANGELOG history untouched.
+
+- [ ] `runtime/README.md`: title/Decision/rationale/phase text still says ARM A53.
+- [ ] `AGENTS.md`: current work bias and runtime baseline still mention ARM A53.
+- [ ] `ROADMAP.md`: ISA lanes / ARM-vs-RISC-V sections need product-aligned RISC-V rewrite.
+- [ ] `runtime/zig/homeagentd/README.md`: aarch64 target → riscv64 target.
+- [ ] `bsp/README.md`: current arm64 board build is historical; add riscv64 product variant plan.
+- [ ] `README.md`/`VERSION.md`: update only after version matrix is grounded.
 
 # RECENT
 
-Closed work lives in `CHANGELOG.md` (latest: `v2026.6.23`). Keep only the last 1–2
-in-flight notes here.
-
-- 2026-06-23: `6647abb` — C906L/C906B 명칭 구분(milkv 공식 확인), README runtime/ layout, origin-lane docs 게이트, PRIVATE.md(로컬 의존 경로) scaffolding. NOW 재구성: 리포 핵심 = flake.nix 재현 빌드.
-- 2026-06-23: `v2026.6.23` cut — SG2000 runtime pivot + RISC-V open-ISA roadmap + ROADMAP standard-pattern rebuild. milkv sources cloned to `~/repos/3rd/milkv/`. (Disk: yocto/flutter caches cleared, 35G→2.0G.)
+- 2026-06-30: SMHub Nano Mg24 bring-up. Factory 0.9.8 captured locally; `captures/` added to `.gitignore`. RISC-V confirmed from device (`riscv64`, `thead,c906`) and beta image strings (OpenSBI/riscv). No OS update yet.
+- 2026-06-30: GPT adversarial review corrected the handoff: zRAM absent on 0.9.8, Node-RED not running, app catalog ≠ installed apps, `/etc/ssh` writeability unproven, A/B rollback needs `dd` backup before mutation.
+- 2026-06-23: `v2026.6.23` cut — SG2000 runtime pivot, C906L/C906B naming, buildroot SDK Docker path. Historical ARM image build remains as origin evidence, not the current product lane.
 
 # LEDGER
-- **리포 핵심 (durable)**: 이 리포의 본질은 전체 플랫폼(부트로더→커널→rootfs→freertos)을 풀로 재현 빌드해 SG2000 이미지를 뽑아내는 것. yocto(`nix run .#yocto`)와 동형으로 buildroot-sdk-v2를 flake.nix로 빌드. 애플리케이션(Zig 상태머신 등)은 그 이미지 위. 이미지 빌드는 무하드웨어.
-- 코어 명칭 (durable): big-core **C906B**(RISC-V/ARM app, ARM A53 고정), small-core RTOS **C906L**(L2 FreeRTOS mailbox 코프로세서, 공개 쇼케이스). milkv `8051core.md`로 확인. 로컬 의존 경로·private prior-art는 `PRIVATE.md`(git-ignored).
-- RPi5/Yocto/Hailo remains high-spec origin evidence, not current product center.
-- Current product-size hypothesis: SG2000 / SMHUB Nano / Milk-V Duo S class, 512MB, onboard EFR32, Buildroot lineage.
-- Runtime decision (durable): SG2000 big core booted in **ARM A53 mode (fixed)**; **Zig 100ms state machine + C906L FreeRTOS mailbox coprocessor**; C906L mailbox base is the public showcase. SSOT `runtime/README.md`.
-- Tuya/THP23 active liberation is parked — kept only as 128MB lower-bound evidence.
-- NEXT pattern SSOT: botlog `~/sync/org/botlog/20260518T181305--*.org`.
+
+- Durable direction: **vendor SMHUB OS unmodified → full product verification → RISC-V Zig `homeagentd`**.
+- Core naming: big core **C906B** = product-aligned RISC-V Linux app core; small core **C906L** = RISC-V RTOS coprocessor / mailbox executor.
+- Runtime ownership: Linux `homeagentd` owns `HubState`; C906L executes bounded actions (`RADIO_RESET`, `LED_SET`, `WATCHDOG_KICK`, etc.).
+- Protocol split: keep Node ecosystem for protocol-heavy layers (Z2M, Matterbridge/matter.js, Node-RED); use Zig for tight hardware/state-machine layer.
+- THP23 remains parked as 128MB lower-bound evidence. br/beads, Android/python-matter-server resurrection, secrets/private coordinates in public files remain forbidden.

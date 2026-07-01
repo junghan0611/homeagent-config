@@ -80,6 +80,31 @@
 - **Thread/OTBR 는 지금 보류**: MG24 를 Thread RCP 로 재플래시해야 하며 Zigbee coordinator 를 잃는다.
   Matter-only 를 고민할 때 별도로 다룬다. 어설픈 선반영 금지.
 
+## 6b. 벤더 매뉴얼 대조 로그 (SMHUB-MANUAL-REVIEW 진행분)
+검토 = 각 벤더 페이지의 "절차/주장 ↔ 우리 Nano Mg24 0.9.8 라이브 실측" 대조. 버전 종속값은 스냅샷.
+
+### B-6 Radios & Protocols (2026-07-01 검토완료)
+벤더 원문은 **SMHUB 시리즈 공통(제네릭)** 문서 — 최대 하드웨어 구성 기준으로 프로토콜별 **별도 칩**을 전제:
+
+| 벤더 §6 주장 (제네릭) | Nano Mg24 라이브 실측 | 판정 |
+|---|---|---|
+| 6.1 Zigbee = **TI CC26xx** `/dev/ttyS1` | 단일 **Silabs MG24**, adapter=`ember`(ezsp13) | ❌ 미적용 — CC26xx 아님, ember |
+| 6.2 Thread = **별도 Silabs EFR32MG** `/dev/ttyS2`, OTBR | 별도 Thread 칩 없음. Thread=같은 MG24 재플래시(=Zigbee 상실) | ❌ 별도 칩 아님, **배타** |
+| 6.3 Z-Wave = **EFR32ZG23 모듈** `/dev/ttyS3` | Z-Wave silicon 없음(lsusb/dmesg 무). 외장 USB만 | ❌ native 미지원 |
+| 6.4 4G/LTE = SIM7672G `/dev/ttyS4` (in dev) | 해당 없음 | ❌ Nano 미탑재 |
+| 6.7 "Zigbee+Thread+WiFi+BT **동시** 운용 out of the box" | 단일 MG24라 Zigbee/Thread **배타** | ❌ Nano에 미적용 |
+| 6.8 Matter Bridge = Zigbee/Thread → Matter, 로컬 브리지 | matterbridge over IP (§6과 일치) | ✅ 구조 일치 |
+
+→ **결론**: 제네릭 매뉴얼의 다중 라디오 표는 Essential/Premium 등 상위 모델용. **Nano Mg24 = 단일 MG24 = ember Zigbee coordinator**가 정본이며 §6이 SSOT. 벤더가 Zigbee=CC26xx로 적는 것이 backend.db appsettings 의 `zstack` 폴백 default 와 짝(제네릭 가정) — 실기는 ember. Nano 검수 시 §6 표(별도 ttyS2/S3 라디오 확인 등)를 **그대로 따르면 안 됨**.
+
+### C. Connecting Zigbee2MQTT → Home Assistant (2026-07-01 검토완료)
+- **최소 펌웨어**: smhub-os ≥0.3.7 · smhub-services ≥0.2.4 · smhub-web ≥0.2.18. → 우리 0.9.8(backend 0.2.12·web 0.3.1) **충족**.
+- **z2m 업데이트 절차(벤더)**: Console 탭 → `curl -fsSL https://updates.smlight.tech/z2m.sh | sudo sh` (sudo pw `smlight`). one-off, 2025-12-13 릴리스 이관. → **설치성 mutation, §8 설치 게이트 대상**(GLG go 필요, 롤백 전제 확인 후).
+- **연결 2모델** (검수 매트릭스 rows 원천):
+  - **①직결**: Web UI `Apps→Zigbee2MQTT` → MQTT Broker URL `mqtt://HA_IP:1883` + HA MQTT 크레덴셜 → `Home Assistant Settings` 켜기 + `Experimental Events` 켜기 → Save → z2m stop/start(또는 reboot). z2m가 HA 브로커에 직결, 기기 자동 디스커버리.
+  - **②로컬 브리지**: z2m는 SMHub 로컬 mosquitto 사용, `Settings→MQTT`에서 `Allow External`+`Allow Anonymous`+`Enable Bridge Mode=True`, Remote `HA_IP:1883`, `Bridge Topic = # both 1` → Save → reboot.
+- **설정면 확인**: 위 토글은 전부 Web UI = **backend.db appsettings**(§2)에 기록 → 선언적 seed 로 대체 가능함을 재확인. secret(MQTT pw)은 per-unit, 이미지에 굽지 않음(§8).
+
 ## 7. 버전 드리프트 원칙 (설계 기준)
 - OS 버전업(0.9.8 → beta5 → 0.9.9 …) 하면 **앱 버전·appsettings 기본값·alembic HEAD·패키지 목록이 또 바뀐다.**
   → **버전을 못박은 config/코드를 미리 만들면 매번 깨진다.** 그래서 지금은 프레임워크를 짓지 않는다.

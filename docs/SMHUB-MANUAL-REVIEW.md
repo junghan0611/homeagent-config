@@ -25,7 +25,7 @@
 - [ ] [3. Getting Started](https://smlight.tech/support/manuals/books/smhub/page/3-getting-started)
 - [ ] [4. Software & System](https://smlight.tech/support/manuals/books/smhub/page/4-software-system) — 앱/서비스 모델. backend.db·OpenRC 라이브 대조.
 - [ ] [5. Network & Connectivity](https://smlight.tech/support/manuals/books/smhub/page/5-network-connectivity)
-- [ ] [6. Radios & Protocols](https://smlight.tech/support/manuals/books/smhub/page/6-radios-protocols) — **★ Zigbee/Thread 배타·MG24 모드. ember coordinator 라이브 확정과 대조.**
+- [x] [6. Radios & Protocols](https://smlight.tech/support/manuals/books/smhub/page/6-radios-protocols) — **검토완료 (2026-07-01)**: 이 페이지는 **SMHUB 시리즈 공통(제네릭)** 문서로 프로토콜별 별도 칩(Zigbee=CC26xx /ttyS1, Thread=EFR32MG /ttyS2, Z-Wave=EFR32ZG23 /ttyS3, 4G=SIM7672G /ttyS4)과 "Zigbee+Thread+WiFi+BT 동시 운용"을 전제. **Nano Mg24=단일 MG24(ember) → 미적용**, 라이브 실측이 정본. 대조 로그 = `PRODUCT-CONFIG-MODEL.md §6b`.
 - [ ] [7. User Interface](https://smlight.tech/support/manuals/books/smhub/page/7-user-interface) — Web UI 앱 토글 = backend.db.apps 대조.
 - [ ] [8. Modules & Extensions](https://smlight.tech/support/manuals/books/smhub/page/8-modules-extensions) — matterbridge/z2m/otbr/zwave 등 모듈 카탈로그.
 - [ ] [10. Glossary](https://smlight.tech/support/manuals/books/smhub/page/10-glossary)
@@ -33,7 +33,7 @@
 ## C. Task Guides (기능별 절차 — 검수/세트 후보)
 "제품 기능을 끝까지 검증"의 실제 절차. 검수 매트릭스 rows 의 원천.
 
-- [ ] [Connecting Zigbee2MQTT on SMHUB to Home Assistant](https://smlight.tech/support/manuals/books/smhub/page/connecting-zigbee2mqtt-on-smhub-to-home-assistant) — **Zigbee 먼저 검증 경로.**
+- [x] [Connecting Zigbee2MQTT on SMHUB to Home Assistant](https://smlight.tech/support/manuals/books/smhub/page/connecting-zigbee2mqtt-on-smhub-to-home-assistant) — **검토완료 (2026-07-01)**: 최소 펌웨어(smhub-os≥0.3.7·services≥0.2.4·web≥0.2.18) 우리 0.9.8 충족. 연결 2모델(①직결 z2m→HA broker ②로컬 mosquitto+bridge `# both 1`). z2m 업데이트=`curl …z2m.sh|sudo sh`(pw `smlight`)=**설치성 mutation→§8 게이트**. 절차/설정 = `PRODUCT-CONFIG-MODEL.md §6b`.
 - [ ] [Using SMHUB as Thread Border Router for Matter devices](https://smlight.tech/support/manuals/books/smhub/page/using-smhub-as-thread-border-router-for-matter-devices) — Thread/OTBR(현재 보류, Matter-only 재고 시).
 - [ ] [Run Thread networks](https://smlight.tech/support/manuals/books/smhub/page/run-thread-networks) — Thread 운용(보류 레인).
 - [ ] [Change IEEE address on SMHUB radio](https://smlight.tech/support/manuals/books/smhub/page/change-ieee-address-on-smhub-radio) — coordinator IEEE. per-unit 프로비저닝과 연관.

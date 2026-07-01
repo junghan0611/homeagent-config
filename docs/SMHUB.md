@@ -3,7 +3,7 @@
 이 문서는 SMHub Nano Mg24 제품 검수 레인의 **단일 SSOT**다. 이전에 나뉘어 있던
 `PRODUCT-CONFIG-MODEL` · `SMHUB-CONTROL-MAP` · `SMHUB-MANUAL-REVIEW` 를 하나로 합쳤다.
 
-- **분석 대상**: 출고 **0.9.8** (live, 무변형 SSH 실측) + **1.0.0.beta5** (fastboot 정적 추출).
+- **분석 대상**: 출고 **0.9.8** (무변형 SSH 실측, §4) + **1.0.0.beta5** (fastboot 정적 추출 §5 + **OTA 후 라이브 실측 §5.4**). **현재 기기 = beta5 부팅(슬롯 B)**.
 - **좌표/크레덴셜**은 `PRIVATE.md`, 원본 아티팩트는 `captures/`(gitignored). **이 문서엔 secret 없음.**
 - **재현 등급**: ✅ 완전(공개 repo+정확 버전, 직접 빌드/교체 가능) / ⚠️ 부분(upstream 공개, 벤더
   defconfig·patch·DT diff 비공개 → bit-identical 아님) / ❌ 불가(바이너리만, 역설계 또는 SMLIGHT 협조).
@@ -155,8 +155,8 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
   `/mnt/user/etc-overlay.img`, **64K used = 극소**).
 - **p7 USER(5.7G) = `/mnt/user`** → bind `/home /opt /var`(ext4 rw noatime). **모든 앱/데이터/backend.db** 여기. ← 세팅본 주 타깃.
 - p4 MISC(`/mnt/misc` 1.9M) = firstboot 플래그 + rauc data.
-- **runtime swap 0**(`SwapTotal 0`): zram swap **device 미활성**. 단 0.9.8 커널엔 `CONFIG_ZRAM=m`·`CONFIG_ZSMALLOC=m`
-  **모듈 지원은 있음**(capability ≠ active). beta5 fstab엔 `/dev/zram0 swap` 라인 존재 — 라인별 차이.
+- **swap: 0.9.8=0**(`SwapTotal 0`, zram device 미활성) ↔ **beta5=zram0 512M 활성**(`/proc/swaps` pri=100, 커널 `CONFIG_ZRAM=m` 로드). 라인별 차이 확정(§5.4 B6).
+- **beta5 실측 정정(§5.4)**: root=**p6 ROOTFS1**(슬롯 B, ext4 ro). **p7 USER는 여전히 ext4**(beta line F2FS는 full re-install 경로에만 적용 — OTA 업그레이드라 재포맷 안 됨). `/etc`=`/mnt/user/etc-overlay.img` **rw overlay**(0.9.8 loop0 오버레이와 동일 구조, p7 지속).
 
 ---
 
@@ -165,16 +165,23 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
   "누가 로그인") ↔ `/etc/ssh/ssh_host_*_key`(서버 host key = "sshd 가 자기 신원 증명하며 뜰 수 있는가"). **무관.**
 - **이 유닛 팩토리 결함**: `/etc/ssh/ssh_host_{rsa,ecdsa,ed25519}_key` 전부 **0바이트**(mtime=빌드시각) →
   `sshd -t: no hostkeys available -- exiting`. sshd 는 OpenRC `default` 런레벨에 **등록돼 있으나**(rc-update 문제
-  아님) 매 부팅 **host key 부재로 즉시 죽음** → 리부트 후 :22 closed. firstboot/EEPROM host key 프로비저닝
-  (릴노트 "Persistent Device Identity", EEPROM에 hostname/SSH keys)이 이 early-adopter 유닛엔 안 채워짐.
+  아님) 매 부팅 **host key 부재로 즉시 죽음** → 리부트 후 :22 closed.
+- **beta5 OTA 후 재확인(2026-07-01, §5.4)**: `/etc/ssh/ssh_host_*_key` **여전히 0바이트(mtime Dec 11 2025 그대로)**, OpenRC sshd
+  **여전히 crashed**. 즉 릴노트 "Persistent Device Identity"(EEPROM에 hostname/SSH keys)는 **OTA 업그레이드 경로엔 적용 안 됨**
+  (full Type-C flash 전용으로 추정). → **EEPROM 이 SSH 결함을 자동 해소할 것이란 가설은 반증됨.**
+- **현재(세션) 접속 경로**: 이번 세션에 띄운 **`/tmp/hk` 우회 sshd**(`sshd -h /tmp/hk -o UsePAM=no …`)가 :22 로 살아있고,
+  에이전트는 `.sshkey/id_ed25519`(OTA 넘어 p7 `~smlight/.ssh/authorized_keys` 지속)로 접속. **리부트하면 소실**(tmpfs).
 - **OpenRC "started" 는 진실 아님**: `rc-status` 가 sshd·smhub-buzzer-daemon 을 started 로 표시해도 프로세스
   없음(crashed). **진실원 = `pgrep -x`/`ss :22`/`sshd -t`**, rc-status 아님. (제품 검수 전반의 running≠working 축.)
 - **접근 우회**: 이전 성공 SSH는 표준 sshd가 아니라 `/tmp/hk` 우회 sshd였고, 리부트로 소실됐다. Web UI Console
   (port 80, `#/console`)은 SSH 없이 smlight 셸 + sudo(pw=smlight)를 제공하지만 복붙이 어려워 제품화/장기 운용면으로는 부적합하다.
 - **복구/영구화 안전 순서**(필요 시): ① authorized_keys 무손상 확인만(건드리지 말 것) ② host key 크기
   확인 ③ `sshd -t` ④ **0바이트 host key 삭제 후** `ssh-keygen -A`(0바이트를 "존재"로 보고 skip → 삭제 필수)
-  ⑤ `mkdir -p /run/sshd`(priv-sep 2차 문제) ⑥ `sshd -t` 통과 뒤 restart. `/etc` = overlay on p7 → 키 **리부트 유지**.
-  단, 현재 결정: 0.9.8 표준 sshd 수리에 더 매달리지 않고 **OS/펌웨어 업데이트를 먼저** 진행한 뒤 새 이미지에서 SSH 상태를 재평가한다.
+  ⑤ `mkdir -p /run/sshd`(priv-sep 2차 문제) ⑥ `sshd -t` 통과 뒤 restart. `/etc`=`/mnt/user/etc-overlay.img` rw overlay(p7)라
+  **키가 리부트 유지될 것으로 기대**(단 이전 시도에서 `/etc/ssh` write 반영이 불확실했으므로 재생성 후 리부트 검증 필수).
+- **결정(2026-07-01)**: beta5에서도 표준 sshd 는 host key 0바이트로 죽으므로, 영구 SSH가 필요하면 **overlay `/etc/ssh` 에 host key
+  재생성(0바이트 삭제 → `ssh-keygen -A`) 후 리부트로 지속성 검증**한다. 그 전까지는 `/tmp/hk` 우회(세션 한정) 또는 `Settings→Console`(SSH 불요)로 접근.
+  벤더 매뉴얼상 SSH 는 별도 토글 없이 부팅 완료(LED chase 종료) 시 기동 전제 — 이 유닛은 host key 결함으로 그 전제가 깨져 있다.
 
 ## 4. 라이브 실측 로그 — 0.9.8 무변형 (2026-07-01)
 
@@ -242,6 +249,14 @@ crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/
   matterbridge·OTBR·zwavejsui는 opkg **카탈로그에만**(미설치).
 - **재현 공백 #2 (matter.js)**: matterbridge 미설치 → `@matter/*` 정확 버전 없음. npm 또는 라이브 설치 후 확정.
 
+**Apps 설치 경로 = opkg mutation (라이브 실측 2026-07-01, `apps-catalog-readonly.txt`)**: Web UI `Apps → Install/OS Update` 버튼은
+`opkg install <pkg>` 를 벤더 feed `smhub_core`(`/etc/opkg/smlight.conf`, **per-unit `http_auth` 시크릿 → captures(gitignored)/PRIVATE 만**)에서 당긴다.
+- **버전 드리프트 증거**(feed에 다중 버전 공존): matterbridge `3.5.4-1 / 3.5.5-1 / 3.5.5-2`, matterbridge-z2m `2.8.0-1 / 3.0.4-1 / 3.0.6-1`
+  (`Depends: matterbridge (>= 3.5.0)`), zwavejsui `11.15.1-3 / 11.19.0-1 / 11.21.0-1`, openthread `0.3.1-3/4/5`, tailscale `1.78.1-3/4/7`,
+  picoclaw(-core) `0.2.8-2`. **"Latest" 클릭 = 클릭 시점 버전 고정 = 비재현.** ipk 다수 `Architecture: all`(nodejs 앱).
+- **우리 정책(§9)**: **클릭 설치 금지.** 필요한 앱은 (1) **정확 버전 pin + ipk provenance 기록**(filename/size/Depends, 위 캡처) →
+  (2) 선언적 applier 가 pin 된 버전으로 설치 후 **verify**, 또는 소스에서 이미지에 bake. 설치는 **GLG go 게이트**.
+
 ### 5.3 C906L RTOS + 코어간 통신 — 벤더 커스텀, 일부 ❌ (**beta 라인 기능, 0.9.8엔 없음**)
 
 C906L(small core) RTOS ↔ Linux(C906B) 통신은 **표준 RPMsg / remoteproc** 축(비밀 mailbox 아님).
@@ -267,10 +282,38 @@ C906L(small core) RTOS ↔ Linux(C906B) 통신은 **표준 RPMsg / remoteproc** 
 - **선례**: SMLIGHT ESP32 repo [`slzb-esphome`](https://github.com/smlight-tech/slzb-esphome)(GPL-3.0)의 패키지
   (buzzer·ws2812·ir·bluetooth·leds·ioexp) = C906L ELF 능력과 동종. SG2000 포트는 ESP32 컴포넌트를 C906L로 이식한 것으로 추정.
 
-**통제 가능성(가설, beta5 live 검증 전)**: ① 통신=표준 RPMsg/remoteproc → 우리 `homeagentd`가 `/dev/rpmsg*`
-직결 또는 smhub-broker 대체 **가능성** ② RTOS=ELF 슬롯 + remoteproc state → **우리 Zig RTOS 교체 후보 seam**
-③ 핵심 바이너리 not-stripped + 백엔드 Python 평문 → 역설계 비용 낮음. **실제 교체 가능성은 beta5 live 에서
-remoteproc lifecycle·firmware load contract·RPMsg ABI 확인 후 확정**(0.9.8엔 스택 부재라 미검증).
+**통제 가능성 — beta5 LIVE 확정 (2026-07-01, §5.4)**: ① 통신=표준 RPMsg/remoteproc **확인**(`/dev/rpmsg{0,1,_ctrl0}`
+라이브, virtio_rpmsg) → 우리 `homeagentd`가 `/dev/rpmsg*` 직결 또는 smhub-broker 대체 **가능**. ② RTOS=ELF 슬롯
+(`/opt/firmware/smhub-rtos.elf`, smlight 소유 355KB) + `remoteproc0/state` write → **우리 Zig RTOS 교체 후보 seam 확정**.
+③ ELF strings로 FreeRTOS+ESPHome 2026.5.3+open-amp 구조·config 출처 노출 → 역설계 비용 낮음. **가설 전부 라이브로 뒷받침됨**(§5.4).
+
+---
+
+### 5.4 beta5 라이브 실측 — C906L RTOS + 스택 확정 (2026-07-01, OTA 후)
+
+증거(gitignored): `captures/smhub-beta5-live-20260701T171429+0900/logs/{beta5-postcapture.txt, mg24-bridge-info.txt}`.
+META: **SMHUB 1.0.0.beta5**, Buildroot `2026.02-18-g60430d6802`, kernel **6.18.17-patch21 riscv64**(build 2026-03-04).
+경로: 0.9.8 → Web UI `Settings→Update and Restore` OTA → **슬롯 B(kernel.1/rootfs.1) 부팅 good**, 슬롯 A(0.9.8)는 `boot status bad`·inactive(잔존, 블록백업이 실질 롤백).
+
+| # | 항목 | 라이브 결과 (0.9.8 대비 = 등장) |
+|---|---|---|
+| B1 | **C906L remoteproc** | `remoteproc0/{name=remoteproc@0, state=**running**, firmware=**smhub-rtos.elf**}` ✅ (0.9.8=부재) |
+| B2 | **RPMsg 채널** | `/dev/rpmsg0·rpmsg1·rpmsg_ctrl0` + dmesg `virtio_rpmsg_bus … esphome-rpc addr 0x400` · `smhub-rpc addr 0x401` ✅ |
+| B3 | **RTOS 펌웨어** | `/opt/firmware/smhub-rtos.elf`(355216B, **smlight 소유 = user-writable**) + `esphome_data.dat`. strings: **C906L RTOS / FreeRTOS / ESPHome 2026.5.3 / open-amp `framework-sg2000-rtos` / config `github://smlight-smhub/rtos-config//nano-esphome.yaml@main`** |
+| B4 | **broker 브리지** | `smhub-broker`(pid, `--ble-throttle --ble-mode=hci`) + `/run/smhub-broker.sock`·`/var/run/smhub-broker.sock` ✅. BLE=`hciattach /dev/ttyS4 … 1500000` |
+| B5 | **opkg 설치(정본)** | esphome-bin 2026.5.3-3 · smhub-broker 1.0.3-3 · **smhub-services 1.0.4-1** · **smhub-ui 1.0.3-1**(+구 smhub-web 0.3.1-1) · zigbee2mqtt 2.10.1-2 · nodered 4.1.5-1 · nodejs 22.22.0 · python3 3.14. (matterbridge/OTBR/zwave 여전히 **미설치**) |
+| B6 | **persistence** | root=**p6 ROOTFS1 ext4 ro**(슬롯 B). **p7 USER = ext4**(F2FS 아님 — OTA 경로라 재포맷 안 됨). `/etc`=`/mnt/user/etc-overlay.img` **rw overlay**. **zram0 512M swap 활성**(0.9.8=swap 0). |
+| B7 | **커널 .config** | `REMOTEPROC=y·REMOTEPROC_CDEV=y·RPMSG_CHAR/CTRL/NS/VIRTIO=y·MAILBOX=y·ZRAM=m·F2FS_FS=y` — beta 라인 코프로세서/압축/F2FS 전부 **커널에 활성**(0.9.8엔 REMOTEPROC/RPMSG/MAILBOX 없었음). |
+| B8 | **프로세스 매니저** | OpenRC `supervise-daemon`(z2m·smhub-broker 감독). ESPHome는 Linux userspace 프로세스 **없음** = **C906L 코어에서 실행**(smhub-rtos.elf), broker가 소켓 브리지. |
+
+**앱 배선 (OpenRC init 직독, `app-wiring-readonly.txt`)**:
+- `smhub-broker`: `command=/opt/bin/smhub-broker --ble-throttle`, supervise-daemon. **`depend() { need localmount remoteproc; before status-login-ready }`**
+  → 별도 **`remoteproc` OpenRC 서비스가 C906L 부팅**, broker가 이를 의존(부팅 순서 계약). `start_pre`가 **`/opt/firmware/bluetooth_proxy_mode`**(off/hci/bluez/dbus) 파일을 읽어 `--ble-mode=` 주입 = **선언적 config seam**(user-writable `/opt/firmware`).
+- `smhub-services`: `/opt/bin/smhub-services`, `SMHUB_SERVICES_DATA=/opt/smhub-services`, `retry=TERM/30/KILL/5`(웹UI 업데이트가 graceful shutdown 블록).
+
+**핵심 함의**: §4(0.9.8)에서 "C906L/ESPHome/RPMsg = beta 라인 추가분"이라던 가설이 **beta5 라이브로 전면 확정**됐다.
+L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널, broker 소켓 브리지, user-writable ELF 슬롯)가
+**우리 `runtime/` RISC-V 재구성의 정확한 ground truth**다. 커널이 riscv64 6.18.17 = 제품이 RISC-V임도 재확인(→ Phase D 문서 정합화 근거).
 
 ---
 
@@ -365,8 +408,13 @@ opkg 설치 목록(C4) · remoteproc/C906L 부재 확정(C2) · adapter=ember(V4
 **남은 무변형(0.9.8, 다음 세션)**: z2m `bridge/info`(ember 펌웨어 빌드 버전, z2m_bridge_online) · buzzer
 crash 로그 · full `config.gz` 덤프 · 벤더 매뉴얼 ②A(Update/Restore + SSH).
 
-**beta5 이후(OTA 게이트 통과 시)**: C906L 라이브(`/sys/class/remoteproc/*`, `/dev/rpmsg*`, dmesg
-remoteproc/rtos) · DTB/FIT 분해 · MG24 `.gbl` 경로 · matterbridge 설치 후 `@matter/*` 버전.
+**beta5 OTA 후 확정(2026-07-01, §5.4)**: ✅ C906L 라이브(remoteproc running + smhub-rtos.elf) · RPMsg 2채널
+(esphome-rpc/smhub-rpc) · broker 소켓 브리지 · ESPHome 2026.5.3 on FreeRTOS(open-amp) · opkg 정본 · p7 ext4/zram/etc-overlay ·
+커널 REMOTEPROC/RPMSG/MAILBOX 활성 · riscv64 재확인 · **EEPROM SSH 지속 가설 반증**(host key 여전히 0바이트).
 
-**경미 변형(별도 판단)**: 기기 페어링(permit_join) · 리부트 boot-start 검증.
+**beta5 남은 것(셸 확보 상태, 다음)**: MG24 `bridge/info` 라이브(ember 펌웨어/ezsp — mosquitto 인증 경로 필요) · DTB/FIT 분해
+(`/sys/firmware/fdt`, sudo) · MG24 `.gbl` 경로 · `homeagentd`용 RPMsg ABI/`smhub-rtos.elf` 로드 contract · (설치 게이트 후) matterbridge `@matter/*`.
+
+**영구화 결정 대기**: overlay `/etc/ssh` host key 재생성 후 리부트 지속성 검증(§3.6).
+**경미 변형(별도 판단)**: 기기 페어링(permit_join).
 **금지**: Type-C full flash를 OTA보다 먼저(A/B rollback 전제 붕괴) · live 좌표/키를 공개 파일에.

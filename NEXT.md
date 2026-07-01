@@ -1,10 +1,13 @@
 # NOW — SMHub Nano Mg24 제품 검수 → RISC-V Zig 런타임
 
 - **Stem**: 벤더 **SMHUB OS는 무수정**으로 쓰고, 제품 기능을 먼저 끝까지 검증한다. 그 결과를 바탕으로 **RISC-V Zig `homeagentd`**(100ms 상태머신)와 C906L mailbox executor를 얹는다.
-- **현재 상태 (2026-06-30)**: 출고 OS **0.9.8** 실기 캡처 완료(`captures/smhub-0.9.8-20260630/`, gitignored). 업데이트는 아직 안 함. 복구 이미지 beta5 + 0.9.9는 로컬 캐시에 sha256 검증 완료. live 좌표/SSH 절차/키 경로는 `PRIVATE.md`만 본다.
+- **현재 상태 (2026-07-01)**: 출고 OS **0.9.8** 실기 캡처 + **블록 이미지 백업 완료**(`captures/smhub-0.9.8-20260630/`, gitignored — §0 안전 게이트 통과). 업데이트는 아직 안 함(보드 uptime 19h, SSH 라이브). 복구 이미지 beta5 + 0.9.9는 로컬 캐시에 sha256 검증 완료. live 좌표/SSH 절차/키 경로는 `PRIVATE.md`만 본다.
 - **결정**: 제품 레인은 **RISC-V 락**. SMHUB OS가 riscv64 실측이므로 on-product Zig `homeagentd`도 `riscv64-linux-*` 타깃. 구 “ARM A53 고정”은 폐기하고, 남은 문서의 ARM 잔재는 다음 세션에서 정리한다.
-- **검증 순서**: ① 0.9.8 비파괴 확인 + 백업 → ② OTA beta5 → ③ beta5 post-capture(C906L/ESPHome/remoteproc) → ④ **Zigbee 먼저**(Z2M + MQTT + 1기기 페어링) → ⑤ **Matter/Thread**(OTBR + Matterbridge/matter.js) → ⑥ `homeagentd` 스켈레톤.
-- **다음 세션 첫 행동 (Opus 권장, 브라우저 admin 대시보드 사용)**: 업데이트하지 말고 먼저 `rauc status --detailed`/`/etc/rauc/system.conf`/`fw_printenv` 확인 후 0.9.8 최소 `dd` 백업을 뜬다. 그 다음에만 Web UI OTA beta5.
+- **현재 단계 (2026-07-01) = 제품화 세트 설계 고민**: "무엇을 어떻게 엮어 제품화 가능한 세트를 만드나". 코드/번들은 **아직 안 만든다** — OS 버전업하면 버전 못박은 config/코드가 또 깨지므로(§버전 드리프트). 구조 지식 SSOT = `docs/PRODUCT-CONFIG-MODEL.md`. (이번 세션 GPT가 만든 builder/applier/config/tests 프레임워크는 시기상조라 **전부 삭제**. 코드는 Claude가 짓고 GPT엔 검수만.)
+- **라이브 확정 (2026-07-01)**: MG24 = **EmberZNet Zigbee coordinator**(adapter=`ember`, ezspVersion 13). 제품 기본 = **z2m + matterbridge(-z2m)** 로 Zigbee 기기를 Matter over IP 로 품는다. **Z-Wave 는 native 미지원**(zwavejsui 제외). **Thread/OTBR 는 보류**(MG24 재플래시=Zigbee 상실, Matter-only 때 재고).
+- **검증 순서**: ① 0.9.8 비파괴 확인 + 백업 ✅ → ② OTA beta5 → ③ beta5 post-capture(C906L/ESPHome/remoteproc) → ④ **Zigbee 먼저**(Z2M + MQTT + 1기기 페어링) → ⑤ **Matter**(Matterbridge over IP) → ⑥ `homeagentd` 스켈레톤.
+- **다음 세션 = 벤더 매뉴얼 검토**: `docs/SMHUB-MANUAL-REVIEW.md` (공식 22페이지 체크리스트). 우선순위 = ①B-6 Radios&Protocols + C Zigbee2MQTT→HA ②A Update/Restore + SSH ③B-2/4/7/8 하드웨어/SW/UI/모듈 ④C Peripheral conf 정본. 각 페이지 "벤더 절차 ↔ 라이브 실측" 대조.
+- **결정 대기(고민 단계)**: (1) 재현 기판 = 벤더 이미지 커스터마이즈 vs 우리 buildroot, (2) 상태 원본 = 손선언 vs **golden 스냅샷**, (3) 설치 게이트(matterbridge 등 설치=mutation, GLG go 필요) 열지. → `PRODUCT-CONFIG-MODEL.md` §8. OTA beta5 는 별개 게이트(미실행, 백업 있어 롤백 가능).
 - **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 전제 깨짐). live IP/MAC/SSH 키/기기 좌표를 공개 파일에 쓰지 말 것. “service running”을 “working”으로 판정하지 말 것.
 
 # ACTIVE
@@ -12,12 +15,13 @@
 ## 0. Mutate 전 안전 게이트 — 0.9.8 보존
 
 목표: 정확한 출고 0.9.8 이미지는 manifest에서 다시 받을 수 없으므로, OTA 전에 슬롯/RAUC 상태와 최소 백업을 확보한다.
+**✅ 안전 게이트 통과 (2026-07-01)** — 상세는 `captures/smhub-0.9.8-20260630/BACKUP-SUMMARY.md`. 보드 여전히 0.9.8, uptime 19h, SSH 라이브.
 
-- [ ] `rauc status --detailed` 및 가능하면 JSON 출력 저장.
-- [ ] `/etc/rauc/system.conf`, `/mnt/misc/rauc`, `fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT rauc_slot active_boot_slot root_uuid rootfs0_uuid rootfs1_uuid slot_num` 저장.
-- [ ] 최소 백업: `mmcblk0boot0/1`, `p1 KERNEL0`, `p5 ROOTFS0`, `p3 ENV`, `p4 MISC`, `etc-overlay.img`, Z2M coordinator/network key/configuration backup.
-- [ ] `collect.sh` 보강: RAUC, `/etc/opkg/*`, app catalog, `/opt/*/package.json`, `/var/log`, HCI/btmgmt, remoteproc/rpmsg/mailbox, zram/F2FS 항목 추가.
-- [ ] 백업 후 **OTA beta5**(Web UI) 진행. Type-C full `emmc.img` flash는 rollback 검증 뒤.
+- [x] `rauc status --detailed` 저장 — A=booted/good, B=bad/inactive(rootfs.1 빈 슬롯). OTA는 B에 기록.
+- [x] `/etc/rauc/system.conf` + `fw_printenv` 저장 (`images/fw_printenv.txt`): `BOOT_ORDER=A` `rauc_slot=A` `active_boot_slot=0x1` `slot_num=1` `BOOT_A/B_LEFT=3` `bootcmd=cvi_update||run emmcboot`.
+- [x] 최소 백업 완료(`images/`, 160M, MANIFEST.sha256): boot0/1, p1/p2 KERNEL(**p1==p2 sha 동일**), p3 ENV, p4 MISC, p5 ROOTFS0(140M gz, ext4 매직 검증), etc-overlay(loop0), Z2M data(coordinator_ieee 96b8…, ch11, 0 devices). gz 전부 `gzip -t` OK, captures/ gitignore 보호 확인.
+- [ ] `collect.sh` 보강: RAUC, `/etc/opkg/*`, app catalog, `/opt/*/package.json`, `/var/log`, HCI/btmgmt, remoteproc/rpmsg/mailbox, zram/F2FS 항목 추가. (선택: p7 User 5.8G 전체 백업)
+- [ ] **다음: OTA beta5**(Web UI) 진행 — 게이트 통과했으므로 GO 가능. Type-C full `emmc.img` flash는 rollback 검증 뒤.
 
 ## 1. 통제 경계 + 재현 세트 매트릭스 — ✅ 1차 산출 (2026-06-30, beta5 이미지 정적 추출)
 

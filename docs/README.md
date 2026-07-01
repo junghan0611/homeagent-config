@@ -29,6 +29,8 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`A2A.md`](A2A.md) | agent protocol notes | A2A work |
 | [`A2UI.md`](A2UI.md) | server-driven UI notes | A2UI surface work |
 | [`PLATFORM-MATRIX.md`](PLATFORM-MATRIX.md) | legacy platform comparison | origin-lane platform questions |
+| [`PRODUCT-CONFIG-MODEL.md`](PRODUCT-CONFIG-MODEL.md) | SMHub product state map — backend.db/OpenRC/p7 USER (what a product set must weave together) | understanding where product state lives before designing a set |
+| [`SMHUB-MANUAL-REVIEW.md`](SMHUB-MANUAL-REVIEW.md) | vendor manual review index (22 pages, checkboxes) | working through official SMHUB docs page-by-page next session |
 
 ## Parked / Absorbed Notes
 

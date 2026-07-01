@@ -160,6 +160,22 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
 
 ---
 
+### 3.6 SSH 접근 · host key 프로비저닝 · OpenRC "started" 함정 (2026-07-01)
+- **접근 2요소는 별개**: `~smlight/.ssh/authorized_keys`(우리 `.sshkey/id_ed25519.pub` 등록 = 클라이언트 인증,
+  "누가 로그인") ↔ `/etc/ssh/ssh_host_*_key`(서버 host key = "sshd 가 자기 신원 증명하며 뜰 수 있는가"). **무관.**
+- **이 유닛 팩토리 결함**: `/etc/ssh/ssh_host_{rsa,ecdsa,ed25519}_key` 전부 **0바이트**(mtime=빌드시각) →
+  `sshd -t: no hostkeys available -- exiting`. sshd 는 OpenRC `default` 런레벨에 **등록돼 있으나**(rc-update 문제
+  아님) 매 부팅 **host key 부재로 즉시 죽음** → 리부트 후 :22 closed. firstboot/EEPROM host key 프로비저닝
+  (릴노트 "Persistent Device Identity", EEPROM에 hostname/SSH keys)이 이 early-adopter 유닛엔 안 채워짐.
+- **OpenRC "started" 는 진실 아님**: `rc-status` 가 sshd·smhub-buzzer-daemon 을 started 로 표시해도 프로세스
+  없음(crashed). **진실원 = `pgrep -x`/`ss :22`/`sshd -t`**, rc-status 아님. (제품 검수 전반의 running≠working 축.)
+- **접근 우회**: 이전 성공 SSH는 표준 sshd가 아니라 `/tmp/hk` 우회 sshd였고, 리부트로 소실됐다. Web UI Console
+  (port 80, `#/console`)은 SSH 없이 smlight 셸 + sudo(pw=smlight)를 제공하지만 복붙이 어려워 제품화/장기 운용면으로는 부적합하다.
+- **복구/영구화 안전 순서**(필요 시): ① authorized_keys 무손상 확인만(건드리지 말 것) ② host key 크기
+  확인 ③ `sshd -t` ④ **0바이트 host key 삭제 후** `ssh-keygen -A`(0바이트를 "존재"로 보고 skip → 삭제 필수)
+  ⑤ `mkdir -p /run/sshd`(priv-sep 2차 문제) ⑥ `sshd -t` 통과 뒤 restart. `/etc` = overlay on p7 → 키 **리부트 유지**.
+  단, 현재 결정: 0.9.8 표준 sshd 수리에 더 매달리지 않고 **OS/펌웨어 업데이트를 먼저** 진행한 뒤 새 이미지에서 SSH 상태를 재평가한다.
+
 ## 4. 라이브 실측 로그 — 0.9.8 무변형 (2026-07-01)
 
 증거(gitignored): `captures/smhub-verify-20260701T113514+0900/logs/{V1-V6_readonly.txt, controlmap-0.9.8-readonly.txt}`.

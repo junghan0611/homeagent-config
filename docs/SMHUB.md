@@ -171,6 +171,7 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
 - `/` = p5 ROOTFS0 **RO**(A/B RAUC, `/dev/root` 739M, 58% used). `/etc` = overlay(loop0 25M, upper on
   `/mnt/user/etc-overlay.img`, **64K used = 극소**).
 - **p7 USER(5.7G) = `/mnt/user`** → bind `/home /opt /var`(ext4 rw noatime). **모든 앱/데이터/backend.db** 여기. ← 세팅본 주 타깃.
+  **소유권 주의(§5.5)**: `/mnt/user`·`/etc`(overlay)·`/var/lib`는 **root 소유 → non-root 쓰기 불가**. **non-root 프로세스의 지속 쓰기 홈 = `/home/smlight`**(p7, smlight writable, 동일-fs 원자 rename 실측 OK).
 - p4 MISC(`/mnt/misc` 1.9M) = firstboot 플래그 + rauc data.
 - **swap: 0.9.8=0**(`SwapTotal 0`, zram device 미활성) ↔ **beta5=zram0 512M 활성**(`/proc/swaps` pri=100, 커널 `CONFIG_ZRAM=m` 로드). 라인별 차이 확정(§5.4 B6).
 - **beta5 실측 정정(§5.4)**: root=**p6 ROOTFS1**(슬롯 B, ext4 ro). **p7 USER는 여전히 ext4**(beta line F2FS는 full re-install 경로에만 적용 — OTA 업그레이드라 재포맷 안 됨). `/etc`=`/mnt/user/etc-overlay.img` **rw overlay**(0.9.8 loop0 오버레이와 동일 구조, p7 지속).
@@ -331,6 +332,19 @@ META: **SMHUB 1.0.0.beta5**, Buildroot `2026.02-18-g60430d6802`, kernel **6.18.1
 **핵심 함의**: §4(0.9.8)에서 "C906L/ESPHome/RPMsg = beta 라인 추가분"이라던 가설이 **beta5 라이브로 전면 확정**됐다.
 L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널, broker 소켓 브리지, user-writable ELF 슬롯)가
 **우리 `runtime/` RISC-V 재구성의 정확한 ground truth**다. 커널이 riscv64 6.18.17 = 제품이 RISC-V임도 재확인(→ Phase D 문서 정합화 근거).
+
+### 5.5 포팅 derisk 실측 — 자원 여유 + 지속 경로 (2026-07-03, beta5)
+
+우리 RISC-V 펌웨어(riscv64 static, AWS IoT MQTT+TLS)를 **z2m 곁에 얹기 전** board-level blocker를 실측 검증. Zigbee는 껍데기(stub) 전제.
+
+- **Q1 자원 — 🟢 GREEN**: Mem total 488M / used 272M / **available 216M** / buff-cache 206M(회수가능). z2m(node) RSS **105.7M**. **zram 512M swap = 348KB(0.06%) 사용** = 사실상 미사용(백스톱 여유). Committed_AS 501M / CommitLimit 756M(66%). → 단일 gateway 프로세스(TLS 세션 1개, 수~수십 MB) OOM 위험 없음. **조건**: ① 실제 RSS는 빌드 후 측정 확정(추정 금지, RSS 규율), ② EmberZNet **host framework 전체 동시 구동**(node급 2번째 footprint)은 별도 재평가 — 쉘은 stub이라 무관.
+- **Q2 지속 경로 — ✅ non-root면 `/home/smlight`(p7 ext4)**: `/`=p6 ext4 **ro**, `/etc`=rw overlay이나 **root 소유(non-root 쓰기 불가)**, `/mnt/user`=p7 rw이나 root 소유, **`/home/smlight`=p7 ext4 rw + smlight writable + 동일-fs `mv` 원자쓰기 실측 성공** ✅, `/tmp`=tmpfs(휘발). → 우리 코드의 `/etc/hub_state.json`(단일 writer)은 **non-root에선 /etc 불가** → 권고 `$HOME/.local/state/…`(=/home/smlight, p7). root 구동이면 /mnt/user·/etc overlay 열림. §3.5 정합.
+- **Q3 버전 좌표 독립 재확인 — ✅**: `coordinator_backup.json`에서 `ezspVersion 13` + `source zigbee-herdsman@10.0.7` + pan_id `e760`(=59232, §2 일치) 독립 확인. (EmberZNet 7.4.2 GA는 backup에 없음 = 런타임 `bridge/info` 값 축, §2/§4 V4 의존.)
+- **Q4 EZSP 13 내 7.4↔7.5 델타 — ⚠️ 열림(§9)**: 로컬은 GSDK 4.5.0=7.5.1만 보유 → 진짜 frame-ID diff엔 7.4.2 `ezsp-enum.h` 필요. 단 `ezsp.c` 하위호환 경로(*initial EZSP_VERSION old packet format*)로 코어 코디네이터 커맨드 상호운용은 안전. 잔여 리스크=7.5 전용 신규 frame 호출. Phase 2(직접구동 b) 착수 시 확정.
+- **Q5 MG24 NCP 리플래시 이미지 — `ncp-uart-hw` (단 flow control 텐션)**: GSDK "em260" 후신 = `app/ncp/sample-app/ncp-uart-hw/ncp-uart-hw.slcp`, **MG24=Cortex-M33**(prebuilt `build/gcc/cortex-m33/zigbee-ncp-uart`), 출력 `.gbl`, 툴=벤더 `smhub-flasher`(릴노트 "Radio page supports Nano Mg24 flashing")/`universal-silabs-flasher`. GSDK UART NCP 샘플은 이 hw판만(`-sw` 부재).
+  ⚠️ **flow control 텐션(사실로 굳히지 않음)**: 라이브 동작 정본 = z2m **`rtscts: false`(no-flow)** @115200. 그런데 stock `ncp-uart-hw`는 기본 **RTS/CTS on**(`SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE=usartHwFlowControlCtsAndRts`, `EMBER_SERIAL1_RTSCTS`). → 벤더 flashed 이미지는 **no-flow 빌드**이거나 그렇게 구동 중이며, **stock hw판을 그대로 리플래시 후 no-flow 호스트로 몰면 부하 시 바이트 드롭 가능**. Phase 2 직접구동 전 flow-control 정합(NCP를 no-flow로 빌드 vs 양단 RTS/CTS — `ttyS1` RTS/CTS 배선 미검증) **재조정 항목**. (§6.1 재플래시 경로.)
+
+**derisk 종합**: Q1·Q2 🟢 = **Phase 1(쉘) 실착수 막는 board blocker 없음**. Q3 확인사살 통과, Q4·Q5는 Phase 2 경계 명확.
 
 ---
 

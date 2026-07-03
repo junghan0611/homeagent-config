@@ -24,7 +24,7 @@ SMHub Nano = **Milk-V Duo S급 SG2000 베이스 + EFR32MG24 무선칩 추가**. 
 - **BSP 계보**: `milkv-duo/duo-buildroot-sdk-v2` (SG2000=cv181x 보드 정의 `sg2000_milkv_duos_*`,
   freertos/C906L 트리 포함).
 
-### Milk-V Duo S(개발보드) ↔ SMHub Nano(제품) 호환 경계
+### 1.1 Milk-V Duo S(개발보드) ↔ SMHub Nano(제품) 호환 경계
 
 | 레이어 | Duo S | SMHub Nano | 호환 |
 |---|---|---|---|
@@ -79,7 +79,8 @@ MG24 코디네이터를 **어떤 host 스택으로 구동하느냐**의 핵심�
   → Zigbee 스택을 벤더 바이너리 없이 소스에서 재현·이해 가능. 단 **host EmberZNet framework를 SG2000(riscv64) 타깃으로 크로스빌드**하는 작업이 별도로 남음.
 - **정확 매칭이 필요하면**: MG24를 GSDK 4.5.0 `em260`으로 7.5.1 NCP 리플래시(`.gbl`, §6.1 재플래시 경로). 껍데기/브리지 목적이면 불필요 — 7.4.2 그대로 EZSP 13으로 충분.
 
-### 벤더 매뉴얼 B-6 대조 — 제네릭 문서임을 확정 (2026-07-01)
+### 2.2 벤더 매뉴얼 B-6 대조 — 제네릭 문서임을 확정 (2026-07-01)
+
 벤더 §6 원문은 **SMHUB 시리즈 공통(제네릭)** 문서로 최대 하드웨어 기준 **별도 칩**을 전제 → **Nano Mg24 미적용**:
 
 | 벤더 §6 주장 (제네릭) | Nano Mg24 라이브 | 판정 |
@@ -200,6 +201,73 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
 - **결정(2026-07-01)**: beta5에서도 표준 sshd 는 host key 0바이트로 죽으므로, 영구 SSH가 필요하면 **overlay `/etc/ssh` 에 host key
   재생성(0바이트 삭제 → `ssh-keygen -A`) 후 리부트로 지속성 검증**한다. 그 전까지는 `/tmp/hk` 우회(세션 한정) 또는 `Settings→Console`(SSH 불요)로 접근.
   벤더 매뉴얼상 SSH 는 별도 토글 없이 부팅 완료(LED chase 종료) 시 기동 전제 — 이 유닛은 host key 결함으로 그 전제가 깨져 있다.
+
+### 3.7 설치면(install surface) — rootfs ro/rw 경계 + OTA 지속성 (라이브 실측 2026-07-03)
+
+**자체 허브 코드/서비스를 SMHub에 올릴 때 "어디에 설치해야 리부트+OTA를 견디나"의 정본.** SMHub 타깃 배포 설계 근거.
+
+**파티션/슬롯 (blkid/RAUC `system.conf` 실측)**
+
+| 파티션 | 크기 | fs | 상태 | 역할 |
+|---|---|---|---|---|
+| p1/p2 KERNEL0/1 | 8M | vfat(FIT) | **A/B, raw** | 커널 FIT 슬롯 |
+| **p5 ROOTFS0 / p6 ROOTFS1** | 768M | ext4 | **ro, A/B** | 루트 슬롯(부팅=p6/B) |
+| p4 MISC | 1.9M | ext4 | rw | RAUC data-dir(`/mnt/misc/rauc`) + firstboot 플래그(`.production-init`/`.fip-flashed-version`/`.openrc-migrated`) |
+| **p7 USER** | **5.7G(9%=493M)** | ext4 | **rw, 지속** | **유일한 설치/지속면** — bind `/opt /home /var` + `/mnt/user` |
+| /etc(overlay) | 25M | ext4 loop | rw | lower=rootfs `/etc`(ro), upper=`/mnt/user/etc-overlay.img`(p7, 32M) |
+| zram0 | 512M | swap | — | 압축 스왑 |
+
+**ro/rw 경계 (핵심)**
+- **rootfs(p5/p6)=ro + OTA 시 비활성 슬롯 통째 재기록** → **설치 금지.** 루트(`/usr/*`) 어떤 파일도 비영속(다음 OTA에 소실). PATH도 여기.
+- **p7(User)=유일 rw 지속면, 리부트+OTA 둘 다 생존.** RAUC OTA는 **비활성 rootfs+kernel 슬롯만** 기록·bootname A↔B 플립(`postinst.sh`은 FIP 부트로더도 버전 변경 시에만 flash). **p7 미변경.** → 실질 설치 전부 p7.
+- **/etc=overlay(upper가 p7)** → `/etc/init.d` 커스텀 서비스는 upper에 얹혀 리부트 지속. 단 lower=새 rootfs `/etc`라 **OS 버전 넘으면 /etc 의미 이동** 가능. `firstboot-upgrade`는 OTA 후 overlay **와이프 안 함**(inittab 잔재만 제거) + `opkg configure` 재실행.
+
+**소유권/권한 게이트**
+- p7 디렉토리 전부 **root 소유** → `/opt/bin`·`/etc/init.d`는 **smlight 쓰기 불가**.
+- **non-root(smlight) 쓰기 가능 = `/home/smlight`**(+ 특이: **`/opt/firmware`=smlight 소유**, 벤더 RTOS ELF 슬롯 → squat 금지).
+- **`sudo` 가능**(pw=smlight, wheel) → root 설치면 열림.
+- **PATH=`/usr/bin:/usr/sbin`뿐 — `/opt/bin` 미포함.** 벤더도 절대경로 실행(`command=/opt/bin/smhub-broker`) → **우리도 절대경로 필수.**
+
+**OTA 재시드 메커니즘 (`firstboot-upgrade` 실측)**
+- `.first_boot` 플래그를 RAUC가 업글 시 제거 → `firstboot-upgrade` 1회 재실행: `_cleanup_dbus`·`_cleanup_overlay`·`_process_opkg_packages`(=`opkg configure`, `*.autostart`→`/opt/share/services/` 마이그레이션, `rc-update -u`, smhub-services + delayed 서비스 기동).
+- **/opt·/home 와이프 없음.** `.factory-seed`(p7)=production 최초 부팅용 ipk 시드(esphome-bin·smhub-broker·smhub-services·smhub-ui + `user-skeleton.tar`), `firstboot-production`(`runs once ever`, 플래그 `/mnt/misc/.production-init`)가 1회만 적용 — **업글 경로는 재시드 아님.**
+
+**두 설치 패턴 (새 SMHub 리포 배포 설계)**
+- **(a) 벤더-네이티브(opkg + OpenRC), root — 제품화 재현.** smhub-broker 모사: `.ipk`(riscv64) 빌드 → opkg 설치(`/opt/bin`) + `/etc/init.d` init(overlay) + `/opt/share/services/*.autostart`. **OTA 통합**: `firstboot-upgrade`가 업글 후 자동 재설정·기동 → OTA 생존+자동기동. init 계약 근거=§5.4 앱배선.
+- **(b) 유저스페이스 사이드카(non-root), 빠른 derisk.** 바이너리+state를 `/home/smlight`(p7) → OTA 생존, root 불요. 단 **OpenRC 자동기동 없음**(별도 런처 필요). Phase 1 쉘에 충분(§5.5 Q2와 정합: state=`/home/smlight`).
+
+**결론**: 설치는 **p7 단일 면**. 쉘/derisk=(b) `/home/smlight`, 제품화=(a) `.ipk`+OpenRC(overlay `/etc/init.d`)로 OTA 레일 편승. **rootfs(ro/A-B)는 설치면 아님.**
+
+### 3.8 물리 제어면 — LED · 버튼 · GPIO 맵 (라이브 실측 2026-07-03)
+
+LED 상태표시 + 버튼 제스처(연타/롱프레스)를 SMHub로 옮길 때의 물리 계약. **⚠️ 버튼은 벤더 factory-reset가 이미 점유하고 10초 롱프레스에 의미를 부여**하고 있어, 새 리포의 UX 설계 전 필독.
+
+**GPIO 칩 (5×32라인, sophgo/thead; sysfs base)**
+
+| gpioinfo | 주소 | base | 대표 라인 |
+|---|---|---|---|
+| gpiochip0 | 5021000.gpio | 512 | (PWR domain) |
+| gpiochip1 | 3020000.gpio | 544 | **btn_1**(L1), diy_dbg_tx/rx(L16/17), regulator-wifi(L15), mux(L30) |
+| gpiochip2 | 3021000.gpio | 576 | regulator-vbus(L5), cc_rst(L11), cc_flsh(L12) |
+| gpiochip3 | 3022000.gpio | 608 | wp(L15), **led_pwr**(L16), **led_cus**(L17) |
+| gpiochip4 | 3023000.gpio | 640 | — |
+
+**명명 라인 (제어 대상)**
+
+| name | chip.line | 글로벌 | 방향 | 소유/용도 |
+|---|---|---|---|---|
+| **btn_1** | 3020000 L1 | 545 | in, active-low, 50ms deb | gpio-keys `key-factory-reset` + `smhub-reset-daemon` |
+| **led_pwr** | 3022000 L16 | 624 | out | 전원 LED(단색), `nano-leds` |
+| **led_cus** | 3022000 L17 | 625 | out | 커스텀/상태 LED(단색), `nano-leds` |
+| cc_rst / cc_flsh | 3021000 L11/L12 | 587/588 | in | USB-C 컨트롤러 |
+| diy_dbg_tx/rx | 3020000 L16/L17 | 560/561 | in | DIY 디버그 UART |
+
+**LED**: `/sys/class/leds` **비어있음** → LED class 아님. **raw GPIO 2개(led_pwr·led_cus), 단색 on/off.** 제어 = libgpiod **by-name**(`gpioset led_cus=1`, 벤더 스크립트가 쓰는 방식). RGB/addressable **없음**(`smhub-ambilight-daemon` 서비스는 존재하나 대응 named GPIO 라인 없음 → Nano 미해당 또는 별경로). **벤더 `nano-leds`(`/usr/lib/smhub/nano_leds.py`)가 상태/부팅 LED 소유** → 앱이 led_cus를 쓰려면 nano-leds와 조정/정지 필요(라인을 상시 점유 안 하고 momentary gpioset이라 **동시 writer race**).
+
+**버튼**: **단일 버튼 btn_1** → kernel `gpio-keys`(DT node `key-factory-reset`, label "Factory Reset"; 정확 KEY code는 `fdtget`/`evtest` 확인 남음) → `/dev/input/event0`(root/`input` group). **evdev 다중 reader 가능** → 벤더 데몬과 **co-read OK**. 라인이 gpio-keys에 consume돼 `gpioget` 직접 claim은 불가(input 경유만).
+- **⚠️ 벤더 점유·의미 부여**: `smhub-reset-daemon`(`/opt/bin/`, 18896B; 폴백 `/usr/lib/smhub/factory-reset-button.sh`)이 btn_1 상시 감시. 스크립트 실측 = **`HOLD_SEC=10` → 10초 연속 홀드 시 `factory-reset --force`(기기 와이프)** + LED 깜빡(`gpioset -t 150ms led_pwr=1 led_cus=1`) + PWM 부저(pwmchip0, period 500µs≈2kHz, duty 50%, 서비스 `pwm-buzzer`).
+
+**⚠️ 충돌 (새 리포 설계 결정적)**: 앱의 **10초 롱프레스 제스처 == 벤더 factory-reset 트리거**. btn_1을 10초 제스처로 재활용하려면 **`smhub-reset-daemon`(+`nano-leds`) 정지/치환 필수**(OpenRC 서비스 disable 또는 우리 데몬으로 대체). **10회 연타**는 벤더가 *연속 홀드*만 판정하므로 대체로 안전(단 `smhub-reset-daemon` 바이너리 실거동 확인 후 확정). 접근 요약: LED write=libgpiod(gpiochip; root/gpio group), 버튼 read=event0(evdev, co-read). 둘 다 **by-name** 권장(글로벌 번호는 커널/DT 변동).
 
 ## 4. 라이브 실측 로그 — 0.9.8 무변형 (2026-07-01)
 
@@ -335,10 +403,10 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
 
 ### 5.5 포팅 derisk 실측 — 자원 여유 + 지속 경로 (2026-07-03, beta5)
 
-우리 RISC-V 펌웨어(riscv64 static, AWS IoT MQTT+TLS)를 **z2m 곁에 얹기 전** board-level blocker를 실측 검증. Zigbee는 껍데기(stub) 전제.
+자체 RISC-V 허브 펌웨어(riscv64 static, MQTT+TLS 워크로드)를 **벤더 z2m 곁에 올리기 전** board-level blocker를 실측 검증. Zigbee는 껍데기(stub) 전제.
 
 - **Q1 자원 — 🟢 GREEN**: Mem total 488M / used 272M / **available 216M** / buff-cache 206M(회수가능). z2m(node) RSS **105.7M**. **zram 512M swap = 348KB(0.06%) 사용** = 사실상 미사용(백스톱 여유). Committed_AS 501M / CommitLimit 756M(66%). → 단일 gateway 프로세스(TLS 세션 1개, 수~수십 MB) OOM 위험 없음. **조건**: ① 실제 RSS는 빌드 후 측정 확정(추정 금지, RSS 규율), ② EmberZNet **host framework 전체 동시 구동**(node급 2번째 footprint)은 별도 재평가 — 쉘은 stub이라 무관.
-- **Q2 지속 경로 — ✅ non-root면 `/home/smlight`(p7 ext4)**: `/`=p6 ext4 **ro**, `/etc`=rw overlay이나 **root 소유(non-root 쓰기 불가)**, `/mnt/user`=p7 rw이나 root 소유, **`/home/smlight`=p7 ext4 rw + smlight writable + 동일-fs `mv` 원자쓰기 실측 성공** ✅, `/tmp`=tmpfs(휘발). → 우리 코드의 `/etc/hub_state.json`(단일 writer)은 **non-root에선 /etc 불가** → 권고 `$HOME/.local/state/…`(=/home/smlight, p7). root 구동이면 /mnt/user·/etc overlay 열림. §3.5 정합.
+- **Q2 지속 경로 — ✅ non-root면 `/home/smlight`(p7 ext4)**: `/`=p6 ext4 **ro**, `/etc`=rw overlay이나 **root 소유(non-root 쓰기 불가)**, `/mnt/user`=p7 rw이나 root 소유, **`/home/smlight`=p7 ext4 rw + smlight writable + 동일-fs `mv` 원자쓰기 실측 성공** ✅, `/tmp`=tmpfs(휘발). → 자체 데몬이 상태를 `/etc`(예: `hub_state.json`, 단일 writer)에 쓰려 하면 **non-root에선 /etc 불가** → 권고 `$HOME/.local/state/…`(=/home/smlight, p7). root 구동이면 /mnt/user·/etc overlay 열림. §3.5 정합.
 - **Q3 버전 좌표 독립 재확인 — ✅**: `coordinator_backup.json`에서 `ezspVersion 13` + `source zigbee-herdsman@10.0.7` + pan_id `e760`(=59232, §2 일치) 독립 확인. (EmberZNet 7.4.2 GA는 backup에 없음 = 런타임 `bridge/info` 값 축, §2/§4 V4 의존.)
 - **Q4 EZSP 13 내 7.4↔7.5 델타 — ⚠️ 열림(§9)**: 로컬은 GSDK 4.5.0=7.5.1만 보유 → 진짜 frame-ID diff엔 7.4.2 `ezsp-enum.h` 필요. 단 `ezsp.c` 하위호환 경로(*initial EZSP_VERSION old packet format*)로 코어 코디네이터 커맨드 상호운용은 안전. 잔여 리스크=7.5 전용 신규 frame 호출. Phase 2(직접구동 b) 착수 시 확정.
 - **Q5 MG24 NCP 리플래시 이미지 — `ncp-uart-hw` (단 flow control 텐션)**: GSDK "em260" 후신 = `app/ncp/sample-app/ncp-uart-hw/ncp-uart-hw.slcp`, **MG24=Cortex-M33**(prebuilt `build/gcc/cortex-m33/zigbee-ncp-uart`), 출력 `.gbl`, 툴=벤더 `smhub-flasher`(릴노트 "Radio page supports Nano Mg24 flashing")/`universal-silabs-flasher`. GSDK UART NCP 샘플은 이 hw판만(`-sw` 부재).

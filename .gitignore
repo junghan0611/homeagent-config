@@ -121,3 +121,6 @@ PRIVATE.md
 bsp/sdk/
 bsp/out/
 captures/
+
+# 벤더 매뉴얼 로컬 스냅샷 (fetch.sh 로 재생성 가능한 참조본, 우리가 관리 X)
+docs/smhub-manual/

@@ -62,6 +62,23 @@ Duo S에서 선행 개발(SoC·BSP 동일). MG24 Zigbee/Thread만 SMHub 실기 �
   는 벤더 공통 카탈로그(외장 USB 동글용)일 뿐 — "지원"으로 해석 금지, 세트에 넣지 않는다.
 - **Thread/OTBR 보류**: MG24 를 Thread RCP 로 재플래시하면 Zigbee coordinator 상실. Matter-only 고민 시 별도 취급.
 
+### 2.1 EmberZNet / EZSP 버전 좌표계 — host↔NCP 호환 계약 (2026-07-03 라이브 재확인)
+
+MG24 코디네이터를 **어떤 host 스택으로 구동하느냐**의 핵심은 EmberZNet 빌드 일치가 아니라 **EZSP protocol 버전 일치**다.
+
+| 층 | 버전 | EZSP | 근거 |
+|---|---|---|---|
+| **NCP 펌웨어**(온보드 MG24 라디오) | EmberZNet **7.4.2 GA** | **13** | z2m `coordinator_backup.json → "ezspVersion": 13`, `bridge/info`(§2) |
+| **현재 구동 host** = z2m | zigbee-herdsman **10.0.7**, z2m **2.10.1** | 13 | 라이브 `coordinator_backup.json source` + `package.json` |
+| **오픈소스 참조 SDK**(Silabs Gecko SDK) | GSDK **4.5.0** = EmberZNet **7.5.1.0** | **13** (`EZSP_PROTOCOL_VERSION 0x0D`) | 공개 Gecko SDK 소스 트리: `EMBER_MAJOR/MINOR/PATCH = 7/5/1` |
+
+- **호환 계약 = EZSP v13.** NCP(7.4.2)와 임의 host 스택(예: GSDK 4.5.0 = 7.5.1)의 EmberZNet 빌드가 달라도 **EZSP 13이 와이어를 묶는다** → 상호운용. z2m(herdsman 10.0.7)이 지금 이 MG24를 EZSP 13으로 구동 중인 게 살아있는 증거.
+- **전송 계약(라이브 재확인 2026-07-03)**: `adapter: ember`, port `/dev/ttyS1`, `baudrate: 115200`. `/dev/ttyS1`은 부팅 시 z2m(node) 프로세스가 상시 점유(root:dialout) → **동시 접근 불가**. 대안 host 스택은 z2m 정지 또는 MQTT 브리지 경유로만 라디오 접근.
+- **코드레벨 완전 파악 근거(오픈소스)**: Gecko SDK 4.5.0은 host/NCP 전 소스 공개 —
+  `protocol/zigbee/app/ezsp-host`(ASH/SPI/CPC 전송), `app/em260`(NCP=MG24 펌웨어 앱), `app/zigbeed`, `stack/*`.
+  → Zigbee 스택을 벤더 바이너리 없이 소스에서 재현·이해 가능. 단 **host EmberZNet framework를 SG2000(riscv64) 타깃으로 크로스빌드**하는 작업이 별도로 남음.
+- **정확 매칭이 필요하면**: MG24를 GSDK 4.5.0 `em260`으로 7.5.1 NCP 리플래시(`.gbl`, §6.1 재플래시 경로). 껍데기/브리지 목적이면 불필요 — 7.4.2 그대로 EZSP 13으로 충분.
+
 ### 벤더 매뉴얼 B-6 대조 — 제네릭 문서임을 확정 (2026-07-01)
 벤더 §6 원문은 **SMHUB 시리즈 공통(제네릭)** 문서로 최대 하드웨어 기준 **별도 칩**을 전제 → **Nano Mg24 미적용**:
 

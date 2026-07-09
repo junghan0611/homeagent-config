@@ -9,6 +9,10 @@
   `docs/SMHUB.md`에 실측 grounded로 모은다. **벤더 비공개 SDK 내부나 특정 제품 코드는 다루지 않음 — board/오픈소스 사실만.**
 - **지식 SSOT (단일)**: `docs/SMHUB.md` — HW/라디오/상태모델/라이브 실측/통제경계·재현 매트릭스/정보벽/
   벤더 매뉴얼 검토/열린 설계질문/다음 단계. (구 PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW 병합.)
+- **인증 허브 레퍼런스 레인 추가 (2026-07-09, GLG)**: 인증 요건 대응 = **IKEA DIRIGERA**(비Tuya·CSA 인증).
+  IKEA 앱 그대로 쓰며 **노하우만 추출** → **SG2000/SMHub에서 1:1 재현**(가성비+OSS 동시). 방향 SSOT =
+  `docs/HUBS.md` + `docs/MULTIPROTOCOL.md`. 단일칩 Zigbee+Thread **동시는 시점 문제(MG26 → Series 3)** —
+  지금은 만들지 않고 **각 스택 독립 제어 기반**만 닦는다. 상세 = **Phase E**. 사업 경계·현장 맥락 = `PRIVATE.md`.
 - **현재 상태 (2026-07-01 OTA 완료)**: **OTA로 `1.0.0.beta5` 부팅 성공** (0.9.8 → beta5, Web UI Settings→Update and Restore).
   출고 0.9.8 블록 백업은 슬롯 A에 롤백 보존(`captures/smhub-0.9.8-20260630/`, gitignored). 0.9.8 V1~V6 실측은 `captures/smhub-verify-20260701T113514+0900/logs/`.
   **beta5 라이브 post-capture 완료**(SSH=`/tmp/hk` 우회 sshd, `.sshkey` 키인증): C906L RTOS 스택 전면 확정 → `docs/SMHUB.md §5.4`.
@@ -18,7 +22,7 @@
 - **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 붕괴). live IP/MAC/SSH 키/기기
   좌표를 공개 파일에 쓰지 말 것. 표준 sshd host-key 수리에 더 매달리지 말 것(업데이트 후 재평가). "service running"을 "working"으로 판정하지 말 것. `AGENT_ALLOW_UNSAFE_COMMIT`/`--no-verify` 금지.
 
-# ACTIVE — 할 일 전체 (Phase A → D)
+# ACTIVE — 할 일 전체 (Phase A → E)
 
 ## Phase A. 0.9.8 무변형 검증 마무리 (남은 것, 리부트 전)
 증거 축적 → `docs/SMHUB.md §4`. GPT 검수(2026-07-01) 반영 = provenance grounded.
@@ -84,6 +88,16 @@ CHANGELOG history는 손대지 않는다.
 - [ ] `README.md`/`VERSION.md`: 버전 매트릭스 grounded 후에만.
 - [ ] `docs/README.md` "Current Direction" 문단의 ARM Cortex-A53 표현 갱신.
 
+## Phase E. 인증 허브 레퍼런스 레인 — IKEA DIRIGERA (노하우 추출 → SMHub 1:1)
+방향 SSOT: `docs/HUBS.md`(허브 랜드스케이프·SoC/라디오·제품군) + `docs/MULTIPROTOCOL.md`(단일칩 전략·시점). 사업 경계·현장 = `PRIVATE.md`.
+
+- **왜**: 인증 요건 = DIRIGERA로 충족(비Tuya·CSA). IKEA 앱 그대로, 기능 어설프게 분할 안 함 → 노하우만 뽑아 **SG2000/SMHub 1:1 재현**. DIRIGERA = 상용 파일럿 레퍼런스, **최종 자체 기판 아님**.
+- **동형 근거(HUBS §2)**: DIRIGERA(STM32MP157 A7+M4 + 2×MG21) ↔ SMHub(SG2000 C906B+C906L + MG24) = Linux앱코어+RTOS코프로세서+외장 EFR32. `homeagentd` 패턴 상호 이식.
+- [ ] **Stage 0 (도착 전, 지금 가능)**: 클론 리포 읽기 `~/repos/3rd/ikea/`(Leggin/dirigera LAN API · wjtje/DIRIGERA teardown · ot-br-posix · ot-efr32). `DIRIGERA/logs` 부트로그로 SoC/커널/부트로더 미리 확인.
+- [ ] **Stage 1 (실기 도착 후 검수, operator)**: HUBS §4.2 체크리스트 — 모델/HW리비전/펌웨어 버전 · UART 콘솔+부트로그 · rootfs/init · Zigbee 코디네이터 종류(z2m 접속 가능성) · OTBR/Thread 버전 · LAN API 토큰 발급 · Matter(IP·Thread) 경로.
+- **라디오 동시성 스탠스(확정, 삽질 0)**: 단일칩 concurrent Zigbee+Thread는 **지금 안 만든다**. 업계·OHF·벤더(SMLIGHT SLZB-MR4=CC2674P10+MG26 2-칩; SMHub Nano=순차) 모두 2-라디오/순차. 시점 = MG26(메모리 헤드룸) → **Series 3(전용 라디오 코어)**; MG26 세대에도 *보장 동시*는 2-칩. **지금 할 일 = 각 스택(Zigbee/Thread) 독립 제어 기반 + 라디오 추상화** → 시점 오면 코드 최소변경 플립. (MULTIPROTOCOL §3.7)
+- [x] **진입점 정비**: README "Product Direction — Where to look" 라우팅표 신설 + HUBS/MULTIPROTOCOL을 README·AGENTS·docs/README Living Docs에 등록. DIRIGERA 레퍼런스 리포 5종 클론(`~/repos/3rd/ikea/`).
+
 # 결정 대기 (설계, SMHUB.md §9)
 - (1) 재현 기판: 벤더 beta5 이미지 커스터마이즈 vs 우리 buildroot(flake.nix).
 - (2) 상태 원본: 손 선언 vs **golden 스냅샷**(backend.db+/etc overlay+p7 data+패키지).
@@ -93,6 +107,8 @@ CHANGELOG history는 손대지 않는다.
 - (6) **[새 리포 UX] 버튼(btn_1) 제스처 재활용 vs 벤더 factory-reset**: 앱 10초 롱프레스가 벤더 `smhub-reset-daemon` 10초 factory-reset와 충돌(§3.8). 결정 필요 = ① smhub-reset-daemon/nano-leds OpenRC disable 후 우리 데몬이 btn_1+LED 전담 vs ② 벤더 데몬 유지하고 10회 연타 등 비충돌 제스처만 사용(event0 co-read) vs ③ 우리 factory-reset 의미를 벤더에 위임. LED(led_cus) 소유권도 함께 정리.
 
 # RECENT
+
+- 2026-07-09: **인증 허브 랜드스케이프 정리 + DIRIGERA 주력 방향 확정 (Phase E 신설).** `docs/HUBS.md` 신설 — IKEA DIRIGERA vs Zemismart M1 vs SMHub 비교, **SoC 동형**(SG2000 C906B+C906L ↔ STM32MP157 A7+M4, Duo S PoE/Wi-Fi6·8GB eMMC로 안 밀림), **MG21/24/26 라디오**, **Thread TBR vs z2m 두 경로**(Thread=OTBR/IPv6 직결, z2m 무관), **지원 제품군**(Matter device types 1.0~1.5 + 스톡 IKEA 앱 카테고리 제한 The Verge 근거). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V = Phase D 잔류. DIRIGERA 레퍼런스 리포 5종 `~/repos/3rd/ikea/` 클론. 사업/현장 맥락 = `PRIVATE.md`.
 
 - 2026-07-03: **물리 제어면(LED·버튼·GPIO) grounded** → `SMHUB.md §3.8`. **LED=raw GPIO 2개**(`led_pwr`/`led_cus`, gpiochip3=3022000 L16/17, 단색 on/off, libgpiod by-name; 벤더 `nano-leds` 소유), LED class 아님, RGB 없음. **버튼=단일 btn_1**(gpiochip1=3020000 L1) → gpio-keys→event0(evdev co-read 가능). **⚠️ 충돌: 벤더 `smhub-reset-daemon`이 btn_1 감시, `HOLD_SEC=10`→10초 홀드=`factory-reset --force`(와이프)** = 앱 10초 롱프레스와 정면 충돌 → 재활용하려면 smhub-reset-daemon/nano-leds 정지·치환 필수(결정대기 6). 10회 연타는 대체로 안전. 부저=pwmchip0(2kHz).
 - 2026-07-03: **설치면(install surface) grounded** → `SMHUB.md §3.7`. homeagent-config=SMHub 지식 SSOT. 설치면 실측: **rootfs(p5/p6)=ro+A/B OTA 통째 교체→설치 금지**, **p7 USER(5.7G)=유일 rw 지속면(리부트+OTA 생존)**, `/etc`=overlay(upper on p7). OTA=RAUC가 비활성 rootfs/kernel 슬롯만 기록·A↔B 플립, p7 미변경. `firstboot-upgrade`=`opkg configure` 재실행(와이프 없음). 소유권=p7 root소유(sudo 가능, pw=smlight), non-root 쓰기=`/home/smlight`(+`/opt/firmware`). PATH=`/usr/bin:/usr/sbin`(/opt/bin 없음→절대경로). 두 패턴: **(a) ipk+OpenRC(제품화, OTA통합)** / **(b) /home/smlight 사이드카(non-root, derisk)**.
@@ -110,6 +126,9 @@ CHANGELOG history는 손대지 않는다.
 
 # LEDGER
 
+- **인증 허브 레퍼런스 = IKEA DIRIGERA** (Phase E): 인증 요건·비Tuya. IKEA 앱 그대로 → 노하우 추출 → SG2000/SMHub **1:1 재현**(가성비+OSS). DIRIGERA=파일럿 레퍼런스, 최종 자체 기판 아님(사업경계 `PRIVATE.md`). 방향 SSOT=`docs/HUBS.md`.
+- **단일칩 Zigbee+Thread 동시 = 시점 문제, 지금 안 만듦**: 업계·OHF·벤더 모두 2-라디오/순차. 종착점=Series 3(전용 라디오 코어); MG26=메모리 헤드룸이나 보장 동시는 여전히 2-칩(SLZB-MR4). 지금=각 스택 독립 제어 기반 + 라디오 추상화. (`docs/MULTIPROTOCOL.md`) "one radio, one protocol"은 현시점 스탠스.
+- **허브 아키텍처 동형**: DIRIGERA(STM32MP157 A7+M4 + 2×MG21) ↔ SMHub(SG2000 C906B+C906L + MG24) = Linux앱코어+RTOS코프로세서+외장 EFR32.
 - Durable direction: **vendor SMHUB OS unmodified → 검증 → 버전업 → RISC-V Zig `homeagentd` + 선언적 config-set → 종합 테스트.**
 - Core naming: big core **C906B** = RISC-V Linux app core; small core **C906L** = RISC-V RTOS coprocessor / mailbox executor.
 - Runtime ownership: Linux `homeagentd` owns `HubState`; C906L executes bounded actions (`RADIO_RESET`, `LED_SET`, `WATCHDOG_KICK`).

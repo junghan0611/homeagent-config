@@ -33,12 +33,33 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 | Main candidate | SMHUB Nano MG24 |
 | BSP | Buildroot SDK lineage, public baseline first |
 | RAM target | 512MB-class for Z2M + MQTT + matter.js/Go evidence |
-| Radio | onboard EFR32/Gecko, preferably MG24-class |
-| Protocol | Zigbee NCP **or** Thread RCP by firmware switching |
+| Radio | onboard EFR32/Gecko, MG24-class now → **MG26 / Series 3** trajectory ([`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md)) |
+| Protocol | Zigbee NCP **or** Thread RCP by firmware switching (single-chip concurrent = chip-timing question) |
 | Parked evidence | Tuya THP23-ZB-X / SSD202D / 128MB lower-bound (not active) |
 
 USB coordinators stay useful for proof work, but they are not the final product shape.
 The runtime architecture lives in [`runtime/README.md`](runtime/README.md).
+
+---
+
+## Product Direction — Certified Hubs & Radio Timing
+
+**Thesis in one line:** the certified reference is **IKEA DIRIGERA**; the goal is to reproduce its
+Zigbee/Matter functions **1:1 on SG2000/SMHub** for cost + open-source contribution. Single-chip
+**concurrent** Zigbee+Thread is not viable today (industry, Open Home Foundation, and the vendor all use
+2-radio or firmware mode-switch) — it is a **chip-timing question** on the **MG21 → MG24 → MG26 → Series 3**
+line. So the current work is **separate-stack control** (one radio, one protocol), not concurrency.
+
+**Where to look (recurring product-direction questions):**
+
+| If you're asking… | Read |
+|---|---|
+| Which certified Zigbee/Matter hub? IKEA vs Zemismart vs SMHub | [`docs/HUBS.md`](docs/HUBS.md) |
+| SoC comparison (SG2000 vs STM32MP157), MG21/24/26, PoE | [`docs/HUBS.md`](docs/HUBS.md) §2 |
+| Thread TBR vs z2m, Matter over IP vs over Thread | [`docs/HUBS.md`](docs/HUBS.md) §3–4 |
+| What devices/product line can the hub support? | [`docs/HUBS.md`](docs/HUBS.md) §7 |
+| Single radio doing Zigbee + Thread at once — how / **when**? | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) |
+| Chip trajectory & when to flip to single-chip concurrent | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) §3.7 |
 
 ---
 
@@ -53,6 +74,8 @@ The runtime architecture lives in [`runtime/README.md`](runtime/README.md).
 | [`VERSION.md`](VERSION.md) | stack, version, and physical device matrix |
 | [`runtime/README.md`](runtime/README.md) | SG2000 runtime architecture + Zig/C906L code home |
 | [`docs/TARGET_DEVICE.md`](docs/TARGET_DEVICE.md) | board/radio strategy details |
+| [`docs/HUBS.md`](docs/HUBS.md) | certified Zigbee/Matter hub landscape (IKEA DIRIGERA lead), SoC/radio comparison, product line |
+| [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) | single-radio Zigbee+Thread concurrency — strategy & timing (MG21/24/26 → Series 3) |
 | [`docs/README.md`](docs/README.md) | docs map |
 
 Start with `NEXT.md` when continuing work.

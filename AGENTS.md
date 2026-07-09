@@ -37,6 +37,8 @@ Keep this repo focused on the hub: Linux host, onboard radio, protocol bridge, r
 | `VERSION.md` | stack, version, physical device matrix |
 | `runtime/README.md` | SG2000 runtime architecture (ARM boot, L0–L4, Zig + C906); front-door for `runtime/` code |
 | `docs/TARGET_DEVICE.md` | board/radio strategy details |
+| `docs/HUBS.md` | 인증 Zigbee/Matter 허브 랜드스케이프 (IKEA DIRIGERA 주력), SoC/라디오 비교, 지원 제품군 |
+| `docs/MULTIPROTOCOL.md` | 단일 라디오 Zigbee+Thread 동시 — 전략·시점 (MG21/24/26 → Series 3). "언제 단일칩으로 가나" |
 | `docs/README.md` | docs map |
 
 If a detail will go stale quickly, keep it out of `AGENTS.md`. Put it in `NEXT.md` while active, or `VERSION.md` / `CHANGELOG.md` when it becomes state/history.
@@ -73,7 +75,7 @@ Defer unless explicitly requested:
 - Public repo only: no private business logic, secrets, internal production details, or closed firmware blobs.
 - Reproducibility over cleverness: prefer a boring image that can be rebuilt and reflashed.
 - On-device first: cloud may be a fallback, not a dependency for local control.
-- One radio, one protocol: Zigbee and Thread/Matter are firmware-switched unless proven otherwise.
+- One radio, one protocol: Zigbee and Thread/Matter are firmware-switched unless proven otherwise. Single-chip **concurrent** is a chip-timing question (MG26 / Series 3), tracked in `docs/MULTIPROTOCOL.md`; now = clean separate-stack control, not concurrency.
 - USB coordinators are proof tools; the target hub has an onboard radio.
 - Keep protocol engines and state ownership separated. Go owns hub state; protocol backends do protocol work.
 - WebSocket reads must have a single owner/read loop.

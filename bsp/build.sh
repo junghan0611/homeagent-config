@@ -11,13 +11,18 @@
 #
 # Usage:
 #   ./bsp/setup.sh                                # clone+pin SDK (or set HOMEAGENT_BSP_SDK)
-#   ./bsp/build.sh milkv-duos-glibc-arm64-emmc    # build ARM A53 eMMC image
-# Output: <sdk>/out/<board>_<date>.zip
+#   ./bsp/build.sh milkv-duos-musl-riscv64-sd     # RISC-V C906, microSD  (default, product ISA)
+#   ./bsp/build.sh milkv-duos-musl-riscv64-emmc   # RISC-V C906, eMMC     (usb_dl recovery flash)
+#   ./bsp/build.sh milkv-duos-glibc-arm64-emmc    # ARM A53, eMMC         (historical, NOT the product)
+# Our runtime targets riscv64 + musl; the arm64 boards exist only because SG2000 can boot
+# either core. Build RISC-V unless you know why you want ARM. (This is a dev-board image —
+# it is not, and cannot become, a hub-product image. See bsp/README.md.)
+# Output: <sdk>/out/<board>_<date>.{img,zip}   (sd -> .img dd-able; emmc -> .zip for usb_dl)
 set -euo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
 SDK_DIR="${HOMEAGENT_BSP_SDK:-$REPO_DIR/bsp/sdk}"
-BOARD="${1:-milkv-duos-glibc-arm64-emmc}"
+BOARD="${1:-milkv-duos-musl-riscv64-sd}"
 DOCKER_IMAGE="${HOMEAGENT_BSP_IMAGE:-milkvtech/milkv-duo:latest}"
 HUB_MINIMAL="${HOMEAGENT_HUB_MINIMAL:-1}"
 
@@ -50,9 +55,18 @@ exec docker run --rm --privileged \
     cat /etc/issue | head -1
 
     # Inject our committed board config (reproducible SSOT).
+    # The board name matches THREE files: the board defconfig (<chip>_<board>_defconfig)
+    # and the kernel/u-boot ones (cvitek_<chip>_<board>_defconfig, under linux/ + u-boot/).
+    # Only the board-level one is ours; excluding cvitek_* keeps us off the kernel config.
     if [ -f "/bsp/board/$BOARD/defconfig" ]; then
-      DST=$(find build/boards -name "*$(echo "$BOARD" | tr - _)_defconfig" | head -1)
-      if [ -n "$DST" ]; then cp "/bsp/board/$BOARD/defconfig" "$DST"; echo "[bsp] applied defconfig -> $DST"; fi
+      U=$(echo "$BOARD" | tr - _)
+      mapfile -t HITS < <(find build/boards -name "*${U}_defconfig" -not -name "cvitek_*")
+      if [ "${#HITS[@]}" -ne 1 ]; then
+        echo "[bsp] ERROR: expected exactly 1 board defconfig for $BOARD, found ${#HITS[@]}: ${HITS[*]:-none}" >&2
+        exit 1
+      fi
+      cp "/bsp/board/$BOARD/defconfig" "${HITS[0]}"
+      echo "[bsp] applied defconfig -> ${HITS[0]}"
     fi
 
     # Apply our committed patches idempotently.

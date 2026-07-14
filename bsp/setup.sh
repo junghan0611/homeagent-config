@@ -11,7 +11,7 @@ set -euo pipefail
 
 BSP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-# Upstream pin (Milk-V Duo series buildroot SDK V2, develop lane — ARM A53 boot).
+# Upstream pin (Milk-V Duo series buildroot SDK V2, develop lane).
 SDK_URL="${SDK_URL:-https://github.com/milkv-duo/duo-buildroot-sdk-v2.git}"
 SDK_BRANCH="${SDK_BRANCH:-develop}"
 SDK_COMMIT="${SDK_COMMIT:-ad920f839}"   # cvi_mpi: support st7701sn 2 lane lcd
@@ -27,4 +27,4 @@ echo "[bsp] cloning $SDK_URL ($SDK_BRANCH) → $SDK_DIR"
 git clone --branch "$SDK_BRANCH" "$SDK_URL" "$SDK_DIR"
 git -C "$SDK_DIR" checkout "$SDK_COMMIT"
 echo "[bsp] pinned at $(git -C "$SDK_DIR" rev-parse --short HEAD)"
-echo "[bsp] next: nix develop .#buildroot  then  ./bsp/build.sh milkv-duos-glibc-arm64-emmc"
+echo "[bsp] next: ./bsp/build.sh milkv-duos-musl-riscv64-sd   (RISC-V = product ISA; arm64 boards are historical)"

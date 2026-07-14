@@ -9,10 +9,13 @@
   `docs/SMHUB.md`에 실측 grounded로 모은다. **벤더 비공개 SDK 내부나 특정 제품 코드는 다루지 않음 — board/오픈소스 사실만.**
 - **지식 SSOT (단일)**: `docs/SMHUB.md` — HW/라디오/상태모델/라이브 실측/통제경계·재현 매트릭스/정보벽/
   벤더 매뉴얼 검토/열린 설계질문/다음 단계. (구 PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW 병합.)
-- **인증 허브 레퍼런스 레인 추가 (2026-07-09, GLG)**: 인증 요건 대응 = **IKEA DIRIGERA**(비Tuya·CSA 인증).
-  IKEA 앱 그대로 쓰며 **노하우만 추출** → **SG2000/SMHub에서 1:1 재현**(가성비+OSS 동시). 방향 SSOT =
-  `docs/HUBS.md` + `docs/MULTIPROTOCOL.md`. 단일칩 Zigbee+Thread **동시는 시점 문제(MG26 → Series 3)** —
-  지금은 만들지 않고 **각 스택 독립 제어 기반**만 닦는다. 상세 = **Phase E**. 사업 경계·현장 맥락 = `PRIVATE.md`.
+- **개발보드 레인 (2026-07-14, GLG)**: **Milk-V Duo S 실기 입수** — **완전 공개(open-source) 레인**. 공개 SDK로
+  부트체인 전체를 **buildroot부터 우리가 빌드**한다. 벤더 비공개 리포/벤더 OS 의존 **0**. **⚠️ SMHub과 별개 셋업**
+  (SMHub은 커널 버전부터 다르고 벤더 private 리포에서 나옴) — 이미지 호환 없음, 섞지 말 것. 상세 = **Phase E**.
+  **RISC-V(C906) 부팅 필수** — SG2000은 A53/C906 둘 다 부팅하고 Duo S는 **물리 스위치**로 고른다. 우리 런타임 타깃이
+  `riscv64-linux-musl`이므로 ARM으로 부팅하면 의미 없음. MG24 라디오 없음 → Zigbee/EZSP는 이 보드에서 못 함.
+- **라디오 동시성 스탠스(유지, durable)**: 단일칩 Zigbee+Thread **동시는 시점 문제(MG26 → Series 3)**.
+  지금은 만들지 않고 **각 스택 독립 제어 기반**만 닦는다. 근거 SSOT = `docs/MULTIPROTOCOL.md` + `docs/HUBS.md`(랜드스케이프).
 - **현재 상태 (2026-07-01 OTA 완료)**: **OTA로 `1.0.0.beta5` 부팅 성공** (0.9.8 → beta5, Web UI Settings→Update and Restore).
   출고 0.9.8 블록 백업은 슬롯 A에 롤백 보존(`captures/smhub-0.9.8-20260630/`, gitignored). 0.9.8 V1~V6 실측은 `captures/smhub-verify-20260701T113514+0900/logs/`.
   **beta5 라이브 post-capture 완료**(SSH=`/tmp/hk` 우회 sshd, `.sshkey` 키인증): C906L RTOS 스택 전면 확정 → `docs/SMHUB.md §5.4`.
@@ -88,15 +91,55 @@ CHANGELOG history는 손대지 않는다.
 - [ ] `README.md`/`VERSION.md`: 버전 매트릭스 grounded 후에만.
 - [ ] `docs/README.md` "Current Direction" 문단의 ARM Cortex-A53 표현 갱신.
 
-## Phase E. 인증 허브 레퍼런스 레인 — IKEA DIRIGERA (노하우 추출 → SMHub 1:1)
-방향 SSOT: `docs/HUBS.md`(허브 랜드스케이프·SoC/라디오·제품군) + `docs/MULTIPROTOCOL.md`(단일칩 전략·시점). 사업 경계·현장 = `PRIVATE.md`.
+## Phase E. Milk-V Duo S (SG2000) — 개발보드 레인: 우리 손으로 buildroot 빌드 → RISC-V 부팅
+**⚠️ SMHub과 별개다.** Duo S = **순수 개발보드**(Milk-V), SMHub = **별도 제품 셋업**(벤더 SMHUB OS, mainline 6.18 + RAUC A/B).
+**이미지는 서로 갈아끼울 수 없다** — milkv SDK(linux 5.10 + CVITEK `rtos_cmdqu`) vs SMHUB OS(6.18 + 표준 remoteproc/rpmsg
++ open-amp): 커널·코어간IPC·init·업데이트 체계가 전부 다름. (`docs/SMHUB.md` 이미지 비교표 = `❌ 비호환`.) Duo S 이미지를
+"제품 이미지"로 취급하지 말 것.
 
-- **왜**: 인증 요건 = DIRIGERA로 충족(비Tuya·CSA). IKEA 앱 그대로, 기능 어설프게 분할 안 함 → 노하우만 뽑아 **SG2000/SMHub 1:1 재현**. DIRIGERA = 상용 파일럿 레퍼런스, **최종 자체 기판 아님**.
-- **동형 근거(HUBS §2)**: DIRIGERA(STM32MP157 A7+M4 + 2×MG21) ↔ SMHub(SG2000 C906B+C906L + MG24) = Linux앱코어+RTOS코프로세서+외장 EFR32. `homeagentd` 패턴 상호 이식.
-- [ ] **Stage 0 (도착 전, 지금 가능)**: 클론 리포 읽기 `~/repos/3rd/ikea/`(Leggin/dirigera LAN API · wjtje/DIRIGERA teardown · ot-br-posix · ot-efr32). `DIRIGERA/logs` 부트로그로 SoC/커널/부트로더 미리 확인.
-- [ ] **Stage 1 (실기 도착 후 검수, operator)**: HUBS §4.2 체크리스트 — 모델/HW리비전/펌웨어 버전 · UART 콘솔+부트로그 · rootfs/init · Zigbee 코디네이터 종류(z2m 접속 가능성) · OTBR/Thread 버전 · LAN API 토큰 발급 · Matter(IP·Thread) 경로.
-- **라디오 동시성 스탠스(확정, 삽질 0)**: 단일칩 concurrent Zigbee+Thread는 **지금 안 만든다**. 업계·OHF·벤더(SMLIGHT SLZB-MR4=CC2674P10+MG26 2-칩; SMHub Nano=순차) 모두 2-라디오/순차. 시점 = MG26(메모리 헤드룸) → **Series 3(전용 라디오 코어)**; MG26 세대에도 *보장 동시*는 2-칩. **지금 할 일 = 각 스택(Zigbee/Thread) 독립 제어 기반 + 라디오 추상화** → 시점 오면 코드 최소변경 플립. (MULTIPROTOCOL §3.7)
-- [x] **진입점 정비**: README "Product Direction — Where to look" 라우팅표 신설 + HUBS/MULTIPROTOCOL을 README·AGENTS·docs/README Living Docs에 등록. DIRIGERA 레퍼런스 리포 5종 클론(`~/repos/3rd/ikea/`).
+**그럼 뭐가 이전되나** (공유되는 것 = 이미지가 아니라 축):
+**SoC 계열 SG2000** · **ISA riscv64** · **libc musl** · **부트체인 지식**(fsbl→opensbi→u-boot→kernel→rootfs→freertos) ·
+**크로스 툴체인**. → `homeagentd`(riscv64-linux-musl)를 **실기 RISC-V에서 빌드·구동·측정**할 수 있는 우리 소유의 랩.
+Duo S = 512MB DDR, Wi-Fi6/BT5, 100M 이더넷, eMMC. **MG24 라디오 없음** → Zigbee/EZSP는 이 보드에서 못 함(SMHub 담당).
+
+**ISA 게이트(불변식)**: SG2000은 A53(ARM)과 C906(RISC-V)를 **둘 다** 부팅할 수 있고, Duo S는 **보드 위 물리 스위치**로 고른다.
+제품은 RISC-V이므로 **스위치=RISC-V + riscv64 이미지**가 아니면 이 레인은 의미 없음. 진실원 = **부트로그 첫 글자**
+(`C`=RISC-V C906 / `B`=ARM A53). 이전 ARM64 빌드(`out/milkv-duos-glibc-arm64-emmc_2026-0623-*.zip`)는 **historical**.
+
+- [x] **RISC-V 보드 config 커밋**: `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/defconfig` 신설. stock 대비 delta =
+  hub-minimal(카메라 센서 3종 + MIPI 패널 제거) 유지. ARM 대비 delta = `CONFIG_ARCH=riscv` ·
+  `CROSS_COMPILE=riscv64-unknown-linux-musl-` · `KERNEL_ENTRY_HACK_ADDR=0x80200000`(ARM은 0x80108000) · `TOOLCHAIN_MUSL_RISCV64`.
+  **musl = 제품과 일치**(homeagentd 타깃도 `riscv64-linux-musl`). `bsp/build.sh` 기본 보드도 riscv64-sd로 전환.
+- [x] **`bsp/build.sh` defconfig 주입 버그 수정**: `find … | head -1`이 보드/커널/u-boot defconfig **3개**에 매칭돼 readdir 운에
+  의존 → `cvitek_*` 제외 + 정확히 1개 아니면 실패. (커널 defconfig를 덮어쓸 뻔한 잠재 사고.)
+- [x] **riscv64 eMMC 이미지 빌드 성공**: `out/milkv-duos-musl-riscv64-emmc_2026-0714-1719.zip`. `BOOT_CPU=riscv`,
+  `vmlinux`=`UCB RISC-V`, busybox=`UCB RISC-V` + `ld-musl-riscv64v0p7_xthead.so.1`(T-Head C906 확장).
+- [x] **굽기 경로 확보 + 스크립트화**: `bsp/flash-emmc.sh` 신설. 보드는 **공장 출하 시 eMMC 비어 있음** → 전원만 넣어도 부트 ROM이
+  USB 다운로드 모드로 낙하(**실측: `3346:1000 CVITEK USB Com Port` 직결 시 안정 열거**; 타임아웃 재열거 루프라 device 번호가 계속 오름).
+  Linux `usb_dl`이 SDK에 있음(공식 문서의 "Windows 전용"은 오안내). NixOS에선 glibc 바이너리라 호스트 실행 불가 → **벤더 컨테이너에서
+  `/dev/bus/usb` 패스스루**로 실행(검증 완료: `usb_dl -h` OK). **ISA 가드**: `out/`에 6/23 ARM64 zip이 남아 있어 riscv64가 아니면 거부.
+  **⚠️ USB 허브/독 뒤에선 열거 실패**(`error -110` 실측) → **노트북 직결 필수**(현재 직결 확인됨).
+- [x] **굽기 실행 완료 (2026-07-14)**: `usb_dl … [INFO] USB download complete` (809MB). **⚠️ 두 함정 실측**:
+  ① `usb_dl -c`는 `181x`를 원함 — 벤더 문서의 `-c cv181x`는 **틀림**(툴이 거부). ② 커널 **`cdc_acm`이 ROM의 다운로드
+  인터페이스를 선점** → libusb가 claim 못 하고 `[ERR]`(빈 메시지)로 즉사. `modprobe -r cdc_acm` 필요(스크립트에 내장).
+  Windows가 전용 CviUsbDownload 드라이버를 깔게 하는 이유와 동일. 스위치는 **`RV`**(operator 확인, USB-C 옆 슬라이드).
+- [x] **부팅 검증 통과 = 이 레인의 첫 성공**: `Linux milkv-duo 5.10.4-tag- #1 PREEMPT Tue Jul 14 17:03:05 CST 2026 **riscv64**`
+  (빌드 타임스탬프 = 우리 빌드), `isa: rv64imafdvcsu`, `NAME=Buildroot VERSION=-g**ad920f839**-dirty`(우리 pin + 우리 defconfig).
+  **USB-NCM 게이트웨이**(Milk-V 기본 좌표) + **eth0 DHCP 획득** + Wi-Fi 드라이버(aic8800) 로드. eMMC 7.3G(p4 rootfs 768M).
+  접속 = 벤더 기본 계정. 라이브 좌표/계정은 `PRIVATE.md`. 증거 = `captures/duos-riscv64-firstboot-20260714T182449+0900/`.
+- [ ] **[새 표적] 메모리 회수 ~170MB**: `MemTotal=323MB` / 512MB — `ion_carveout_heap` **0x9400000(148MB)** + rtos ion
+  0x1600000(22MB)가 **카메라/코덱 버퍼**로 예약됨. 허브엔 전부 불필요 → hub-minimal의 진짜 이득. defconfig/DT의 ION 크기를
+  줄여 재빌드 → `homeagentd` 가용 메모리 확보.
+- [ ] **[정정] hub-minimal은 아직 부분적**: defconfig 델타는 **센서/패널만** 제거했고, 커널 osdrv 모듈 **`cvi_vc_driver`(928K)·
+  `cv181x_ive`·`cv181x_jpeg`·`cv181x_vcodec`·`cv181x_tpu`가 여전히 빌드·로드됨**(라이브 `lsmod` 확인). 비전 스택 완전 제거는
+  osdrv 모듈 목록까지 손봐야 함.
+- [ ] **SD 레인(선택)**: microSD가 생기면 `milkv-duos-musl-riscv64-sd` 빌드 → `.img` **dd** (eMMC 무손상·반복 쉬움). defconfig 커밋됨.
+- [x] **스택 차이 grounded (2026-07-14, 라이브 확증)**: 실기에서 **`/sys/class/remoteproc` 없음 · `/dev/rpmsg*` 없음**,
+  대신 dmesg `cvi_rtos_cmdqu_probe DONE`(`1900000.rtos_cmdqu`). → Duo S의 코어간 통신은 CVITEK **`rtos_cmdqu`**,
+  SMHub beta5는 **표준 remoteproc/rpmsg + open-amp**(6.18). **Duo S로 SMHub의 RPMsg 축은 재현 불가** — 레인 분리가 맞다.
+  (SMLIGHT `slzb-os-scripts`는 SLZB-06x Berry 스크립팅 API로, SG2000 OS 빌드 레시피 아님 — 지름길 없음.)
+- [ ] **homeagentd RISC-V 런타임 검증 (이 보드의 진짜 목적)**: 부팅 확인 후 `riscv64-linux-musl` Zig 바이너리를 올려
+  timerfd/epoll 100ms tick · RSS · 워치독을 **실기에서 측정**. 지금까지 SMHub에서만 추정하던 값을 우리 보드에서 자유롭게 반복.
 
 # 결정 대기 (설계, SMHUB.md §9)
 - (1) 재현 기판: 벤더 beta5 이미지 커스터마이즈 vs 우리 buildroot(flake.nix).
@@ -108,7 +151,9 @@ CHANGELOG history는 손대지 않는다.
 
 # RECENT
 
-- 2026-07-09: **인증 허브 랜드스케이프 정리 + DIRIGERA 주력 방향 확정 (Phase E 신설).** `docs/HUBS.md` 신설 — IKEA DIRIGERA vs Zemismart M1 vs SMHub 비교, **SoC 동형**(SG2000 C906B+C906L ↔ STM32MP157 A7+M4, Duo S PoE/Wi-Fi6·8GB eMMC로 안 밀림), **MG21/24/26 라디오**, **Thread TBR vs z2m 두 경로**(Thread=OTBR/IPv6 직결, z2m 무관), **지원 제품군**(Matter device types 1.0~1.5 + 스톡 IKEA 앱 카테고리 제한 The Verge 근거). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V = Phase D 잔류. DIRIGERA 레퍼런스 리포 5종 `~/repos/3rd/ikea/` 클론. 사업/현장 맥락 = `PRIVATE.md`.
+- 2026-07-14: **IKEA DIRIGERA 레인 폐기 + Milk-V Duo S(SG2000) 실기 레인 개시 (Phase E 교체).** DIRIGERA는 구매/진행 안 함 — NEXT에서 전부 제거(`docs/HUBS.md`는 랜드스케이프 자료로만 존속). 대신 **Milk-V Duo S(SG2000) 개발보드 입수** → `bsp/` buildroot 레인을 **ARM64 → RISC-V로 전환**(완전 공개 레인, 벤더 OS 의존 0). **SMHub과는 별개 셋업**(커널 6.18·벤더 private, 이미지 비호환) — 공유되는 건 SoC 계열·ISA·musl·부트체인 지식뿐. 실측: SDK 로컬 클론(`~/repos/3rd/milkv/duo-buildroot-sdk-v2`)이 `bsp/setup.sh` pin(`ad920f839`)과 **동일 커밋**, riscv64-musl 툴체인 이미 확보, 6/23 ARM64 eMMC 빌드 산출물 2개 잔존(historical). **RISC-V delta 5줄 확정**(ARCH/CROSS_COMPILE/ENTRY_HACK_ADDR 0x80200000/TOOLCHAIN_MUSL_RISCV64/BOARD) + stock riscv에 남아있던 카메라·패널 4줄은 hub-minimal로 제거 → `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/defconfig` 커밋. **`bsp/build.sh` 잠재 버그 수정**(defconfig `find|head -1`이 커널/u-boot defconfig까지 3개 매칭 → `cvitek_*` 제외·1개 강제). 보드 실측: **eMMC 공장 출하 시 비어 있음** → 전원 인가 시 부트 ROM이 USB 다운로드 모드로 낙하(`CVITEK USB Com Port` cdc_acm 열거 확인), **USB 독/허브 뒤에선 열거 실패(`error -110`) → 노트북 직결 필요**. 굽기 도구는 **Linux용 `usb_dl`이 SDK에 존재**(`build/tools/common/usb_dl/Linux/`) — 공식 문서의 "Windows 전용" 안내는 틀림. microSD 카드 없음 → eMMC 직행. **결과: 같은 날 부팅 성공** — 우리가 빌드한 riscv64 이미지가 실기에서 돌아감(`uname` riscv64, 빌드 타임스탬프·SDK pin 일치, USB-NCM + eth0 DHCP + Wi-Fi 드라이버). 굽기 함정 2개 실측(`-c 181x` / `cdc_acm` 선점) → `bsp/flash-emmc.sh`에 내장. **미해결**: `/dev/ttyUSB0`(CP210x) 시리얼 무응답(UART 배선 미확인 — 콘솔은 `ttyS0,115200`), ION carveout 170MB 낭비, hub-minimal 부분적.
+
+- 2026-07-09: **허브 랜드스케이프 + 단일칩 멀티프로토콜 시점 논리 정리** (방향 레인은 2026-07-14에 폐기, 아래 기술 근거만 durable). `docs/HUBS.md` 신설(허브 SoC/라디오/제품군 조사 자료). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V = Phase D 잔류.
 
 - 2026-07-03: **물리 제어면(LED·버튼·GPIO) grounded** → `SMHUB.md §3.8`. **LED=raw GPIO 2개**(`led_pwr`/`led_cus`, gpiochip3=3022000 L16/17, 단색 on/off, libgpiod by-name; 벤더 `nano-leds` 소유), LED class 아님, RGB 없음. **버튼=단일 btn_1**(gpiochip1=3020000 L1) → gpio-keys→event0(evdev co-read 가능). **⚠️ 충돌: 벤더 `smhub-reset-daemon`이 btn_1 감시, `HOLD_SEC=10`→10초 홀드=`factory-reset --force`(와이프)** = 앱 10초 롱프레스와 정면 충돌 → 재활용하려면 smhub-reset-daemon/nano-leds 정지·치환 필수(결정대기 6). 10회 연타는 대체로 안전. 부저=pwmchip0(2kHz).
 - 2026-07-03: **설치면(install surface) grounded** → `SMHUB.md §3.7`. homeagent-config=SMHub 지식 SSOT. 설치면 실측: **rootfs(p5/p6)=ro+A/B OTA 통째 교체→설치 금지**, **p7 USER(5.7G)=유일 rw 지속면(리부트+OTA 생존)**, `/etc`=overlay(upper on p7). OTA=RAUC가 비활성 rootfs/kernel 슬롯만 기록·A↔B 플립, p7 미변경. `firstboot-upgrade`=`opkg configure` 재실행(와이프 없음). 소유권=p7 root소유(sudo 가능, pw=smlight), non-root 쓰기=`/home/smlight`(+`/opt/firmware`). PATH=`/usr/bin:/usr/sbin`(/opt/bin 없음→절대경로). 두 패턴: **(a) ipk+OpenRC(제품화, OTA통합)** / **(b) /home/smlight 사이드카(non-root, derisk)**.
@@ -126,9 +171,11 @@ CHANGELOG history는 손대지 않는다.
 
 # LEDGER
 
-- **인증 허브 레퍼런스 = IKEA DIRIGERA** (Phase E): 인증 요건·비Tuya. IKEA 앱 그대로 → 노하우 추출 → SG2000/SMHub **1:1 재현**(가성비+OSS). DIRIGERA=파일럿 레퍼런스, 최종 자체 기판 아님(사업경계 `PRIVATE.md`). 방향 SSOT=`docs/HUBS.md`.
+- **IKEA DIRIGERA 레인 = 폐기 (2026-07-14, GLG)**: 구매 안 함, 진행 안 함. NEXT에서 제거. `docs/HUBS.md`는 **랜드스케이프 조사 자료로만** 남긴다(우리 방향 아님). `~/repos/3rd/ikea/` 클론도 참고용, 작업 대상 아님.
+- **개발보드 Duo S ≠ 제품 SMHub (섞지 말 것)**: Duo S = Milk-V 개발보드(`bsp/` buildroot 레인, linux 5.10 + CVITEK `rtos_cmdqu`). SMHub = 별도 제품 셋업(벤더 SMHUB OS, mainline 6.18 + remoteproc/rpmsg + RAUC). **이미지 호환 없음.** 이전되는 건 SoC 계열(SG2000)·ISA(riscv64)·libc(musl)·부트체인 지식·툴체인뿐. Duo S엔 MG24 라디오 없음 → Zigbee/EZSP는 SMHub 전용.
+- **ISA 불변식: SG2000은 A53/C906 둘 다 부팅, 제품은 RISC-V**. Duo S는 물리 스위치로 고른다. 진실원 = 부트로그 첫 글자 `C`(RISC-V) / `B`(ARM). arm64 빌드는 historical — 제품 레인 아님. userspace는 **musl**(riscv64-linux-musl)로 제품과 일치시킨다.
 - **단일칩 Zigbee+Thread 동시 = 시점 문제, 지금 안 만듦**: 업계·OHF·벤더 모두 2-라디오/순차. 종착점=Series 3(전용 라디오 코어); MG26=메모리 헤드룸이나 보장 동시는 여전히 2-칩(SLZB-MR4). 지금=각 스택 독립 제어 기반 + 라디오 추상화. (`docs/MULTIPROTOCOL.md`) "one radio, one protocol"은 현시점 스탠스.
-- **허브 아키텍처 동형**: DIRIGERA(STM32MP157 A7+M4 + 2×MG21) ↔ SMHub(SG2000 C906B+C906L + MG24) = Linux앱코어+RTOS코프로세서+외장 EFR32.
+- **허브 아키텍처 class 패턴**: Linux 앱코어 + RTOS 코프로세서 + 외장 EFR32 라디오. SMHub = SG2000(C906B+C906L) + MG24. 이 3분할이 `homeagentd` 설계의 전제.
 - Durable direction: **vendor SMHUB OS unmodified → 검증 → 버전업 → RISC-V Zig `homeagentd` + 선언적 config-set → 종합 테스트.**
 - Core naming: big core **C906B** = RISC-V Linux app core; small core **C906L** = RISC-V RTOS coprocessor / mailbox executor.
 - Runtime ownership: Linux `homeagentd` owns `HubState`; C906L executes bounded actions (`RADIO_RESET`, `LED_SET`, `WATCHDOG_KICK`).

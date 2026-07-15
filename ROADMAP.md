@@ -26,10 +26,12 @@ Two SG2000 / RISC-V lanes anchor the current work:
   we work it as a *system application developer* — on top of the vendor OS — and carry its
   lessons over into the Duo S lane in our own way.
 
-Both are **SG2000 / riscv64**, so the shared axis is real: SoC family, ISA, `musl` libc,
-boot-chain knowledge, cross-toolchain. But the **images are not interchangeable** (Duo S =
-milkv SDK Linux 5.10 + CVITEK `rtos_cmdqu`; SMHub = mainline 6.18 + standard
-remoteproc/rpmsg + open-amp) — see the image-compat table in [`docs/SMHUB.md`](docs/SMHUB.md).
+Both are **SG2000 / riscv64**, so the shared axis is real: SoC family, ISA, boot-chain
+knowledge, cross-toolchain. **libc differs** — our minimal boards are `musl`, while the SMHub
+shipped image measures **glibc** (`docs/SMHUB.md`); our own Node service image is glibc too.
+The **images are not interchangeable** (Duo S = milkv SDK Linux 5.10 + CVITEK `rtos_cmdqu`;
+SMHub = kernel 6.18 + standard remoteproc/rpmsg + open-amp) — see the image-compat table in
+[`docs/SMHUB.md`](docs/SMHUB.md).
 
 ---
 
@@ -50,8 +52,11 @@ embedded-hub productization on a vendor OpenWrt image):
 - **Log management** — persistent logs, rotation, a clean ro-root / rw-data split.
 - **Persistence / rw area** — overlay + writable data partition (SMHub uses p7; we design
   our own equivalent).
-- **Package pre-install** — the minimal service set baked into the rootfs (MQTT broker,
-  Zigbee2MQTT, matter.js / Matterbridge, `homeagentd`, a sample server + app).
+- **Package pre-install** — the minimal service set as **cross-built `.ipk` packages under
+  `/opt`** (MQTT broker, Zigbee2MQTT, matter.js / Matterbridge, `homeagentd`, a sample server +
+  app). Node.js is the foundation the JS stack rides on. We match SMHub's *shipped contract*
+  (version / rv64gc-glibc ABI / `/opt` layout / deps / OpenRC service), **not** their vendor
+  kernel/BSP or unpublished Buildroot recipe — see the locked build method below.
 - **Recovery / update path** — A/B or image-replace, first-boot provisioning.
 
 Deliverable = **sample hub + app + server**, end to end, all functions demonstrably working
@@ -66,16 +71,39 @@ clone — no fork needed). Fork a source repo only when a change **cannot** be e
 defconfig, overlay, or patch. Detail + experience log: [`docs/BUILDROOT.md`](docs/BUILDROOT.md);
 operational how-to: [`bsp/README.md`](bsp/README.md).
 
+### Locked build method (2026-07-15) — pure cross-compile, reproduce from the shipped contract
+
+The productization packages (Node first, then Mosquitto / Z2M) are built **pure cross-compile**
+in our own Buildroot and shipped as **`.ipk` under `/opt` + OpenRC**. Build policy:
+
+- **No QEMU-user, no native RISC-V runner.** Product packages are cross-compiled on the host; no
+  target binary is executed at build time. V8's mksnapshot is the constraint's technical gate:
+  the first step is to prove a **host cross-snapshot (or equivalent V8 pure-cross) path**.
+  `--without-node-snapshot` is a candidate, not a confirmed elimination of target execution — the
+  failure boundary separates Node snapshot from V8 snapshot.
+- **SMHub is a reverse-engineered reference for the contract, not a source.** Its shipped image
+  measures the *contract* — `nodejs 22.22.0-2` (`riscv64`, glibc), `/opt` install, deps, service
+  wiring (`docs/SMHUB.md`). Its feed (`pkg.smlight.tech`) serves `.ipk` binaries only (no source);
+  it ships **kernel 6.18** (vs our 5.10) on a separate, non-public vendor Buildroot tree, and we
+  do not adopt its SLZB-OS distribution model. We **reproduce our own** packages from public
+  upstream source (`nodejs/node`, `Koenkk/zigbee2mqtt`, …).
+- **No SDK fork.** Everything is a `bsp/patches/` injection over the pinned, unforked working clone; the
+  kernel stays **linux 5.10** (we do not follow SMHub's 6.18) — preserving the Duo S ≠ SMHub line.
+- **libc dual-lane.** The service image is glibc (a new `milkv-duos-glibc-riscv64-emmc` variant);
+  the existing `…-musl-riscv64-{sd,emmc}` boards remain the `homeagentd` / minimal baseline.
+
 ---
 
 ## Now — RISC-V C906 boot owned on Duo S
 
 The big core is booted in **RISC-V C906 mode**. SG2000 boots either A53 (ARM) or C906
-(RISC-V) by a board switch; our runtime target is `riscv64-linux-musl`, so RISC-V is the
-point. **First success (2026-07-14):** our own Buildroot image booted on Duo S real
-silicon — `Linux milkv-duo 5.10.4 riscv64`, our build timestamp, our defconfig, eth0 DHCP
-+ Wi-Fi (aic8800) up. The lane now opens to memory reclaim, hub-minimal trimming, and the
-real goal: measuring `homeagentd` on real RISC-V hardware.
+(RISC-V) by a board switch; the `homeagentd` baseline target is `riscv64-linux-musl`, so
+RISC-V is the point. **First success (2026-07-14):** our own Buildroot image booted on Duo S
+real silicon — `Linux milkv-duo 5.10.4 riscv64`, our build timestamp, our defconfig, eth0 DHCP
++ Wi-Fi (aic8800) up. The **active lane is now the productization stack**: cross-build Node
+22.22.0 as a glibc `.ipk` under `/opt` (`NEXT.md` N0). Memory reclaim / hub-minimal trimming
+is re-placed as a gate **after Node, before Z2M**; measuring `homeagentd` on real silicon runs
+in parallel on the musl baseline.
 
 The runtime is a **Zig 100ms `homeagentd` state machine on Linux (L3)** over a **C906
 FreeRTOS mailbox coprocessor (L2)**, with radio at L0 and an 8051 always-on layer (L1,
@@ -89,11 +117,11 @@ deferred). Architecture center: [`runtime/README.md`](runtime/README.md).
 | 1 | Target taxonomy | SG2000, SSD202D, EFR32, RAM lower-bound strategy | done |
 | 2 | Open BSP baseline | Own Buildroot `riscv64-musl` build for Duo S (SDK v2 lineage) | done |
 | 3 | Board ownership (Duo S) | RISC-V boot on silicon, USB-download flash, rootfs/net | done |
-| 4 | Board minimization | Reclaim camera/codec ION memory, trim `cvi_*` vision modules | current |
-| 5 | Runtime on RISC-V | Measure Zig 100ms `homeagentd` + C906 mailbox base on silicon | next |
+| 4 | Board minimization | Reclaim camera/codec ION memory, trim `cvi_*` vision modules | gate after Node, before Z2M |
+| 5 | Runtime on RISC-V | Measure Zig 100ms `homeagentd` + C906 mailbox base on silicon (musl baseline) | parallel |
 | 6 | Radio via USB dongle | ZBDongle-E Zigbee NCP / Thread RCP on Duo S, z2m / matter proof | planned |
 | 7 | SMHub reference diff | System-app review of the vendor product, port lessons to Duo S | ongoing |
-| 8 | Productization rootfs | our Buildroot pre-bakes network / logging / rw-overlay / package set (the framework) | next major |
+| 8 | Productization stack | cross-build Node `.ipk`/`/opt` (**current, `NEXT.md` N0**) → Mosquitto → Z2M → sample set | **current** |
 | 9 | Sample hub + app + server | end-to-end open demo — all functions working, reproducibly | goal |
 
 ### BSP base — own the Duo S build, diff the SMHub product
@@ -161,11 +189,19 @@ This repo is a multi-board record. Active and parked lanes:
 
 ## Frozen invariants — lines not to cross
 
-- **RISC-V C906 is the target boot lane** for the Duo S core lane; the runtime target is
-  `riscv64-linux-musl`. ARM A53 builds are historical comparison only, not the product.
-- **Duo S and SMHub images are not interchangeable** — different kernel, inter-core IPC,
-  init, and update system. Do not treat a Duo S image as a product image, or flash one
-  where the other belongs.
+- **RISC-V C906 is the target boot lane** for the Duo S core lane. ARM A53 builds are
+  historical comparison only, not the product.
+- **Runtime is dual-lane libc**: `homeagentd` = a `riscv64-linux-musl` artifact baseline
+  (the existing `…-musl-riscv64-{sd,emmc}` boards), and the **Node service image = glibc**
+  (a new `…-glibc-riscv64-emmc` variant). `homeagentd` joins the service image as a
+  static/portable artifact. This is a refinement of the old "musl-only" line, not a reversal.
+- **Duo S and SMHub images are not interchangeable** — different kernel (**our linux 5.10 vs
+  SMHub's 6.18**), inter-core IPC, init, and update system. We do **not** chase SMHub's vendor
+  kernel/BSP. Do not treat a Duo S image as a product image, or flash one where the other belongs.
+- **Productization is pure cross-compile, reproduced from the shipped contract** — no QEMU,
+  no native RISC-V runner, no SDK fork, no vendor `.ipk`/recipe/distribution import. SMHub is a
+  reverse-engineered reference for the *contract* only (see "Locked build method"). Packages are
+  our own cross-built `.ipk` under `/opt`.
 - **No business logic in this repo** — verification surfaces and prototypes only; product
   logic stays in its own repos.
 - One radio, one protocol at a time — Zigbee NCP **or** Thread RCP by firmware switching.
@@ -187,6 +223,10 @@ This repo is a multi-board record. Active and parked lanes:
 
 ## Deprecated — closed, do not reopen
 
+- **QEMU-user and native RISC-V build for productization packages** — build policy is pure
+  cross-compile; alternatives closed 2026-07-15.
+- **Following SMHub's kernel/BSP tree or importing its `.ipk` / recipe / SLZB-OS distribution**
+  (SMHub is a reverse-engineered *contract* reference; we reproduce our own from public source).
 - **ARM A53 as the product boot lane** (superseded by RISC-V C906; ARM kept historical only).
 - Active Tuya THP23-ZB-X liberation / bring-up (kept only as parked 128MB evidence).
 - USB-only coordinator as the *final product* radio (the USB dongle is a dev / proto radio;

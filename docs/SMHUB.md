@@ -331,6 +331,18 @@ crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/
 | openthread / OTBR | 0.3.1-5 (벤더 ipk) | `openthread/openthread`·`ot-br-posix` | ⚠️ 내부 commit 미상 |
 | zwavejsui | 11.19.0 (카탈로그) | `zwave-js/zwave-js-ui` | ⚠️ 미설치 |
 
+**Node.js 패키지·ABI 실측(2026-07-15, beta5 `rootfs.img` + `user.img` read-only mount)**:
+
+- opkg control = `nodejs 22.22.0-2`, `Architecture: riscv64`; 실제 ELF = `/opt/bin/node`(74,808,592B, PIE,
+  not stripped). 즉 **Buildroot toolchain으로 빌드된 Node가 opkg package로 `/opt`에 설치된 결과**까지 확인된다.
+  Buildroot에서 `.ipk`를 생성한 정확한 recipe/pipeline은 이미지에 없으므로 비공개 공백이다.
+- ABI = interpreter `/lib/ld-linux-riscv64-lp64d.so.1`, RUNPATH `/opt/lib`. `NEEDED`는 libatomic/z/libuv/
+  c-ares/nghttp2/OpenSSL/ICU 78/libstdc++/libm/libgcc/glibc이며, Node의 최대 요구 심볼은 `GLIBC_2.38`, beta5
+  base rootfs는 **glibc 2.42**다.
+- `readelf -A` = RV64 I/M/A/F/D/C + Z* + T-Head 확장(`xthead*`), **draft RVV 0.7 없음**. `.comment` =
+  `GCC: (Buildroot 2025.11-30-gedba1321d1-dirty) 15.2.0`; package changelog는 `22.22.0-2`를
+  “Rebuild for Buildroot 2026.02”로 기록한다. 이는 산출물 provenance이지 빌드 host 방식(native/cross)의 증거는 아니다.
+
 - beta5 공장 시드 **실제 설치** = nodejs/python3/zigbee2mqtt/esphome-bin/smhub-broker/smhub-services/smhub-ui.
   matterbridge·OTBR·zwavejsui는 opkg **카탈로그에만**(미설치).
 - **재현 공백 #2 (matter.js)**: matterbridge 미설치 → `@matter/*` 정확 버전 없음. npm 또는 라이브 설치 후 확정.
@@ -339,7 +351,8 @@ crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/
 `opkg install <pkg>` 를 벤더 feed `smhub_core`(`/etc/opkg/smlight.conf`, **per-unit `http_auth` 시크릿 → captures(gitignored)/PRIVATE 만**)에서 당긴다.
 - **버전 드리프트 증거**(feed에 다중 버전 공존): matterbridge `3.5.4-1 / 3.5.5-1 / 3.5.5-2`, matterbridge-z2m `2.8.0-1 / 3.0.4-1 / 3.0.6-1`
   (`Depends: matterbridge (>= 3.5.0)`), zwavejsui `11.15.1-3 / 11.19.0-1 / 11.21.0-1`, openthread `0.3.1-3/4/5`, tailscale `1.78.1-3/4/7`,
-  picoclaw(-core) `0.2.8-2`. **"Latest" 클릭 = 클릭 시점 버전 고정 = 비재현.** ipk 다수 `Architecture: all`(nodejs 앱).
+  picoclaw(-core) `0.2.8-2`. **"Latest" 클릭 = 클릭 시점 버전 고정 = 비재현.** 웹/JS 앱 ipk 다수는
+  `Architecture: all`이지만 **Node.js 런타임 자체는 `riscv64`**다.
 - **우리 정책(§9)**: **클릭 설치 금지.** 필요한 앱은 (1) **정확 버전 pin + ipk provenance 기록**(filename/size/Depends, 위 캡처) →
   (2) 선언적 applier 가 pin 된 버전으로 설치 후 **verify**, 또는 소스에서 이미지에 bake. 설치는 **GLG go 게이트**.
 

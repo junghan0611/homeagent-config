@@ -1,99 +1,108 @@
-# NOW — Duo S Buildroot 제품 서비스 레인: glibc RISC-V Node → Mosquitto → Z2M → HA 호환
+# NOW — Duo S 제품 레인: 순수 크로스컴파일 Buildroot로 Node `.ipk`를 재현
 
-- **Stem**: SMHub를 동작 레퍼런스로 삼되 벤더 바이너리·비공개 피드에 의존하지 않고, 우리 Buildroot 이미지가
-  **Node.js + Mosquitto + Zigbee2MQTT + ZBDongle-E**를 부팅부터 자동 기동해 Zigbee 1기기의 상태·명령을
-  MQTT/Home Assistant 방식으로 왕복시키는 첫 샘플 허브를 만든다. Matter는 이 수직 슬라이스가 닫힌 뒤다.
-- **다음 세션 단일 미션 — N0**: 기존 `musl-riscv64` 보드는 보존하고 **`glibc-riscv64` 제품 서비스 변형**을
-  추가한 뒤, Node.js 22 LTS를 **공개 upstream source에서 Buildroot 패키지로 재현 빌드**해 `node -p` smoke까지 닫는다.
-- **왜 glibc 변형인가 (2026-07-15 실측)**: SMHub beta5의 `/opt/bin/node` 22.22.0-2는 RISC-V glibc ELF
-  (`/lib/ld-linux-riscv64-lp64d.so.1`, RUNPATH `/opt/lib`)이고, 로컬 `~/repos/3rd/milkv/nodejs-riscv`도
-  공식 Node source를 RISC-V Ubuntu/glibc runner에서 빌드한다. 현재 Duo S는 musl이라 그 바이너리를 직접 쓸 수 없다.
-  SDK에는 `riscv64-unknown-linux-gnu` toolchain이 이미 있으므로 **glibc 보드 변형 + source build**가 우선 경로다.
-- **Node 기준점**: SDK Buildroot 2025.02 recipe와 SMHub 0.9.8 registry가 같은 **22.13.1**을 첫 pin으로 삼는다.
-  N0 통과 뒤 beta5 실설치 **22.22.0-2** 정렬 여부를 결정한다. `nodejs-riscv`의 latest-tag CI/Node 25 산출물은
-  포팅 참고·독립 증거일 뿐 제품 패키지로 복사하지 않는다.
-- **Blocker**: upstream Buildroot도 RISC-V Node를 아직 열지 않는다. 우리 패치에는 최소한
-  `BR2_PACKAGE_NODEJS_ARCH_SUPPORTS += BR2_riscv`와 `NODEJS_SRC_CPU=riscv64`, QEMU/V8 snapshot 경로 검증이 필요하다.
-- **Read first**: `docs/BUILDROOT.md` → `bsp/README.md` → SDK `buildroot/package/nodejs/` →
-  `~/repos/3rd/milkv/nodejs-riscv/.github/workflows/build-node.yml` → `docs/SMHUB.md §3.2, §5.2, §5.4`.
-- **Do not touch**: SMHub 설치/피드 mutation, Matter/Matterbridge/Node-RED, MG24 리플래시, 기존 musl 보드 삭제,
-  vendor Node/serialport 바이너리 반입, Type-C full flash. 실기 flash는 GLG go 뒤에만 한다.
+> **확정 정책 (2026-07-15). 대안 검토 종료.** 아래가 확정 축이며 NEXT · ROADMAP · `docs/SMHUB.md`가 여기에 정렬한다.
 
-## N0 — Node.js 22 Buildroot source package (다음 오푸스 작업 범위)
+- **Stem**: 첫 공개 제품 증명 = "우리 보드가 Zigbee 1기기를 MQTT/Home Assistant 방식으로 왕복시키는 샘플 허브".
+  토대는 **Node.js를 보드에 재현 가능하게 올리는 것**(z2m·matter.js 등 이후 JS 스택이 전부 Node 위). Matter는 그 뒤다.
+- **참조 원칙**: SMHub 출고 이미지는 **계약(version · ABI · `/opt` layout · deps · service)의 참조**다. 벤더 recipe /
+  커널 / `.ipk` / 배포 스크립트는 반입하지 않고 **공개 upstream source(`nodejs/node` 등)로 우리 패키지를 재현**한다.
+  측정 계약은 `docs/SMHUB.md §3.2·§5.2·§5.4`(공개 SSOT).
+- **빌드 정책**: **순수 크로스컴파일.** 빌드 호스트에서 target 바이너리를 실행(qemu-user)하거나 real RISC-V에서 native
+  빌드하지 않는다. 이는 제품 패키지 빌드 정책이다.
 
-1. **보드 변형**: `milkv-duos-glibc-riscv64-emmc`를 기존 musl RISC-V 보드의 최소 delta로 추가한다.
-   ISA는 그대로 C906/RISC-V이며 libc만 glibc로 분리한다. 기존 musl 산출물과 이름·출력 경로를 섞지 않는다.
-2. **패키지 패치**: SDK Node 22.13.1 recipe를 RISC-V에 열고 `--dest-cpu=riscv64`로 cross-build한다.
-   source URL/tag, SHA256, license, SDK commit, toolchain, Docker image digest를 manifest에 남긴다.
-3. **빌드 검증**: patch 미적용은 WARN이 아니라 실패. 산출물은 `file/readelf`로 RISC-V + glibc interpreter를 확인하고,
-   가능하면 Buildroot host QEMU로 `node -p 'process.arch+":"+process.versions.node'`를 실행한다.
-4. **실기 게이트(GLG go 후)**: Duo S에 flash → `uname -m=riscv64` → Node smoke → RSS/기동시간 기록 → 재부팅 후 재확인.
-5. **N0 종료 산출물**: 재현 가능한 board config/patch/package, build manifest, smoke 결과. Z2M 설치는 아직 하지 않는다.
+## 확정 축
 
-### N0 합격 기준
+- **N0 = 우리 SDK Buildroot에서 순수 cross-compile로 Node 22.22.0(rv64gc / glibc)을 빌드 → `.ipk`로 `/opt`에
+  설치 가능한 패키지 생성 + 실기 smoke.** SMHub 출고 계약 매칭, 공개 source 재현.
+- **빌드 시 target 실행 없음(LOCKED 제약)**: QEMU-user, native RISC-V runner 모두 배제. V8 snapshot 처리의 첫 기술
+  게이트 = **host cross-snapshot(또는 동등한 V8 pure-cross) 경로 증명**. `--without-node-snapshot`은 후보/보조 옵션이며
+  단독으로 target 실행 제거를 보장하지 않는다(Node v22.22.0 `configure.py`: cross면 이미 `node_use_node_snapshot=false`,
+  `--without-snapshot`은 미지원 경고). **실패경계는 Node snapshot vs V8 snapshot을 분리**해 기록한다.
+- **SDK 무포크**: 확장은 `bsp/patches/`를 pinned·unforked working clone에 주입하는 방식만. **커널은 우리 linux 5.10 유지**(SMHub은
+  kernel 6.18 — 별도 vendor Buildroot BSP/external tree·patch 여부는 비공개; 그 커널/BSP를 따라가지 않음 →
+  "Duo S ≠ SMHub image" 유지).
+- **libc dual-lane**: service image = **glibc**(새 `milkv-duos-glibc-riscv64-emmc` 변형). 기존
+  `milkv-duos-musl-riscv64-{sd,emmc}` = `homeagentd` / minimal baseline으로 보존. `homeagentd`가 service image에
+  합류할 땐 static/portable artifact로.
+- **version**: 첫 parity pin = **22.22.0**(SMHub 출고와 동일). 기술 증명 후 최신 유지보수 Node22 LTS로 update gate.
+- **packaging**: **installable `.ipk`(absolute `/opt` prefix, RUNPATH `/opt/lib`) + OpenRC** 서비스.
+  untracked 직접 파일 주입은 배제하고 **package manager가 추적하는 preinstall**만 허용한다.
 
-- `node -p process.arch` = `riscv64`, 버전 = pin과 일치.
-- ELF interpreter가 glibc이며 모든 `NEEDED` 라이브러리가 이미지에서 해소된다.
-- 동일 입력의 재빌드 절차와 source/hash/license provenance가 공개 리포에 남는다.
-- 기존 `milkv-duos-musl-riscv64-{sd,emmc}` 빌드가 보존된다.
-- 실패 시 “Node 불가”로 뭉개지 않고 configure/build/QEMU/runtime 중 정확한 경계를 기록한다.
+## 역설계 근거 (beta5 이미지 실측, `captures/smhub-beta5-20260630/`; 공개 계약은 `docs/SMHUB.md`)
+
+- opkg status(검증): **`nodejs 22.22.0-2` / `Architecture: riscv64`**, `/opt` 설치, 완전한 opkg 메타셋(`.control /
+  .list / .postinst / .npmrc / .pnpmfile.cjs / .schema.json`). → **Buildroot toolchain으로 빌드된 Node가 opkg
+  package로 `/opt`에 설치**. (Buildroot가 `.ipk`를 직접 생성하는 exact pipeline은 비공개.)
+- OS = `Buildroot 2026.02-18-g60430d6802 / SMHUB 1.0.0.beta5`, **kernel 6.18**(manual §"upgrade from vendor 5.4.x").
+  우리 SDK = **linux 5.10**. 피드 `pkg.smlight.tech`는 `.ipk` 바이너리만(소스 비공개).
+- 소스맵은 `docs/SMHUB.md §5.2`(Node 22.22.0 → `nodejs/node`, z2m 2.10.1 → Koenkk + pnpm-lock 확보 …).
+- upstream Buildroot 2026.02도 Node RISC-V arch allowlist 없음(raw 확인) → **arch-enable은 확정적으로 필요한 공개 재현
+  조각 중 하나**다. V8 pure-cross snapshot 경로는 이미지가 알려주지 않으므로 N0 첫 기술 게이트에서 증명한다.
+
+## N0 착수 시 소유할 surface (GLG go 후)
+
+- 새 `bsp/board/milkv-duos-glibc-riscv64-emmc/` : **top-level defconfig = glibc/toolchain/board 선택**
+  (`CONFIG_TOOLCHAIN_GLIBC_RISCV64=y`, `CONFIG_CROSS_COMPILE="riscv64-unknown-linux-gnu-"`, 커널 5.10 유지). **Buildroot
+  rootfs config가 package C/CXX/LD `rv64gc/lp64d`와 Node 선택을 소유**(현재 `buildroot/configs/<board>_defconfig`에
+  `BR2_PACKAGE_NODEJS` 없음, repo 미소유). 두 surface를 분리한다.
+- `bsp/patches/`: Node RISC-V arch-enable(`Config.in` `BR2_riscv` + `nodejs-src.mk` `NODEJS_SRC_CPU=riscv64`) +
+  V8 pure-cross snapshot 경로(위 첫 기술 게이트) + Node **22.22.0 source URL/hash로 recipe pin update**.
+- `.ipk` 패키징 + `/opt` 배치 + OpenRC autostart(SMHub 서비스 계약 모사, `docs/SMHUB.md §5.4`).
+- `bsp/build.sh` **fail-closed**: 패치 미적용 현재 `WARN`+continue(`bsp/build.sh:73-77`) → "미적용=실패"로. SDK dirty는
+  scoped(pin 확인 + patch별 reverse/apply-check + exact path/hash), 전체 `git reset/clean` 금지(in-tree output 보존).
+
+## N0 합격 기준
+
+- **host 게이트(실행 아님)**: 산출 ELF = riscv64 + glibc, interpreter가 service image loader와 일치, GLIBC max symbol이
+  SDK sysroot 이하, `NEEDED` 전부 `/opt/lib`+base에서 해소(`readelf`). provenance 공개(source URL·tag·SHA256·license·
+  toolchain·docker image ID/RepoDigest; `:latest` 문자열 금지). **빌드에 qemu/native target 실행 흔적 0.**
+- **runtime 게이트(실기 Duo S 전용, GLG go 후)**: `node -p 'process.arch+":"+process.versions.node'` = `riscv64:22.22.0`.
+  host는 riscv 바이너리를 실행할 수 없으므로 runtime 합격은 실기에서만 판정한다.
+- 기존 musl sd/emmc 빌드 회귀 보존. 실패 시 정확한 경계 기록.
 
 # AFTER N0 — 순서 고정
 
-## N1. Hub-minimal + 제품 rootfs 기반
-
-- ION 170MB 멀티미디어 carveout과 비전 모듈을 제거하되 **C906L FreeRTOS 2MB + `rtos_cmdqu`는 보존**한다.
-- Buildroot 파일 주입용 `BR2_ROOTFS_OVERLAY`와 런타임 rw DATA/OverlayFS를 구분한다.
-- DATA 파티션, BusyBox init 서비스, first-boot, 네트워크, 지속 로그를 최소 단위로 만든다.
-
-## N2. Mosquitto + Z2M 재현 패키지
-
-- Mosquitto를 먼저 자동 기동하고 localhost pub/sub를 검증한다.
-- Zigbee2MQTT는 공개 upstream **2.10.1** + lockfile로 패키징한다. SMHub의 private `rigel.smlight.tech`
-  serialport shadow tarball은 쓰지 않는다. `@serialport/bindings-cpp` RISC-V native addon을 공개 source에서
-  같은 Buildroot sysroot로 빌드해 `/dev/ttyUSB*` open smoke를 먼저 통과시킨다.
-- Node → serialport → Z2M 순으로 실패 경계를 분리한다. 한 번에 z2m 전체를 디버그하지 않는다.
-
-## N3. Zigbee 1기기 + Home Assistant 호환 수직 슬라이스
-
-- ZBDongle-E = EmberZNet 7.4.2 / EZSP 13 / 115200 / `rtscts:false` (`firmware/zbdonglee/`).
-- cold boot → Z2M `bridge/state=online` → 1기기 pair → report → command ack → 재부팅 생존.
-- `homeassistant.enabled: true`; retained discovery `homeassistant/…/config`,
-  `zigbee2mqtt/<friendly_name>` state, `…/set` command 왕복을 증거로 남긴다.
-- 캡처는 pass/fail JSONL + 버전/RSS/포트/로그로 남긴다. “프로세스 started”만으로 합격시키지 않는다.
-
-## N4. 샘플 허브 + 서버 + 앱 세트
-
-- **허브**: Buildroot + Node/Mosquitto/Z2M + USB radio.
-- **서버**: 기존 Go surface에 최소 Z2M/MQTT adapter를 붙여 REST/SSE로 정규화한다. 비즈니스 로직 없음.
-- **앱**: 기존 Lit `ui/dist`를 정적 제공해 상태 표시·on/off 한 동작만 왕복시킨다.
-- Z2M frontend는 운영/진단 UI로 유지한다. Matter/commissioning/A2A/A2UI 확장은 이 세트 합격 뒤다.
+- **N1** package lifecycle 확립: `.ipk` install / upgrade / remove / reboot 지속 + OpenRC. Mosquitto를 같은 방식으로
+  추가하고 자동 기동 + localhost pub/sub 검증.
+- **N1.5** 메모리 회수: camera/codec ION carveout(~170MB) 트림 + 잔여 `cvi_*` 비전 모듈 제거(Node 뒤, Z2M 전 게이트).
+- **N2** Zigbee2MQTT 공개 upstream 2.10.1 + lockfile를 같은 `.ipk`/`/opt` 방식으로. private serialport shadow tarball
+  금지. `@serialport/bindings-cpp`의 **Node-API compiled addon을 공개 source에서 같은 sysroot로 cross-build** →
+  `/dev/ttyUSB*` open smoke.
+- **N3** Zigbee 1기기 + HA 호환 수직 슬라이스. ZBDongle-E = EmberZNet 7.4.2 / EZSP 13 / 115200 / `rtscts:false`.
+  cold boot → Z2M `bridge/state=online` → pair → report → command ack → 재부팅 생존. discovery+state+`…/set` 왕복 증거.
+- **N4** 샘플 허브 + 서버(Go 최소 adapter) + 앱(Lit `ui/dist` 정적). Matter/commissioning/A2A/A2UI는 이후.
 
 # DECISIONS / GUARDRAILS
 
-- **libc 두 레인**: musl = 최소 런타임·`homeagentd` 실험 기준선, glibc = Node/Z2M 제품 서비스 후보.
-  N0 실측 전 표준 문서의 제품 libc를 일괄 전환하지 않는다.
-- **SMHub에서 가져오는 것**: 버전·ABI·패키지 구성·서비스 계약·검증 기준. 가져오지 않는 것:
-  벤더 Node ELF, authenticated opkg payload, private serialport shadow package, 비공개 Buildroot diff.
-- **첫 공개 제품 증명**은 Zigbee/HA 호환까지다. Matter는 명시적으로 후속이다.
-- **실행 ≠ 동작**: installed/enabled/running/working을 구분하고 실제 MQTT/serial/radio 왕복으로 판정한다.
-- live IP/MAC/키/네트워크키는 `PRIVATE.md`/gitignored captures에만 둔다. git hook 우회 금지.
+- **확정: 순수 크로스컴파일 Buildroot → `.ipk` → `/opt`.** 빌드 시 target 실행(qemu-user)·native RISC-V 빌드 배제.
+- **SMHub은 계약 참조만**: version 22.22.0 · rv64gc/glibc ABI · `/opt` layout · deps · service를 매칭. **반입 안 함**:
+  벤더 커널/BSP, 비공개 recipe, 벤더 `.ipk`, authenticated opkg payload, private serialport shadow, SLZB-OS/배포 스크립트.
+- **SDK 무포크**: `bsp/patches/` 주입만, pinned·unforked working clone과 커널 5.10 유지.
+- **재현 빌드만**: 벤더 바이너리 복사 금지, 공개 source에서 cross-build.
+- **installed ≠ running ≠ working**: package 존재/서비스 enable/프로세스 기동/실제 왕복을 구분해 판정.
+- live IP/MAC/키/네트워크키는 `PRIVATE.md`/gitignored captures에만. git hook 우회 금지.
+- **실기 flash는 GLG go 후에만**. 커밋/푸시는 GLG 결정.
+
+## ROADMAP invariant — 함께 정렬(정교화)
+
+1. **runtime target**: `homeagentd` = `riscv64-linux-musl` artifact baseline + Node service image = glibc(dual-lane).
+2. **"Duo S ≠ SMHub image"**: 유지. 커널 5.10 유지 + 무포크 → SMHub 이미지로 수렴하지 않고 형상(ABI/패키징 계약)만 재현.
 
 # RECENT
 
-- **2026-07-15 PM 담금질**: 원격 `ff3ba12` fast-forward. SMHub beta5 `user.img`를 read-only로 재확인해
-  Node 22.22.0-2가 **glibc RISC-V**임을 확정했다(74.8MB ELF, `/opt/lib` shared deps). SDK Buildroot Node recipe는
-  22.13.1이나 RISC-V menu/CPU mapping이 닫혀 있고, QEMU user RISC-V와 glibc RISC-V toolchain은 이미 있다.
-  SMHub Z2M 2.10.1은 `@serialport/bindings-cpp` 13.0.1 RISC-V addon을 private shadow tarball로 치환하므로,
-  공개 재현 레인은 addon source build를 별도 게이트로 삼는다.
+- **2026-07-15**: N0 방향 확정 — 순수 크로스컴파일 Buildroot로 Node `.ipk`를 공개 source에서 재현(target 실행 없음,
+  SDK 무포크, 커널 5.10, SMHub은 계약 참조만). beta5 이미지 실측으로 `nodejs 22.22.0-2 riscv64` opkg `/opt` 설치 확인,
+  SMHub kernel 6.18 / 비공개 피드 확인. 실기는 read-only만, flash/mutation 없음.
 - **v2026.7.15**: Duo S RISC-V 자체 이미지 실기 부팅, ARM→RISC-V 문서 전환, ZBDongle-E 7.4.2 펌웨어,
   `docs/BUILDROOT.md` 추가. 상세 이력은 `CHANGELOG.md`와 `docs/SMHUB.md`.
 
 # LEDGER
 
-- Duo S SDK Linux 5.10 + CVITEK `rtos_cmdqu`와 SMHub Linux 6.18 + remoteproc/rpmsg는 이미지 비호환이다.
-  SMHub는 동작 레퍼런스, Duo S `bsp/`가 공개 빌드 레인이다.
-- RISC-V C906 big core + C906L FreeRTOS + EFR32 radio의 3분할은 유지한다. USB ZBDongle-E는 Duo S 개발 증명용이며
-  최종 제품 형상은 onboard EFR32다.
-- `homeagentd`/C906L 메일박스와 제품화 rootfs는 폐기하지 않는다. 다만 첫 종단 표적은 Node/Z2M/HA 호환이며,
-  각 단계가 닫힐 때 원래 런타임 stem으로 합류한다.
+- base = 우리 SDK 유지 + glibc-riscv64 service 변형. mainline BSP 이전 / dual-libc(musl base+glibc Node)는 배제.
+  SDK에 glibc RISC-V toolchain/sysroot + `TOOLCHAIN_GLIBC_RISCV64` Kconfig 존재, Duo board 변형만 부재(확인).
+- target 실행 배제 배경: T-Head C906 draft RVV0.7(`v0p7_xthead`)이 mainline QEMU와 충돌 → 우회(Node 범위 rv64gc
+  mksnapshot-under-qemu)는 폐기, 순수 크로스 + rv64gc glibc service 변형으로 대체.
+- RISC-V C906 big core + C906L FreeRTOS + EFR32 radio 3분할 유지. USB ZBDongle-E는 Duo S 개발 증명용, 최종 제품
+  형상은 onboard EFR32.
+- `homeagentd`/C906L 메일박스와 제품화 rootfs는 폐기 안 함. 첫 종단 표적이 Node/Z2M/HA 호환일 뿐, 각 단계가 닫힐 때
+  원래 런타임 stem으로 합류.

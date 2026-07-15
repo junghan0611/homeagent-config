@@ -201,4 +201,4 @@ Go + Node.js + matterjs-server를 단일 디렉토리로 번들:
 
 - [A2UI](A2UI.md) — 서버 주도 UI 패러다임
 - [API](API.md) — REST API 명세
-- [YOCTO-OFFLINE-FIRST](YOCTO-OFFLINE-FIRST.md) — Yocto 오프라인 빌드 가이드
+- [YOCTO](YOCTO.md) — Yocto 오프라인 빌드 가이드 (origin lane)

@@ -16,6 +16,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 |-----|------|-----------|
 | [`../VERSION.md`](../VERSION.md) | stack / version / physical device matrix | checking current board/runtime state |
 | [`../runtime/README.md`](../runtime/README.md) | RISC-V Linux + Zig state machine + C906L coprocessor architecture | the SG2000 runtime center (RISC-V C906 boot, L0–L4, C906 base) |
+| [`BUILDROOT.md`](BUILDROOT.md) | SG2000/Duo S Buildroot experience + strategy (core lane) | building/flashing the Duo S RISC-V image (operational how-to in `../bsp/README.md`) |
 | [`TARGET_DEVICE.md`](TARGET_DEVICE.md) | board and radio strategy details | SG2000 / SSD202D / EFR32 decisions |
 | [`THP23-LIBERATION.md`](THP23-LIBERATION.md) | THP23-ZB-X liberation research (parked 128MB evidence) | reference for the parked 128MB lower-bound lane |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | ADRs and structure decisions | changing process/backend boundaries |
@@ -24,7 +25,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`MATTER.md`](MATTER.md) | Matter backend strategy | changing matter.js / commissioning paths |
 | [`THREAD.md`](THREAD.md) | OTBR/RCP notes | changing Thread/RCP paths |
 | [`EDGE-ZIGBEE.md`](EDGE-ZIGBEE.md) | hub ↔ edge/Zigbee boundary | touching ESP32/Zigbee/MQTT interfaces |
-| [`YOCTO-OFFLINE-FIRST.md`](YOCTO-OFFLINE-FIRST.md) | Yocto offline recipe policy | origin-lane Yocto recipe work |
+| [`YOCTO.md`](YOCTO.md) | Yocto offline-first recipe policy (origin lane, RPi5) | origin-lane Yocto recipe work |
 | [`FLUTTER.md`](FLUTTER.md) | Flutter shell notes | client/origin-lane UI work |
 | [`A2A.md`](A2A.md) | agent protocol notes | A2A work |
 | [`A2UI.md`](A2UI.md) | server-driven UI notes | A2UI surface work |

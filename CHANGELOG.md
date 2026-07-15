@@ -32,6 +32,8 @@
 - Realigned the standard doc set from "ARM Cortex-A53, fixed" to "RISC-V C906" across `README.md`, `AGENTS.md`, `VERSION.md`, `docs/README.md`, `docs/TARGET_DEVICE.md`, `runtime/README.md` (Decision + L0–L4 + BSP/phase + portfolio), `runtime/zig/homeagentd/README.md`, `runtime/c906/rtos-agent/README.md`, and the `docs/FLUTTER.md` main-lane pointer.
 - Updated `VERSION.md` physical state — Duo S in hand (RISC-V boot verified), SMHub in hand (OTA beta5 verified) — and corrected the radio matrix to the actual in-repo `firmware/zbdonglee/` files.
 - Recorded the two-lane invariant (Duo S milkv SDK Linux 5.10 + CVITEK `rtos_cmdqu` vs SMHub mainline 6.18 + remoteproc/rpmsg + open-amp — **images not interchangeable**; shared axis = SoC/ISA/musl/toolchain).
+- Renamed `docs/YOCTO-OFFLINE-FIRST.md` → `docs/YOCTO.md` (origin lane, RPi5) and added `docs/BUILDROOT.md` — the SG2000/Duo S Buildroot experience + strategy for the core lane (Buildroot is now unavoidable; operational how-to stays in `bsp/README.md`).
+- Reconciled the DIRIGERA framing across the standard doc set — README, `docs/README.md`, and a `docs/HUBS.md` status banner now mark it as parked landscape research, not our direction.
 
 ### Parked
 

@@ -1,7 +1,11 @@
-# YOCTO OFFLINE-FIRST RECIPE POLICY
+# YOCTO — Origin-Lane Build (Offline-First Recipe Policy)
 
 > 이 프로젝트는 **오프라인 빌드 우선(Offline-First)** 원칙을 따릅니다.
 > 모든 Yocto/BitBake 레시피는 네트워크 없이 재현 가능해야 합니다.
+
+> **레인 주의**: Yocto는 **high-spec origin 레인(RPi5)** 이다. SG2000/Duo S **코어 레인**은
+> Buildroot이며, 그 경험·전략은 [`BUILDROOT.md`](BUILDROOT.md), 운영 how-to는
+> [`../bsp/README.md`](../bsp/README.md)에 있다.
 
 ## 왜 Offline-First인가?
 

@@ -1,198 +1,99 @@
-# NOW — 커스텀 Buildroot 제품화 틀: 샘플 허브+앱+서버 통합 (SMHub 참고, 우리 buildroot 소유, 비즈니스 로직 없음)
+# NOW — Duo S Buildroot 제품 서비스 레인: glibc RISC-V Node → Mosquitto → Z2M → HA 호환
 
-- **북극성 (2026-07-15, GLG)**: **커스텀 Buildroot 제품화 틀**. SMHub를 참고하되(버전/설치면 = `docs/SMHUB.md`) 우리 고유 Buildroot로 **샘플 허브+앱+서버를 통으로 패키징**, 전 기능 동작을 공개 리포로 증명한다. 제품화 사전작업(네트워크/로그/rw-overlay/패키지 프리인스톨/first-boot)을 Buildroot로 제대로 깐다. **비즈니스 로직 없음.** SDK = `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(pin `ad920f839`) → 기본은 `bsp/`에서 작업, 정 안될 때만 포크. 상세 = **Phase F** · `ROADMAP.md`(North star) · `docs/BUILDROOT.md`.
-- **직전 성과 (v2026.7.15)**: Duo S RISC-V C906 자체 이미지 **실기 부팅 성공**(Phase E) + 표준 문서 **ARM→RISC-V 정합화**(Phase D) + 문서 세트 정합(DIRIGERA=landscape화, YOCTO→BUILDROOT 분리). 다음 실작업 = Phase F.
-- **Stem**: 벤더 **SMHUB OS는 무수정**으로 쓰고 제품 기능을 끝까지 검증한 뒤, **버전업(OTA beta5)** 하고
-  그 위에 **실제 코드**(RISC-V Zig `homeagentd` 100ms 상태머신 + 선언적 config-set)를 만들어 **종합 테스트**한다.
-- **방향 전환 (2026-07-01, GLG)**: 이전 "코드 아직 안 만든다(버전 드리프트 회피)"에서 **"버전업 후 실제 코드로
-  종합 테스트"** 로 전환. 버전을 못박지 않기 위해 **배포 시점에 실물에서 값을 읽는 applier + 검수 하네스**로 짓는다.
-- **문서 목적 (2026-07-03, GLG)**: 이 리포는 **SMHub를 실기로 공부해 오픈소스 개발자를 위해 board 지식을 정리하는 SSOT**다.
-  RISC-V(SG2000) 타깃에 **자체 허브 펌웨어/데몬을 올리려는 사람**이 필요한 HW·라디오·EZSP·파티션/설치면·지속성·서비스·GPIO를
-  `docs/SMHUB.md`에 실측 grounded로 모은다. **벤더 비공개 SDK 내부나 특정 제품 코드는 다루지 않음 — board/오픈소스 사실만.**
-- **지식 SSOT (단일)**: `docs/SMHUB.md` — HW/라디오/상태모델/라이브 실측/통제경계·재현 매트릭스/정보벽/
-  벤더 매뉴얼 검토/열린 설계질문/다음 단계. (구 PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW 병합.)
-- **개발보드 레인 (2026-07-14, GLG)**: **Milk-V Duo S 실기 입수** — **완전 공개(open-source) 레인**. 공개 SDK로
-  부트체인 전체를 **buildroot부터 우리가 빌드**한다. 벤더 비공개 리포/벤더 OS 의존 **0**. **⚠️ SMHub과 별개 셋업**
-  (SMHub은 커널 버전부터 다르고 벤더 private 리포에서 나옴) — 이미지 호환 없음, 섞지 말 것. 상세 = **Phase E**.
-  **RISC-V(C906) 부팅 필수** — SG2000은 A53/C906 둘 다 부팅하고 Duo S는 **물리 스위치**로 고른다. 우리 런타임 타깃이
-  `riscv64-linux-musl`이므로 ARM으로 부팅하면 의미 없음. MG24 라디오 없음 → Zigbee/EZSP는 이 보드에서 못 함.
-- **라디오 동시성 스탠스(유지, durable)**: 단일칩 Zigbee+Thread **동시는 시점 문제(MG26 → Series 3)**.
-  지금은 만들지 않고 **각 스택 독립 제어 기반**만 닦는다. 근거 SSOT = `docs/MULTIPROTOCOL.md` + `docs/HUBS.md`(랜드스케이프).
-- **현재 상태 (2026-07-01 OTA 완료)**: **OTA로 `1.0.0.beta5` 부팅 성공** (0.9.8 → beta5, Web UI Settings→Update and Restore).
-  출고 0.9.8 블록 백업은 슬롯 A에 롤백 보존(`captures/smhub-0.9.8-20260630/`, gitignored). 0.9.8 V1~V6 실측은 `captures/smhub-verify-20260701T113514+0900/logs/`.
-  **beta5 라이브 post-capture 완료**(SSH=`/tmp/hk` 우회 sshd, `.sshkey` 키인증): C906L RTOS 스택 전면 확정 → `docs/SMHUB.md §5.4`.
-  **주의**: beta5도 표준 `/etc/ssh` host key 0바이트·OpenRC sshd crashed 그대로 = EEPROM 지속 가설 반증. 영구 SSH는 overlay `/etc/ssh` host key 재생성+리부트 검증이 남음(§3.6). 캡처 스크립트 `scripts/beta5-postcapture-readonly.sh`. live 좌표/키는 `PRIVATE.md`만.
-- **라이브 확정**: MG24=**ember** Zigbee coordinator. 기본 세트 = z2m + matterbridge(-z2m) Matter over IP.
-  Z-Wave native 미지원, Thread/OTBR 보류. **C906L/ESPHome/RPMsg 스택은 0.9.8엔 없음 = beta 라인(beta3+) 기능.**
-- **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 붕괴). live IP/MAC/SSH 키/기기
-  좌표를 공개 파일에 쓰지 말 것. 표준 sshd host-key 수리에 더 매달리지 말 것(업데이트 후 재평가). "service running"을 "working"으로 판정하지 말 것. `AGENT_ALLOW_UNSAFE_COMMIT`/`--no-verify` 금지.
+- **Stem**: SMHub를 동작 레퍼런스로 삼되 벤더 바이너리·비공개 피드에 의존하지 않고, 우리 Buildroot 이미지가
+  **Node.js + Mosquitto + Zigbee2MQTT + ZBDongle-E**를 부팅부터 자동 기동해 Zigbee 1기기의 상태·명령을
+  MQTT/Home Assistant 방식으로 왕복시키는 첫 샘플 허브를 만든다. Matter는 이 수직 슬라이스가 닫힌 뒤다.
+- **다음 세션 단일 미션 — N0**: 기존 `musl-riscv64` 보드는 보존하고 **`glibc-riscv64` 제품 서비스 변형**을
+  추가한 뒤, Node.js 22 LTS를 **공개 upstream source에서 Buildroot 패키지로 재현 빌드**해 `node -p` smoke까지 닫는다.
+- **왜 glibc 변형인가 (2026-07-15 실측)**: SMHub beta5의 `/opt/bin/node` 22.22.0-2는 RISC-V glibc ELF
+  (`/lib/ld-linux-riscv64-lp64d.so.1`, RUNPATH `/opt/lib`)이고, 로컬 `~/repos/3rd/milkv/nodejs-riscv`도
+  공식 Node source를 RISC-V Ubuntu/glibc runner에서 빌드한다. 현재 Duo S는 musl이라 그 바이너리를 직접 쓸 수 없다.
+  SDK에는 `riscv64-unknown-linux-gnu` toolchain이 이미 있으므로 **glibc 보드 변형 + source build**가 우선 경로다.
+- **Node 기준점**: SDK Buildroot 2025.02 recipe와 SMHub 0.9.8 registry가 같은 **22.13.1**을 첫 pin으로 삼는다.
+  N0 통과 뒤 beta5 실설치 **22.22.0-2** 정렬 여부를 결정한다. `nodejs-riscv`의 latest-tag CI/Node 25 산출물은
+  포팅 참고·독립 증거일 뿐 제품 패키지로 복사하지 않는다.
+- **Blocker**: upstream Buildroot도 RISC-V Node를 아직 열지 않는다. 우리 패치에는 최소한
+  `BR2_PACKAGE_NODEJS_ARCH_SUPPORTS += BR2_riscv`와 `NODEJS_SRC_CPU=riscv64`, QEMU/V8 snapshot 경로 검증이 필요하다.
+- **Read first**: `docs/BUILDROOT.md` → `bsp/README.md` → SDK `buildroot/package/nodejs/` →
+  `~/repos/3rd/milkv/nodejs-riscv/.github/workflows/build-node.yml` → `docs/SMHUB.md §3.2, §5.2, §5.4`.
+- **Do not touch**: SMHub 설치/피드 mutation, Matter/Matterbridge/Node-RED, MG24 리플래시, 기존 musl 보드 삭제,
+  vendor Node/serialport 바이너리 반입, Type-C full flash. 실기 flash는 GLG go 뒤에만 한다.
 
-# ACTIVE — 할 일 전체 (Phase F=다음 메인; A→C·E=기반; D=문서 정합화 완결 v2026.7.15)
+## N0 — Node.js 22 Buildroot source package (다음 오푸스 작업 범위)
 
-## Phase A. 0.9.8 무변형 검증 마무리 (남은 것, 리부트 전)
-증거 축적 → `docs/SMHUB.md §4`. GPT 검수(2026-07-01) 반영 = provenance grounded.
+1. **보드 변형**: `milkv-duos-glibc-riscv64-emmc`를 기존 musl RISC-V 보드의 최소 delta로 추가한다.
+   ISA는 그대로 C906/RISC-V이며 libc만 glibc로 분리한다. 기존 musl 산출물과 이름·출력 경로를 섞지 않는다.
+2. **패키지 패치**: SDK Node 22.13.1 recipe를 RISC-V에 열고 `--dest-cpu=riscv64`로 cross-build한다.
+   source URL/tag, SHA256, license, SDK commit, toolchain, Docker image digest를 manifest에 남긴다.
+3. **빌드 검증**: patch 미적용은 WARN이 아니라 실패. 산출물은 `file/readelf`로 RISC-V + glibc interpreter를 확인하고,
+   가능하면 Buildroot host QEMU로 `node -p 'process.arch+":"+process.versions.node'`를 실행한다.
+4. **실기 게이트(GLG go 후)**: Duo S에 flash → `uname -m=riscv64` → Node smoke → RSS/기동시간 기록 → 재부팅 후 재확인.
+5. **N0 종료 산출물**: 재현 가능한 board config/patch/package, build manifest, smoke 결과. Z2M 설치는 아직 하지 않는다.
 
-- [x] z2m `bridge/info` grounded: type=EmberZNet, 펌웨어 **7.4.2 [GA]**, bridge online, ch11, permit_join False, paired end-device 0(db 1행=Coordinator). → `phaseA-recapture-0.9.8.txt`.
-- [x] 드리프트 규명: 보드 **손탄 아님/출고 그대로**(z2m 2.8.0=빌드시 설치, backend.db 2.3.0=stale seed). usersettings=1행(wide, 빈값 아님).
-- [x] full `/proc/config.gz` full text 확보 + `opkg list-installed` 저장(captures).
-- [ ] DTB 덤프(`/sys/firmware/fdt` root-only → **sudo 필요**, 읽기전용 sudo 정책 결정).
-- [x] **리부트 boot-start 검증 완료**(2026-07-01, operator go): 리부트 후 포트로 확정 — **z2m 8080·smhub-services 8000·nginx 80/443 자동 기동**(z2m 는 start_at_boot=0 인데도 OpenRC runlevel 로 뜸 → **제어축=OpenRC runlevel, backend.db.start_at_boot 무관**). **단 sshd 22 는 안 뜸.**
-- [ ] **SSH 복구는 보류**: 원인 확정(`/etc/ssh/ssh_host_*_key` 0바이트 → sshd `no hostkeys` 즉사, rc-update 문제 아님). Web Console은 복붙이 불편해 제품화 경로로 부적합. 이전 성공 경로는 `/tmp/hk` 우회 sshd였고 리부트 소실. **0.9.8 표준 sshd 영구수리는 하지 말고 OS/펌웨어 업데이트 후 새 이미지에서 SSH 상태 재평가.** CLI가 꼭 필요할 때만 임시 우회 sshd를 재현.
-- [ ] `smhub-buzzer-daemon=crashed`: sshd 와 같은 "started 인데 프로세스 죽음" 패턴(OpenRC started 불신). pwmchip0 접근 실패 추정, 보류.
-- [ ] MQTT pub/sub 왕복 = **strict 무변형 아님**(broker publish) → retained SUB 만 하거나 unique·retain=false·QoS0 smoke 로 분리 표기.
-- [ ] 벤더 매뉴얼 **②A Update/Restore Methods + External SSH** 검토 → OTA/백업 게이트 절차 정본화(`SMHUB.md §7`). **← OTA 진짜 blocker.**
+### N0 합격 기준
 
-## Phase B. 버전업 = OTA beta5/0.9.9 (operator go 게이트) — **다음 첫 행동**
-백업·안전 게이트 통과. 표준 SSH 수리보다 **Web UI로 OS/펌웨어 업데이트를 먼저** 진행한다. **되돌릴 수 있게** 단계별로.
+- `node -p process.arch` = `riscv64`, 버전 = pin과 일치.
+- ELF interpreter가 glibc이며 모든 `NEEDED` 라이브러리가 이미지에서 해소된다.
+- 동일 입력의 재빌드 절차와 source/hash/license provenance가 공개 리포에 남는다.
+- 기존 `milkv-duos-musl-riscv64-{sd,emmc}` 빌드가 보존된다.
+- 실패 시 “Node 불가”로 뭉개지 않고 configure/build/QEMU/runtime 중 정확한 경계를 기록한다.
 
-- [x] **OTA 직전 최소 preflight 통과**: 블록백업 완료(160M, gzip -t OK), 슬롯 A=0.9.8 good 롤백 보존, B=빈 슬롯 타깃. 벤더 매뉴얼 ②A(Update/Restore + External SSH) WebFetch 검토 완료 — OTA=`Settings→Updates & Restore→Check for Updates`(data/settings 보존, 정상부팅 시만). A/B·RAUC·롤백은 매뉴얼 미문서화 → 우리 백업이 정본.
-- [x] **OTA로 `1.0.0.beta5` 부팅 성공 (2026-07-01, operator go)**. 부팅 슬롯 B 확인 + 서비스 상태 = **Web UI 확인 대기**(operator).
-- [x] **SSH 접속 확보**: Web UI Security엔 SSH 토글 없음(beta 빌드), 정식 셸=`Settings→Console`. 실제 접속은 **`/tmp/hk` 우회 sshd**(:22)로 열렸고 에이전트가 `.sshkey/id_ed25519` 키인증으로 붙음(authorized_keys OTA 지속). **beta5도 표준 host key 0바이트·sshd crashed = EEPROM 지속 가설 반증**(§3.6).
-- [x] **beta5 post-capture 완료** → `captures/smhub-beta5-live-20260701T171429+0900/logs/{beta5-postcapture.txt, mg24-bridge-info.txt}` + `docs/SMHUB.md §5.4`. **C906L remoteproc running + smhub-rtos.elf + rpmsg 2채널(esphome-rpc/smhub-rpc) + broker 소켓 + FreeRTOS/ESPHome 2026.5.3/open-amp** 라이브 확정. p7=ext4(F2FS 아님), zram 512M, /etc rw overlay, 커널 REMOTEPROC/RPMSG/MAILBOX 활성, riscv64 재확인.
-- [x] beta5 앱/커널 재현값: `opkg list-installed`(esphome-bin·smhub-broker·smhub-ui·smhub-services·z2m 2.10.1·nodered·py3.14) + config.gz 마커 확보. **남음**: DTB 분해(`/sys/firmware/fdt`, sudo).
-- [ ] MG24: `bridge/info` 라이브(ember 펌웨어/`ezsp version` — mosquitto 인증 경로 필요, retained SUB 빈값) · 코디네이터 `.gbl` 경로.
+# AFTER N0 — 순서 고정
 
-## Phase B+. 벤더 앱 배선 **학습 레인** — "smhub가 어떻게 하는지 배운다" (설치 없이, read-only)
+## N1. Hub-minimal + 제품 rootfs 기반
 
-목표: 우리가 재현할 4개 컴포넌트를 **설치하지 않고** 배선을 역설계해 배운다. 설치된 것=live 파일 직독,
-미설치=feed에서 **ipk read-only fetch → `ar x`/tar 추출**(gitignored captures) → init/config/포트/의존 문서화 → 선언적 재현.
-버전 pin 필수. **클릭 설치 금지, 설치는 GLG go 게이트.** 근거 `docs/SMHUB.md §5.2/§5.4/§9`.
+- ION 170MB 멀티미디어 carveout과 비전 모듈을 제거하되 **C906L FreeRTOS 2MB + `rtos_cmdqu`는 보존**한다.
+- Buildroot 파일 주입용 `BR2_ROOTFS_OVERLAY`와 런타임 rw DATA/OverlayFS를 구분한다.
+- DATA 파티션, BusyBox init 서비스, first-boot, 네트워크, 지속 로그를 최소 단위로 만든다.
 
-- [ ] **smhub-broker (설치됨) — 최우선, homeagentd의 원본**: core↔core 통신 + HW 접근 위임. 이미 확보: init `depend needs remoteproc`,
-  `--ble-throttle` + `/opt/firmware/bluetooth_proxy_mode`→`--ble-mode` seam, 소켓 `/run/smhub-broker.sock`. **남음**: `remoteproc` OpenRC
-  서비스 스크립트 직독(C906L 부팅 계약 = `echo start/stop > remoteproc0/state` + firmware load), broker strings 전체(RpmsgTransport ABI, `smhub-rpc`/`esphome-rpc` 엔드포인트), `opkg files smhub-broker` 파일맵. → homeagentd가 대체/공존할 계약 확정.
-- [ ] **nodered (설치됨) — 필수 로직 레인 후보**: flow 엔진. 직독 `/etc/init.d/nodered`(520B), `/opt/nodered`, 포트/settings.js,
-  backend.db appsettings 연동, z2m/MQTT 플로우 연결점. → 우리 자동화 로직을 nodered flow로 태울지 판단.
-- [ ] **matterbridge 계열 (미설치) — 확실히 pin, Matter-over-IP 노출축**: **matterbridge 3.5.5-2**(Depends nodejs) +
-  **matterbridge-z2m 3.0.6-1**(Depends matterbridge>=3.5.0) + matterbridge-hass 1.0.5-1 + matterbridge-shelly 2.2.30-1.
-  ipk read-only 추출로 배선 학습(init/config/포트, z2m→matterbridge-z2m→Matter fabric 연동, `@matter/*` 실제 버전). → Matter 레인 재현 설계.
-- [ ] **picoclaw / picoclaw-core 0.2.8-2 (미설치) — on-device AI agent(🦀)**: HomeAgent 비전 정렬. ipk 추출로 구조/실행모델/의존 파악(무엇을, 어디서, 어떤 권한으로 도는지). 설치 전 학습만.
+## N2. Mosquitto + Z2M 재현 패키지
 
-## Phase C. 실제 코드 — homeagentd + config-set applier + 종합 테스트 하네스
-버전을 못박지 않는다: **applier가 배포 시점 실물에서 backend.db.version/opkg/alembic HEAD를 읽어** 대조.
+- Mosquitto를 먼저 자동 기동하고 localhost pub/sub를 검증한다.
+- Zigbee2MQTT는 공개 upstream **2.10.1** + lockfile로 패키징한다. SMHub의 private `rigel.smlight.tech`
+  serialport shadow tarball은 쓰지 않는다. `@serialport/bindings-cpp` RISC-V native addon을 공개 source에서
+  같은 Buildroot sysroot로 빌드해 `/dev/ttyUSB*` open smoke를 먼저 통과시킨다.
+- Node → serialport → Z2M 순으로 실패 경계를 분리한다. 한 번에 z2m 전체를 디버그하지 않는다.
 
-- [ ] **homeagentd 스켈레톤** (Zig, `riscv64-linux-musl`, root 불필요, user-writable 경로 배포):
-  timerfd/epoll monotonic 100ms tick · MQTT health read/write · z2m status read · MG24 presence · watchdog heartbeat.
-  (libc/native 의존 회피; system lib 링크 시 Buildroot sysroot/ABI 먼저 확보.)
-- [ ] **선언적 config-set applier**: repo 선언 → 실물 적용. backend.db(enabled/start_at_boot/usersettings만) +
-  `/opt/zigbee2mqtt/data/configuration.yaml` + `/etc/peripherals/*.conf`. per-unit secret(network key/machine-id)은 건드리지 않음.
-  적용 전 실물 read(alembic HEAD 일치 확인) → dry-run diff → apply → verify.
-- [ ] **종합 테스트 하네스 (running ≠ working, pass/fail)**: L0 ping → MQTT broker → z2m frontend/bridge_online →
-  coordinator serial/ember → 1기기 페어링(report→command ack→restart 생존) → (Matter 설치 시) commissioning → C906L RPMsg round-trip.
-  결과 = `captures/…/results.jsonl` + `SMHUB.md §4` 반영. **주의**: 구 GPT 하네스(`tests/smhub_verify/`)는 host 미설정 실패 —
-  살릴지/버릴지 먼저 결정(NEXT LEDGER의 "GPT 프레임워크 삭제" 지침과 충돌).
-- [ ] 설치 게이트(GLG go): matterbridge/z2m update 등 설치 후 Matter 레인 검수.
+## N3. Zigbee 1기기 + Home Assistant 호환 수직 슬라이스
 
-## Phase E. Milk-V Duo S (SG2000) — 개발보드 레인: 우리 손으로 buildroot 빌드 → RISC-V 부팅
-**⚠️ SMHub과 별개다.** Duo S = **순수 개발보드**(Milk-V), SMHub = **별도 제품 셋업**(벤더 SMHUB OS, mainline 6.18 + RAUC A/B).
-**이미지는 서로 갈아끼울 수 없다** — milkv SDK(linux 5.10 + CVITEK `rtos_cmdqu`) vs SMHUB OS(6.18 + 표준 remoteproc/rpmsg
-+ open-amp): 커널·코어간IPC·init·업데이트 체계가 전부 다름. (`docs/SMHUB.md` 이미지 비교표 = `❌ 비호환`.) Duo S 이미지를
-"제품 이미지"로 취급하지 말 것.
+- ZBDongle-E = EmberZNet 7.4.2 / EZSP 13 / 115200 / `rtscts:false` (`firmware/zbdonglee/`).
+- cold boot → Z2M `bridge/state=online` → 1기기 pair → report → command ack → 재부팅 생존.
+- `homeassistant.enabled: true`; retained discovery `homeassistant/…/config`,
+  `zigbee2mqtt/<friendly_name>` state, `…/set` command 왕복을 증거로 남긴다.
+- 캡처는 pass/fail JSONL + 버전/RSS/포트/로그로 남긴다. “프로세스 started”만으로 합격시키지 않는다.
 
-**그럼 뭐가 이전되나** (공유되는 것 = 이미지가 아니라 축):
-**SoC 계열 SG2000** · **ISA riscv64** · **libc musl** · **부트체인 지식**(fsbl→opensbi→u-boot→kernel→rootfs→freertos) ·
-**크로스 툴체인**. → `homeagentd`(riscv64-linux-musl)를 **실기 RISC-V에서 빌드·구동·측정**할 수 있는 우리 소유의 랩.
-Duo S = 512MB DDR, Wi-Fi6/BT5, 100M 이더넷, eMMC. **MG24 라디오 없음** → Zigbee/EZSP는 이 보드에서 못 함(SMHub 담당).
+## N4. 샘플 허브 + 서버 + 앱 세트
 
-**ISA 게이트(불변식)**: SG2000은 A53(ARM)과 C906(RISC-V)를 **둘 다** 부팅할 수 있고, Duo S는 **보드 위 물리 스위치**로 고른다.
-제품은 RISC-V이므로 **스위치=RISC-V + riscv64 이미지**가 아니면 이 레인은 의미 없음. 진실원 = **부트로그 첫 글자**
-(`C`=RISC-V C906 / `B`=ARM A53). 이전 ARM64 빌드(`out/milkv-duos-glibc-arm64-emmc_2026-0623-*.zip`)는 **historical**.
+- **허브**: Buildroot + Node/Mosquitto/Z2M + USB radio.
+- **서버**: 기존 Go surface에 최소 Z2M/MQTT adapter를 붙여 REST/SSE로 정규화한다. 비즈니스 로직 없음.
+- **앱**: 기존 Lit `ui/dist`를 정적 제공해 상태 표시·on/off 한 동작만 왕복시킨다.
+- Z2M frontend는 운영/진단 UI로 유지한다. Matter/commissioning/A2A/A2UI 확장은 이 세트 합격 뒤다.
 
-- [x] **RISC-V 보드 config 커밋**: `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/defconfig` 신설. stock 대비 delta =
-  hub-minimal(카메라 센서 3종 + MIPI 패널 제거) 유지. ARM 대비 delta = `CONFIG_ARCH=riscv` ·
-  `CROSS_COMPILE=riscv64-unknown-linux-musl-` · `KERNEL_ENTRY_HACK_ADDR=0x80200000`(ARM은 0x80108000) · `TOOLCHAIN_MUSL_RISCV64`.
-  **musl = 제품과 일치**(homeagentd 타깃도 `riscv64-linux-musl`). `bsp/build.sh` 기본 보드도 riscv64-sd로 전환.
-- [x] **`bsp/build.sh` defconfig 주입 버그 수정**: `find … | head -1`이 보드/커널/u-boot defconfig **3개**에 매칭돼 readdir 운에
-  의존 → `cvitek_*` 제외 + 정확히 1개 아니면 실패. (커널 defconfig를 덮어쓸 뻔한 잠재 사고.)
-- [x] **riscv64 eMMC 이미지 빌드 성공**: `out/milkv-duos-musl-riscv64-emmc_2026-0714-1719.zip`. `BOOT_CPU=riscv`,
-  `vmlinux`=`UCB RISC-V`, busybox=`UCB RISC-V` + `ld-musl-riscv64v0p7_xthead.so.1`(T-Head C906 확장).
-- [x] **굽기 경로 확보 + 스크립트화**: `bsp/flash-emmc.sh` 신설. 보드는 **공장 출하 시 eMMC 비어 있음** → 전원만 넣어도 부트 ROM이
-  USB 다운로드 모드로 낙하(**실측: `3346:1000 CVITEK USB Com Port` 직결 시 안정 열거**; 타임아웃 재열거 루프라 device 번호가 계속 오름).
-  Linux `usb_dl`이 SDK에 있음(공식 문서의 "Windows 전용"은 오안내). NixOS에선 glibc 바이너리라 호스트 실행 불가 → **벤더 컨테이너에서
-  `/dev/bus/usb` 패스스루**로 실행(검증 완료: `usb_dl -h` OK). **ISA 가드**: `out/`에 6/23 ARM64 zip이 남아 있어 riscv64가 아니면 거부.
-  **⚠️ USB 허브/독 뒤에선 열거 실패**(`error -110` 실측) → **노트북 직결 필수**(현재 직결 확인됨).
-- [x] **굽기 실행 완료 (2026-07-14)**: `usb_dl … [INFO] USB download complete` (809MB). **⚠️ 두 함정 실측**:
-  ① `usb_dl -c`는 `181x`를 원함 — 벤더 문서의 `-c cv181x`는 **틀림**(툴이 거부). ② 커널 **`cdc_acm`이 ROM의 다운로드
-  인터페이스를 선점** → libusb가 claim 못 하고 `[ERR]`(빈 메시지)로 즉사. `modprobe -r cdc_acm` 필요(스크립트에 내장).
-  Windows가 전용 CviUsbDownload 드라이버를 깔게 하는 이유와 동일. 스위치는 **`RV`**(operator 확인, USB-C 옆 슬라이드).
-- [x] **부팅 검증 통과 = 이 레인의 첫 성공**: `Linux milkv-duo 5.10.4-tag- #1 PREEMPT Tue Jul 14 17:03:05 CST 2026 **riscv64**`
-  (빌드 타임스탬프 = 우리 빌드), `isa: rv64imafdvcsu`, `NAME=Buildroot VERSION=-g**ad920f839**-dirty`(우리 pin + 우리 defconfig).
-  **USB-NCM 게이트웨이**(Milk-V 기본 좌표) + **eth0 DHCP 획득** + Wi-Fi 드라이버(aic8800) 로드. eMMC 7.3G(p4 rootfs 768M).
-  접속 = 벤더 기본 계정. 라이브 좌표/계정은 `PRIVATE.md`. 증거 = `captures/duos-riscv64-firstboot-20260714T182449+0900/`.
-- [ ] **[새 표적] 메모리 회수 ~170MB**: `MemTotal=323MB` / 512MB — `ion_carveout_heap` **0x9400000(148MB)** + rtos ion
-  0x1600000(22MB)가 **카메라/코덱 버퍼**로 예약됨. 허브엔 전부 불필요 → hub-minimal의 진짜 이득. defconfig/DT의 ION 크기를
-  줄여 재빌드 → `homeagentd` 가용 메모리 확보.
-- [ ] **[정정] hub-minimal은 아직 부분적**: defconfig 델타는 **센서/패널만** 제거했고, 커널 osdrv 모듈 **`cvi_vc_driver`(928K)·
-  `cv181x_ive`·`cv181x_jpeg`·`cv181x_vcodec`·`cv181x_tpu`가 여전히 빌드·로드됨**(라이브 `lsmod` 확인). 비전 스택 완전 제거는
-  osdrv 모듈 목록까지 손봐야 함.
-- [ ] **SD 레인(선택)**: microSD가 생기면 `milkv-duos-musl-riscv64-sd` 빌드 → `.img` **dd** (eMMC 무손상·반복 쉬움). defconfig 커밋됨.
-- [x] **스택 차이 grounded (2026-07-14, 라이브 확증)**: 실기에서 **`/sys/class/remoteproc` 없음 · `/dev/rpmsg*` 없음**,
-  대신 dmesg `cvi_rtos_cmdqu_probe DONE`(`1900000.rtos_cmdqu`). → Duo S의 코어간 통신은 CVITEK **`rtos_cmdqu`**,
-  SMHub beta5는 **표준 remoteproc/rpmsg + open-amp**(6.18). **Duo S로 SMHub의 RPMsg 축은 재현 불가** — 레인 분리가 맞다.
-  (SMLIGHT `slzb-os-scripts`는 SLZB-06x Berry 스크립팅 API로, SG2000 OS 빌드 레시피 아님 — 지름길 없음.)
-- [ ] **homeagentd RISC-V 런타임 검증 (이 보드의 진짜 목적)**: 부팅 확인 후 `riscv64-linux-musl` Zig 바이너리를 올려
-  timerfd/epoll 100ms tick · RSS · 워치독을 **실기에서 측정**. 지금까지 SMHub에서만 추정하던 값을 우리 보드에서 자유롭게 반복.
+# DECISIONS / GUARDRAILS
 
-## Phase F. 커스텀 Buildroot 제품화 틀 — 샘플 허브+앱+서버 통합 (다음 세션 메인)
-목표: 우리 Buildroot가 **네트워크/로그/rw-overlay/패키지 세트**를 미리 깔아주고, 그 위에 **샘플 허브+앱+서버**가
-통으로 동작함을 공개로 보여준다. 근거 틀 = `ROADMAP.md`(North star) · `docs/BUILDROOT.md`(경험·전략) · `bsp/README.md`(운영).
-SMHub는 "제품이 뭘 깔아주나"의 참고일 뿐(버전/설치면 = `docs/SMHUB.md`) — 벤더 이미지 의존 없이 우리가 짓는다.
-
-- **선행(Phase E 미완 항목 참조, 서비스 세트 fit 위해 먼저)**: 메모리 회수 ~170MB(ION carveout 148M + rtos 22M) + hub-minimal 완결(osdrv 비전 모듈 `cvi_vc_driver`·`cv181x_{ive,jpeg,vcodec,tpu}` 제거).
-
-**제품화 rootfs 레이어 (bsp/ overlay + package selection)**:
-- [ ] **rootfs overlay 골격**: `bsp/board/<board>/` overlay 훅 — **ro-root / rw-data 분리** 설계부터.
-- [ ] **네트워크**: DHCP/static + Wi-Fi(aic8800)/eth0 + hostname/mDNS(avahi) + first-boot 프로비저닝.
-- [ ] **로그 관리**: 지속 로그(rw-data), 회전(logrotate/busybox), ro-root 오염 금지.
-- [ ] **rw/persistence**: writable data 파티션 + overlay(SMHub p7 패턴 참고, 우리 방식). 재부팅·업데이트 생존 검증.
-- [ ] **패키지 프리인스톨(서비스 세트)**: mosquitto(MQTT) + Zigbee2MQTT + matter.js/Matterbridge + `homeagentd` + 샘플 서버 + 샘플 앱. buildroot package 또는 overlay 바이너리. **주의**: Node/riscv64 빌드 벽 = `docs/SMHUB.md §5.5` derisk 참고.
-
-**샘플 허브+앱+서버 종단 데모 (딜리버러블)**:
-- [ ] **통합 부팅 데모**: 이미지 한 장 부팅 → 서비스 세트 자동 기동 → z2m(ZBDongle-E 7.4.2, `firmware/zbdonglee/`) 페어링 → 앱↔서버↔허브 왕복 → "전 기능 동작" 캡처.
-- [ ] **재현성 정본화**: `bsp/build.sh <board>` → flash → 부팅 → 데모가 **반복 가능**(공개 리포 사용자가 따라할 수 있게). 절차는 `docs/BUILDROOT.md`에 정본화.
-
-**경계**: 비즈니스 로직 없음. 특정 제품 상용 코드/벤더 비공개 SDK 내부 금지. 내부 프로젝트명(공개 리포 금지어) 쓰지 말 것.
-
-# 결정 대기 (설계, SMHUB.md §9)
-- (1) 재현 기판: 벤더 beta5 이미지 커스터마이즈 vs 우리 buildroot(flake.nix).
-- (2) 상태 원본: 손 선언 vs **golden 스냅샷**(backend.db+/etc overlay+p7 data+패키지).
-- (3) 구 GPT 하네스 `tests/smhub_verify/` 처리(삭제 vs 재활용) — Phase C 전에 결정.
-- (4) **[Phase 2 열림] EZSP 13 내 7.4↔7.5 frame 델타**: 로컬 GSDK 4.5.0=7.5.1만 보유 → 7.4.2 `ezsp-enum.h`(또는 SiLabs UG100 EZSP ref) 확보 후 frame-ID diff. host 스택 직접구동 경로 착수 시 필요. 코어 커맨드는 `ezsp.c` VERSION 협상으로 상호운용 안전(§5.5 Q4).
-- (5) **[Phase 2 열림] MG24 NCP 리플래시 + flow control 정합**: `ncp-uart-hw.slcp`(EFR32MG24=Cortex-M33, GSDK 4.5.0=7.5.1) → `.gbl`, `smhub-flasher`/`universal-silabs-flasher`. **⚠️ 라이브 정본 = z2m `rtscts:false`(no-flow)인데 stock ncp-uart-hw는 RTS/CTS on** → 리플래시 시 flow-control 재조정(no-flow NCP 빌드 vs 양단 RTS/CTS, ttyS1 배선 미검증). 껍데기/브리지 목적이면 불필요(§5.5 Q5).
-- (6) **[새 리포 UX] 버튼(btn_1) 제스처 재활용 vs 벤더 factory-reset**: 앱 10초 롱프레스가 벤더 `smhub-reset-daemon` 10초 factory-reset와 충돌(§3.8). 결정 필요 = ① smhub-reset-daemon/nano-leds OpenRC disable 후 우리 데몬이 btn_1+LED 전담 vs ② 벤더 데몬 유지하고 10회 연타 등 비충돌 제스처만 사용(event0 co-read) vs ③ 우리 factory-reset 의미를 벤더에 위임. LED(led_cus) 소유권도 함께 정리.
+- **libc 두 레인**: musl = 최소 런타임·`homeagentd` 실험 기준선, glibc = Node/Z2M 제품 서비스 후보.
+  N0 실측 전 표준 문서의 제품 libc를 일괄 전환하지 않는다.
+- **SMHub에서 가져오는 것**: 버전·ABI·패키지 구성·서비스 계약·검증 기준. 가져오지 않는 것:
+  벤더 Node ELF, authenticated opkg payload, private serialport shadow package, 비공개 Buildroot diff.
+- **첫 공개 제품 증명**은 Zigbee/HA 호환까지다. Matter는 명시적으로 후속이다.
+- **실행 ≠ 동작**: installed/enabled/running/working을 구분하고 실제 MQTT/serial/radio 왕복으로 판정한다.
+- live IP/MAC/키/네트워크키는 `PRIVATE.md`/gitignored captures에만 둔다. git hook 우회 금지.
 
 # RECENT
 
-- 2026-07-14: **IKEA DIRIGERA 레인 폐기 + Milk-V Duo S(SG2000) 실기 레인 개시 (Phase E 교체).** DIRIGERA는 구매/진행 안 함 — NEXT에서 전부 제거(`docs/HUBS.md`는 랜드스케이프 자료로만 존속). 대신 **Milk-V Duo S(SG2000) 개발보드 입수** → `bsp/` buildroot 레인을 **ARM64 → RISC-V로 전환**(완전 공개 레인, 벤더 OS 의존 0). **SMHub과는 별개 셋업**(커널 6.18·벤더 private, 이미지 비호환) — 공유되는 건 SoC 계열·ISA·musl·부트체인 지식뿐. 실측: SDK 로컬 클론(`~/repos/3rd/milkv/duo-buildroot-sdk-v2`)이 `bsp/setup.sh` pin(`ad920f839`)과 **동일 커밋**, riscv64-musl 툴체인 이미 확보, 6/23 ARM64 eMMC 빌드 산출물 2개 잔존(historical). **RISC-V delta 5줄 확정**(ARCH/CROSS_COMPILE/ENTRY_HACK_ADDR 0x80200000/TOOLCHAIN_MUSL_RISCV64/BOARD) + stock riscv에 남아있던 카메라·패널 4줄은 hub-minimal로 제거 → `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/defconfig` 커밋. **`bsp/build.sh` 잠재 버그 수정**(defconfig `find|head -1`이 커널/u-boot defconfig까지 3개 매칭 → `cvitek_*` 제외·1개 강제). 보드 실측: **eMMC 공장 출하 시 비어 있음** → 전원 인가 시 부트 ROM이 USB 다운로드 모드로 낙하(`CVITEK USB Com Port` cdc_acm 열거 확인), **USB 독/허브 뒤에선 열거 실패(`error -110`) → 노트북 직결 필요**. 굽기 도구는 **Linux용 `usb_dl`이 SDK에 존재**(`build/tools/common/usb_dl/Linux/`) — 공식 문서의 "Windows 전용" 안내는 틀림. microSD 카드 없음 → eMMC 직행. **결과: 같은 날 부팅 성공** — 우리가 빌드한 riscv64 이미지가 실기에서 돌아감(`uname` riscv64, 빌드 타임스탬프·SDK pin 일치, USB-NCM + eth0 DHCP + Wi-Fi 드라이버). 굽기 함정 2개 실측(`-c 181x` / `cdc_acm` 선점) → `bsp/flash-emmc.sh`에 내장. **미해결**: `/dev/ttyUSB0`(CP210x) 시리얼 무응답(UART 배선 미확인 — 콘솔은 `ttyS0,115200`), ION carveout 170MB 낭비, hub-minimal 부분적.
-
-- 2026-07-09: **허브 랜드스케이프 + 단일칩 멀티프로토콜 시점 논리 정리** (방향 레인은 2026-07-14에 폐기, 아래 기술 근거만 durable). `docs/HUBS.md` 신설(허브 SoC/라디오/제품군 조사 자료). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V → **Phase D 정합화 완결(v2026.7.15)**.
-
-- 2026-07-03: **물리 제어면(LED·버튼·GPIO) grounded** → `SMHUB.md §3.8`. **LED=raw GPIO 2개**(`led_pwr`/`led_cus`, gpiochip3=3022000 L16/17, 단색 on/off, libgpiod by-name; 벤더 `nano-leds` 소유), LED class 아님, RGB 없음. **버튼=단일 btn_1**(gpiochip1=3020000 L1) → gpio-keys→event0(evdev co-read 가능). **⚠️ 충돌: 벤더 `smhub-reset-daemon`이 btn_1 감시, `HOLD_SEC=10`→10초 홀드=`factory-reset --force`(와이프)** = 앱 10초 롱프레스와 정면 충돌 → 재활용하려면 smhub-reset-daemon/nano-leds 정지·치환 필수(결정대기 6). 10회 연타는 대체로 안전. 부저=pwmchip0(2kHz).
-- 2026-07-03: **설치면(install surface) grounded** → `SMHUB.md §3.7`. homeagent-config=SMHub 지식 SSOT. 설치면 실측: **rootfs(p5/p6)=ro+A/B OTA 통째 교체→설치 금지**, **p7 USER(5.7G)=유일 rw 지속면(리부트+OTA 생존)**, `/etc`=overlay(upper on p7). OTA=RAUC가 비활성 rootfs/kernel 슬롯만 기록·A↔B 플립, p7 미변경. `firstboot-upgrade`=`opkg configure` 재실행(와이프 없음). 소유권=p7 root소유(sudo 가능, pw=smlight), non-root 쓰기=`/home/smlight`(+`/opt/firmware`). PATH=`/usr/bin:/usr/sbin`(/opt/bin 없음→절대경로). 두 패턴: **(a) ipk+OpenRC(제품화, OTA통합)** / **(b) /home/smlight 사이드카(non-root, derisk)**.
-- 2026-07-03: **RISC-V 자체 펌웨어 실행 derisk 실측** → `SMHUB.md §5.5` + §3.5 보강. **Q1 자원=🟢**(available 216M, z2m node RSS 105.7M, zram 512M swap 0.06% 사용 → 단일 gateway OOM 위험 없음, 빌드 후 RSS 측정 조건). **Q2 지속경로=✅** non-root 쓰기 홈 `/home/smlight`(p7 ext4, 원자 rename 실측 OK; `/etc`·`/mnt/user`·`/var/lib`는 root 소유 불가). **Q3 버전좌표 독립 재확인 통과**(coordinator_backup ezspVersion13+herdsman10.0.7+pan_id e760). **결론: Phase 1 쉘 착수 막는 board blocker 없음.** Q4·Q5는 아래 결정대기(Phase 2).
-- 2026-07-03: **MG24 Zigbee host↔NCP 버전 좌표계 grounded** → `SMHUB.md §2.1`. 호환 계약=**EZSP v13**(NCP EmberZNet 7.4.2 GA ↔ 오픈소스 참조 GSDK 4.5.0=EmberZNet 7.5.1, 둘 다 EZSP 13). 라이브 재확인: `coordinator_backup.json ezspVersion:13`, zigbee-herdsman 10.0.7, z2m 2.10.1, adapter=ember@/dev/ttyS1 115200, ttyS1=z2m(node) 상시 점유(동시접근 불가). 오픈소스 코드레벨 재현 근거=Gecko SDK 4.5.0 `ezsp-host`(ASH/SPI/CPC)+`em260`(NCP)+`zigbeed` — host framework를 riscv64 크로스빌드 작업만 남음.
-- 2026-07-01: **Apps 카탈로그 read-only 회수 + 재현 정책 확정.** Web UI Apps 설치=`opkg install` (벤더 feed `smhub_core`, per-unit `http_auth` 시크릿→captures(gitignored)/PRIVATE). feed에 다중 버전 공존(matterbridge 3.5.4~3.5.5-2, matterbridge-z2m 2.8.0~3.0.6, zwavejsui 11.15~11.21, openthread 0.3.1-3~5, tailscale, picoclaw) = **"Latest" 클릭=비재현**. **정책: 클릭 설치 금지 → 정확 버전 pin + ipk provenance 기록 → 선언적 applier 설치+verify 또는 소스 bake, GLG go 게이트.** 문서 `SMHUB.md §5.2/§9`. 캡처 `apps-catalog-readonly.txt`(secret 마스킹). 캡처 스크립트 `beta5-postcapture-readonly.sh`=순수 read-only(sh -n OK, mutation 0) 검수 완료.
-- 2026-07-01: **beta5 post-capture 완료 — C906L RTOS 스택 라이브 확정.** SSH는 `/tmp/hk` 우회 sshd로 붙음(`.sshkey` 키인증). `remoteproc0` state=running·firmware=smhub-rtos.elf, `/dev/rpmsg{0,1,_ctrl0}`, dmesg rpmsg 채널 `esphome-rpc 0x400`+`smhub-rpc 0x401`, `/run/smhub-broker.sock`(smhub-broker `--ble-mode=hci`, hciattach ttyS4), ELF strings=**C906L RTOS/FreeRTOS/ESPHome 2026.5.3/open-amp `framework-sg2000-rtos`/config `github://smlight-smhub/rtos-config//nano-esphome.yaml@main`**. opkg 정본(esphome-bin·smhub-broker 1.0.3·smhub-services 1.0.4·smhub-ui 1.0.3·z2m 2.10.1). persistence: root=p6 ext4 ro(슬롯 B), **p7=ext4(F2FS 아님, OTA 경로)**, zram0 512M, /etc rw overlay. 커널 REMOTEPROC/RPMSG/MAILBOX/ZRAM/F2FS 활성, riscv64 6.18.17. **EEPROM SSH 지속 가설 반증**(host key 여전히 0바이트). 문서: `SMHUB.md §5.4` 신설 + §3.5/§3.6/§10 정합. 증거 `captures/smhub-beta5-live-20260701T171429+0900/`.
-- 2026-07-01: **OTA 완료 — 0.9.8 → `1.0.0.beta5` 부팅 성공** (Web UI Settings→Update and Restore, ~5–20분 스트리밍 설치). 벤더 매뉴얼 ②A(Update/Restore Methods + External SSH) WebFetch 검토 완료. 로컬 release notes(`~/repos/3rd/milkv/smhub-os-release-notes.org`)에서 **beta line 전모 grounded**: beta1=EEPROM SSH keys 지속·F2FS·zRAM·dual-core RTOS 토대·`smhub-web`→`smhub-ui` 개명, beta2=Recovery Console·PicoClaw·MISC fsck, beta3=**ESPHome on RTOS core + `esphome-bin`·`smhub-broker` 사전설치**·BT proxy·OS+App 채널 lockstep. beta5 라이브 도달성 = ping/80 OK, **SSH 22 refused**(Web UI 활성화 필요, EEPROM 키로 지속 기대). 캡처 스크립트 `scripts/beta5-postcapture-readonly.sh` 준비. **다음**: operator가 Web UI로 SSH 켜면 post-capture 실행 → §5.3 C906L ⚠️/❌ 확정.
-- 2026-07-01: **리부트 boot-start 실측 + SSH host key 문제 규명.** z2m/services/nginx 는 리부트 후 자동 기동(포트 확정) = OpenRC runlevel 제어축. sshd 는 default 등록됐으나 `/etc/ssh/ssh_host_*_key` **0바이트**로 부팅마다 즉사 → SSH 끊김(로그인키 문제 아님). **OpenRC "started" 불신**(sshd·buzzer 죽어도 started 표시). 이전 성공 접속은 `/tmp/hk` 우회 sshd였고 리부트로 소실. Web UI Console은 복붙이 불편하므로 **0.9.8 sshd 수리 보류, OS/펌웨어 업데이트 우선**. 상세 `SMHUB.md §3.6`.
-- 2026-07-01: **SMHub 문서 3종(PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW) → `docs/SMHUB.md` 단일 SSOT로 병합.** 방향을 "버전업 → 실제 코드 → 종합 테스트"로 전환.
-- 2026-07-01: **0.9.8 라이브 무변형 실측** V1~V6 + CONTROL-MAP(DT `smlight,nano`, remoteproc/C906L 부재=beta 라인, opkg≠backend.db.version 4층 확정, 커널 config.gz 부분 확보, ember 라이브). 증거 `captures/smhub-verify-20260701T113514+0900/logs/`.
-- 2026-07-01: 벤더 매뉴얼 B-6(제네릭 문서, 별도 칩 전제 → Nano 미적용) + C Zigbee2MQTT→HA(2연결 모델, z2m update=설치 게이트) 검토. 결과 `SMHUB.md §2/§7`.
-- 2026-06-30: beta5 이미지 정적 추출 → 통제 경계/재현 매트릭스. C906L=RPMsg/remoteproc 표준. 재현 공백 7건=SMLIGHT 연락 후보. 원본 `captures/smhub-beta5-20260630/`(ignored).
-- 2026-06-30: SMHub bring-up, factory 0.9.8 캡처, RISC-V 확인. GPT 교정: zRAM 없음, Node-RED 미실행, 카탈로그≠설치.
+- **2026-07-15 PM 담금질**: 원격 `ff3ba12` fast-forward. SMHub beta5 `user.img`를 read-only로 재확인해
+  Node 22.22.0-2가 **glibc RISC-V**임을 확정했다(74.8MB ELF, `/opt/lib` shared deps). SDK Buildroot Node recipe는
+  22.13.1이나 RISC-V menu/CPU mapping이 닫혀 있고, QEMU user RISC-V와 glibc RISC-V toolchain은 이미 있다.
+  SMHub Z2M 2.10.1은 `@serialport/bindings-cpp` 13.0.1 RISC-V addon을 private shadow tarball로 치환하므로,
+  공개 재현 레인은 addon source build를 별도 게이트로 삼는다.
+- **v2026.7.15**: Duo S RISC-V 자체 이미지 실기 부팅, ARM→RISC-V 문서 전환, ZBDongle-E 7.4.2 펌웨어,
+  `docs/BUILDROOT.md` 추가. 상세 이력은 `CHANGELOG.md`와 `docs/SMHUB.md`.
 
 # LEDGER
 
-- **IKEA DIRIGERA 레인 = 폐기 (2026-07-14, GLG)**: 구매 안 함, 진행 안 함. NEXT에서 제거. `docs/HUBS.md`는 **랜드스케이프 조사 자료로만** 남긴다(우리 방향 아님). `~/repos/3rd/ikea/` 클론도 참고용, 작업 대상 아님.
-- **개발보드 Duo S ≠ 제품 SMHub (섞지 말 것)**: Duo S = Milk-V 개발보드(`bsp/` buildroot 레인, linux 5.10 + CVITEK `rtos_cmdqu`). SMHub = 별도 제품 셋업(벤더 SMHUB OS, mainline 6.18 + remoteproc/rpmsg + RAUC). **이미지 호환 없음.** 이전되는 건 SoC 계열(SG2000)·ISA(riscv64)·libc(musl)·부트체인 지식·툴체인뿐. Duo S엔 MG24 라디오 없음 → Zigbee/EZSP는 SMHub 전용.
-- **ISA 불변식: SG2000은 A53/C906 둘 다 부팅, 제품은 RISC-V**. Duo S는 물리 스위치로 고른다. 진실원 = 부트로그 첫 글자 `C`(RISC-V) / `B`(ARM). arm64 빌드는 historical — 제품 레인 아님. userspace는 **musl**(riscv64-linux-musl)로 제품과 일치시킨다.
-- **단일칩 Zigbee+Thread 동시 = 시점 문제, 지금 안 만듦**: 업계·OHF·벤더 모두 2-라디오/순차. 종착점=Series 3(전용 라디오 코어); MG26=메모리 헤드룸이나 보장 동시는 여전히 2-칩(SLZB-MR4). 지금=각 스택 독립 제어 기반 + 라디오 추상화. (`docs/MULTIPROTOCOL.md`) "one radio, one protocol"은 현시점 스탠스.
-- **허브 아키텍처 class 패턴**: Linux 앱코어 + RTOS 코프로세서 + 외장 EFR32 라디오. SMHub = SG2000(C906B+C906L) + MG24. 이 3분할이 `homeagentd` 설계의 전제.
-- Durable direction: **vendor SMHUB OS unmodified → 검증 → 버전업 → RISC-V Zig `homeagentd` + 선언적 config-set → 종합 테스트.**
-- Core naming: big core **C906B** = RISC-V Linux app core; small core **C906L** = RISC-V RTOS coprocessor / mailbox executor.
-- Runtime ownership: Linux `homeagentd` owns `HubState`; C906L executes bounded actions (`RADIO_RESET`, `LED_SET`, `WATCHDOG_KICK`).
-- Protocol split: Node 생태계 = 프로토콜 무거운 층(Z2M, Matterbridge/matter.js, Node-RED); Zig = tight 하드웨어/상태머신 층.
-- 4층 구분 불변: **catalog ≠ installed(opkg) ≠ enabled(backend.db) ≠ running(OpenRC)**. backend.db.version=seed, opkg=설치 진실원.
-- **OpenRC "started" 는 진실 아님**: sshd·smhub-buzzer 가 started 표시라도 프로세스 죽어있을 수 있음. 진실원 = `pgrep -x`/`ss :22`/`sshd -t`.
-- **접근은 SSH 단일 의존 금지**: Web UI Console(`#/console`, port 80)은 응급 셸이지만 복붙이 불편해 장기 운용면 아님. 필요 시 `/tmp/hk` 우회 sshd를 임시 재현. 표준 SSH = `.sshkey`(client authorized_keys) + host key(server, /etc/ssh, overlay p7) 둘 다 필요.
-- 코드는 Claude가 짓고 GPT엔 검수만. THP23 parked(128MB 하한 증거). secrets/private 좌표 공개 파일 금지.
+- Duo S SDK Linux 5.10 + CVITEK `rtos_cmdqu`와 SMHub Linux 6.18 + remoteproc/rpmsg는 이미지 비호환이다.
+  SMHub는 동작 레퍼런스, Duo S `bsp/`가 공개 빌드 레인이다.
+- RISC-V C906 big core + C906L FreeRTOS + EFR32 radio의 3분할은 유지한다. USB ZBDongle-E는 Duo S 개발 증명용이며
+  최종 제품 형상은 onboard EFR32다.
+- `homeagentd`/C906L 메일박스와 제품화 rootfs는 폐기하지 않는다. 다만 첫 종단 표적은 Node/Z2M/HA 호환이며,
+  각 단계가 닫힐 때 원래 런타임 stem으로 합류한다.

@@ -2,7 +2,7 @@
 
 **Minimal open-source smart-home hub BSP.**
 
-Buildroot · SG2000 (ARM A53) · Zig state machine · C906L FreeRTOS coprocessor · onboard EFR32 · Zigbee · Matter · matter.js · Go · Yocto origin lane
+Buildroot · SG2000 (RISC-V C906) · Zig state machine · C906L FreeRTOS coprocessor · EFR32 radio · Zigbee · Matter · matter.js · Go · Yocto origin lane
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -10,13 +10,13 @@ Buildroot · SG2000 (ARM A53) · Zig state machine · C906L FreeRTOS coprocessor
 
 ## Thesis
 
-HomeAgent is being re-centered from a high-spec RPi5/Yocto/Hailo demo into a **minimal hub BSP** project.
+HomeAgent is being re-centered from a high-spec RPi5/Yocto/Hailo demo into a **minimal hub BSP** project — a reproducible **verification and prototyping ground** across several boards and dev environments. **No business logic lives here**; product logic stays in its own repos.
 
 The work is not to invent a new Matter or Zigbee stack. Buildroot, Linux, Silicon Labs EFR32, Zigbee2MQTT, matter.js, Go, and Flutter already exist. The work here is the wiring:
 
 > boot a small hub-class board with an open image, own the onboard radio, and document a reproducible path from BSP to Matter/Zigbee services.
 
-On SG2000-class hardware the big core is booted in **ARM Cortex-A53 mode**, with a **Zig 100ms hub state machine** on Linux and a **C906L FreeRTOS coprocessor base** owning the real-time pins over the SoC mailbox. This is the public reconstruction of a hub state machine that was previously shipped as proprietary work — the architecture is open even though the production code is not. See [`runtime/README.md`](runtime/README.md).
+On SG2000-class hardware the big core is booted in **RISC-V C906 mode** (`riscv64-linux-musl`), with a **Zig 100ms hub state machine** on Linux and a **C906L FreeRTOS coprocessor base** owning the real-time pins over the SoC mailbox. This is the public reconstruction of a hub state machine that was previously shipped as proprietary work — the architecture is open even though the production code is not. See [`runtime/README.md`](runtime/README.md).
 
 RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js, OTBR, Go controller, Flutter/Lit UI, Hailo/sLLM experiments, and recovery patterns. The current product-size hypothesis is smaller: **SG2000-class, 512MB, onboard EFR32**.
 
@@ -28,17 +28,20 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 |------|-----------|
 | Main lane | minimal hub BSP + runtime stratification |
 | Host | SOPHGO SG2000 / Milk-V Duo S class |
-| Big-core boot | **ARM Cortex-A53, fixed** (not RISC-V) |
+| Big-core boot | **RISC-V C906** — booted on Duo S silicon (2026-07-14) |
 | Runtime | **Zig 100ms state machine on Linux + C906L FreeRTOS mailbox coprocessor base** |
-| Main candidate | SMHUB Nano MG24 |
-| BSP | Buildroot SDK lineage, public baseline first |
+| Core board | **Milk-V Duo S** (SG2000, RISC-V, full-stack ownership) |
+| Commercial reference | **SMHUB Nano MG24** (vendor OS, system-application approach) |
+| BSP | Buildroot SDK lineage, own RISC-V build in-repo (`bsp/`) |
 | RAM target | 512MB-class for Z2M + MQTT + matter.js/Go evidence |
-| Radio | onboard EFR32/Gecko, MG24-class now → **MG26 / Series 3** trajectory ([`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md)) |
+| Radio | Duo S = **USB ZBDongle-E** (EmberZNet 7.4.2); SMHub = onboard EFR32MG24 → **MG26 / Series 3** trajectory ([`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md)) |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching (single-chip concurrent = chip-timing question) |
 | Parked evidence | Tuya THP23-ZB-X / SSD202D / 128MB lower-bound (not active) |
 
-USB coordinators stay useful for proof work, but they are not the final product shape.
-The runtime architecture lives in [`runtime/README.md`](runtime/README.md).
+On the Duo S lane a USB coordinator (ZBDongle-E, version-aligned to the board) is the
+working radio; onboard EFR32 stays the product shape (SMHub). Firmware:
+[`firmware/zbdonglee/`](firmware/zbdonglee/). The runtime architecture lives in
+[`runtime/README.md`](runtime/README.md).
 
 ---
 
@@ -145,7 +148,9 @@ Treat RPi5 deploy and Yocto commands as origin-lane tools unless the task says o
 
 ```text
 homeagent-config/
-├── runtime/                  # SG2000 runtime stratification (main lane: ARM Linux + Zig + C906L)
+├── runtime/                  # SG2000 runtime stratification (main lane: RISC-V Linux + Zig + C906L)
+├── bsp/                      # Duo S RISC-V board configs + build/flash scripts
+├── firmware/                 # radio coordinator firmware (ZBDongle-E, version-aligned)
 ├── go/                       # Go controller / hub surface (origin lane)
 ├── flutter/                  # Flutter client experiments (origin lane)
 ├── ui/                       # Lit frontend (origin lane)

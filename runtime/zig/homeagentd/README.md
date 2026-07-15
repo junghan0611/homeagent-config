@@ -1,11 +1,11 @@
 # homeagentd — L3 Zig hub state machine
 
-**Scope (fixed): SG2000-class only — Milk-V Duo S / SMHUB Nano MG24, ARM Cortex-A53 boot.**
+**Scope (fixed): SG2000-class only — Milk-V Duo S / SMHUB Nano MG24, RISC-V C906 boot (`riscv64-linux-musl`).**
 This is the one runtime we push forward. It is not a portable abstraction over every
 board; it is the deterministic hub loop for this hardware lane. Architecture context:
 [`../../README.md`](../../README.md).
 
-`homeagentd` is the L3 application-core runtime: a Zig process on ARM Linux that wakes
+`homeagentd` is the L3 application-core runtime: a Zig process on RISC-V C906 Linux that wakes
 on a fixed cadence or event edge, reasserts hub identity, observes radio / network /
 device state, advances bounded state transitions, emits commands, and returns to idle.
 

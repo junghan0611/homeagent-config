@@ -1,4 +1,4 @@
-# HomeAgent Runtime Stratification — ARM Linux + Zig state machine + C906L coprocessor
+# HomeAgent Runtime Stratification — RISC-V Linux + Zig state machine + C906L coprocessor
 
 This document is the **architecture center** for the SG2000 hub lane. It is the
 public-portfolio reconstruction of a hub runtime that was previously built and
@@ -6,7 +6,7 @@ shipped as proprietary work: a deterministic Zig state machine on an embedded
 SigmaStar-class platform. The production repository is closed; the *architecture
 idea* is not. HomeAgent rebuilds that idea in the open.
 
-The showcase target of this lane is a clean, public **ARM Linux ↔ C906L FreeRTOS
+The showcase target of this lane is a clean, public **RISC-V Linux ↔ C906L FreeRTOS
 mailbox integration base** — not a benchmark, but a readable reference for how a
 hub splits its life across an application core and a real-time coprocessor.
 
@@ -27,41 +27,41 @@ where 512MB RAM, eMMC, and a multi-core SoC make a product-shaped hub realistic.
 
 ---
 
-## Decision: boot SG2000 in ARM mode
+## Decision: boot SG2000 in RISC-V C906 mode
 
-SG2000 / Duo S can boot its big core (**C906B**) as **RISC-V (C906B) or ARM
-(Cortex-A53)**. For HomeAgent the big core is **fixed to ARM A53**. The small
-real-time core (**C906L**) always runs FreeRTOS — that is HomeAgent's L2
-coprocessor base, distinct from the big-core C906B RISC-V app lane.
+SG2000 / Duo S can boot its big core as **RISC-V (C906B) or ARM (Cortex-A53)**, selected
+by an on-board switch. For HomeAgent the big core is booted as **RISC-V C906** — the
+runtime target is `riscv64-linux-musl`, so RISC-V is not an experiment here, it is the
+product ISA. The other small real-time core (**C906L**) always runs FreeRTOS as
+HomeAgent's L2 coprocessor base, independent of the big-core choice.
 
-| Reason | Why ARM A53 wins for this hub |
-|--------|-------------------------------|
-| Package ecosystem | Node.js, Zigbee2MQTT, Matter, Go, Rust, Zig, Python are less awkward on aarch64 |
-| Debugging | aarch64 embedded Linux is a well-trodden field path |
-| Portability | connects cleanly to the RPi5/OPi5 high-spec origin lane |
-| Tooling | Matter/Thread/Zigbee surrounding tools are more realistic on ARM |
-| Portfolio read | "product-shaped ARM Linux hub", not "rare-ISA experiment" |
+**First silicon (2026-07-14):** our own Buildroot image booted the C906 in RISC-V mode on
+a Duo S — `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, our defconfig, eth0 DHCP
++ Wi-Fi up. Detail in [`../NEXT.md`](../NEXT.md) (Phase E) and `captures/`.
 
-RISC-V is interesting, but the center of this portfolio is **product-shaped local
-hub optimization**, not exotic-ISA novelty. The C906L small core still matters — just as
-the **real-time / always-on layer below Linux**, not as the application head.
+| Reason | Why RISC-V C906 for this hub |
+|--------|------------------------------|
+| Product ISA match | the runtime target is `riscv64-linux-musl`; SMHub (the commercial reference) also boots C906/RISC-V, so dongle, board, and runtime share one ISA |
+| Open all the way down | RISC-V closes the open-ISA loop (ISA → bootloader → kernel → runtime → agent surface) that a licensed ISA cannot |
+| The gap is the portfolio | measuring the riscv64 toolchain / package maturity (Node, Zig, `musl`, T-Head extensions) on real silicon *is* the content, not a footnote |
+| We own the whole image | Duo S is a pure dev board — Buildroot → OpenSBI/U-Boot → Linux → rootfs → FreeRTOS, all ours |
 
-How ARM boot is selected and verified (from the Milk-V docs):
+ARM A53 is not dismissed — it stays a **historical comparison build** (`out/…-arm64-…`),
+useful to diff toolchain and ecosystem friction. But the active lane, and the product, are
+RISC-V; ARM gives open *software* on a licensed ISA, which is exactly why owning the open
+*ISA* is the point.
 
-- **Build**: SDK V2 supports both cores (recommended for Duo S). Pick an **`arm64`
-  board config** in `build.sh` (board names carry `-arm64-`, e.g. the published
-  `milkv-duo256m-glibc-arm64-sd`); Docker build is recommended.
-- **Physical switch**: Duo S selects RISC-V vs ARM with an **on-board switch** — it must
-  match the firmware, or the board will not boot.
-- **Verify**: the **first line of the boot log** starts with `B` for the ARM core and
-  `C` for the RISC-V core. Phase 0 success = a `B` boot log.
+How RISC-V boot is selected and verified (from the Milk-V docs):
 
-RISC-V is not dismissed — it is kept as a **future open-ISA comparison lane**, because the
-same SoC opens it for the price of a boot switch and a second rootfs. ARM gives open
-software on a licensed ISA; the RISC-V option closes the **"open all the way down"** loop
-(open ISA → open bootloader → open kernel → open runtime → open A2A/A2UI agent surface)
-that the rest of this project already lives by. Rationale and the roadmap placement are in
-[`../ROADMAP.md`](../ROADMAP.md) (*ISA Lanes*). For the product runtime now, ARM is fixed.
+- **Build**: SDK V2 supports both cores. Our in-repo board configs
+  `../bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/` pin RISC-V + `musl` + a hub-minimal
+  delta; Docker build.
+- **Physical switch**: Duo S selects RISC-V vs ARM with an **on-board switch** (`RV`
+  position) — it must match the firmware, or the board will not boot.
+- **Verify**: the **first line of the boot log** is `C` for the RISC-V core (`B` = ARM).
+  Boot success = a `C` boot log, confirmed on silicon.
+
+Rationale and roadmap placement: [`../ROADMAP.md`](../ROADMAP.md) (*ISA: RISC-V now*).
 
 ---
 
@@ -72,8 +72,8 @@ Linux blob.
 
 | Layer | Where it runs | Responsibility |
 |-------|---------------|----------------|
-| **L4** Agent / orchestration | ARM Linux | HomeAgent policy, local API, logs, cloudless orchestration, garden/agent connection |
-| **L3** Application | ARM Cortex-A53 Linux | `homeagentd` (Zig), MQTT, Zigbee2MQTT, Matterbridge / matter.js, update / storage / SSH |
+| **L4** Agent / orchestration | RISC-V C906 Linux | HomeAgent policy, local API, logs, cloudless orchestration, garden/agent connection |
+| **L3** Application | RISC-V C906 Linux | `homeagentd` (Zig), MQTT, Zigbee2MQTT, Matterbridge / matter.js, update / storage / SSH |
 | **L2** Real-time control | C906L FreeRTOS small core | 100ms tick, heartbeat, watchdog, LED/button, radio reset, MG24 bootloader pins |
 | **L1** Always-on | 8051 RTC domain | sleep/wake, RTC, power state, emergency recovery (future) |
 | **L0** Radio | EFR32MG24 | Zigbee NCP **or** Thread RCP, firmware-switched |
@@ -95,7 +95,7 @@ assert / emit         = heartbeat / event emission
 sleep                 = low-power / bounded loop
 ```
 
-As a loop on ARM Linux:
+As a loop on RISC-V Linux:
 
 ```zig
 while (true) {
@@ -133,11 +133,11 @@ if needed, issue a recovery command
 
 ## L2 — the C906L FreeRTOS integration base (the showcase)
 
-This is the part of the lane meant to be a **great public base**: the ARM Linux
+This is the part of the lane meant to be a **great public base**: the RISC-V C906 Linux
 application core and the C906L FreeRTOS small core cooperating over the SoC
 **mailbox**.
 
-Big core (ARM Linux) does the thinking:
+Big core (RISC-V C906 Linux) does the thinking:
 
 ```text
 Zigbee / Matter / MQTT state
@@ -164,7 +164,7 @@ fail-safe fallback
 Wiring:
 
 ```text
-homeagentd.zig  (ARM Linux, L3)
+homeagentd.zig  (RISC-V C906 Linux, L3)
       │  mailbox commands
       ▼
 rtos-agent      (C906L FreeRTOS, L2)
@@ -201,7 +201,7 @@ everything else is asleep: sleep/wake conditions, RTC, power state, emergency
 recovery. It is the hub's autonomic nervous system.
 
 It is **too low to host the application** and is deliberately deferred. Early
-portfolio value is fully carried by **ARM A53 + C906L + MG24**; 8051 is documented
+portfolio value is fully carried by **RISC-V C906 + C906L + MG24**; 8051 is documented
 as a future recovery layer, not a Phase-1 task. Starting point when it is time:
 `milkv-duo/duo-8051` (SDCC build; SRAM-mode firmware ≤ 8KB; its own Mailbox IP).
 
@@ -213,12 +213,12 @@ The base is **`milkv-duo/duo-buildroot-sdk-v2` (`develop` branch)**. It carries 
 **whole boot chain in one tree** — `fsbl`, `opensbi`, `u-boot-2021.10`, `linux_5.10`,
 `ramdisk`, and crucially **`freertos`** for the C906L small core (the L2 mailbox base
 starts here). We boot the **Milk-V Duo S dev board** from the bootloader up on this SDK
-first, in ARM A53 mode.
+in RISC-V C906 mode (**achieved 2026-07-14**).
 
 Both boards were bought: **Milk-V Duo S (dev)** and **SMHUB Nano MG24 (product)**. The
 SMHUB Nano is a Duo S / SG2000 product, but SMLIGHT does **not** ship the vendor SDK as
-is — they run a **separate, more mainline product Buildroot set**. From the SMHUB-OS
-release notes:
+is — they run a **separate, more mainline product Buildroot set** we read and diff as a
+system-application developer (not rebuild). From the SMHUB-OS release notes:
 
 | Layer | Milk-V dev SDK (`duo-buildroot-sdk-v2` develop) | SMHUB Nano product (SMLIGHT) |
 |-------|--------------------------------------------------|-------------------------------|
@@ -245,13 +245,13 @@ Reference clones (local, `~/repos/3rd/milkv/`, not vendored into this repo):
 
 ## Phased plan (hardware-gated)
 
-Boards are on the way; nothing here requires them until Phase 0.
+Boards are in hand; Phase 0 is done (Duo S RISC-V boot, 2026-07-14).
 
 | Phase | Name | Goal |
 |------:|------|------|
-| 0 | **ARM boot lane fixed** | Build `duo-buildroot-sdk-v2` (develop) for Duo S in ARM A53 mode; serial boot log, `uname`/arch, eMMC layout, package manager, GPIO/UART/MG24 device visible |
+| 0 | **RISC-V boot lane (done)** | Own RISC-V C906 image for Duo S from SDK v2 lineage; serial boot log `C`, `uname` riscv64, eMMC layout, USB-download flash — **verified on silicon 2026-07-14** |
 | 1 | **Zig `homeagentd`** | 100ms tick, state table, event queue, MQTT in/out, MG24 presence check, watchdog heartbeat |
-| 2 | **C906 mailbox base** | ARM ↔ C906L FreeRTOS mailbox (`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — the public showcase |
+| 2 | **C906 mailbox base** | RISC-V C906 ↔ C906L FreeRTOS mailbox (`LED_SET`/`RADIO_RESET`/`WATCHDOG_KICK`/…) — the public showcase |
 | 3 | **8051 always-on** | sleep/wake + RTC + emergency recovery (later) |
 
 Do not pull all of Matter in at Phase 1. Start from the well-understood state
@@ -274,7 +274,7 @@ THP23-ZB-X (public)
   - bring-up / NAND / UART discovery proof (parked, not active)
 
 SMHUB Nano MG24 / Milk-V Duo S (public, active)
-  - SG2000 / ARM A53 / 512MB / EFR32MG24
+  - SG2000 / RISC-V C906 / 512MB / EFR32MG24
   - Zig HomeAgent runtime + C906L FreeRTOS coprocessor base
   - product-shaped minimal open hub
 ```
@@ -284,7 +284,7 @@ One sentence:
 > Previously I built and shipped a Zig-based Zigbee hub as a deterministic state
 > machine on an embedded SigmaStar-class platform. Because the production
 > repository is proprietary, HomeAgent reconstructs the same architecture in
-> public: an ARM Linux smart-home hub where a Zig runtime is the 100ms hub state
+> public: a RISC-V Linux smart-home hub where a Zig runtime is the 100ms hub state
 > machine, while SG2000's C906L FreeRTOS / 8051 cores and the EFR32MG24 radio form
 > the lower control, recovery, and radio layers.
 

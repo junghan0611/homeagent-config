@@ -4,18 +4,19 @@
 
 ---
 
-## Target Strategy (2026-06-23)
+## Target Strategy (2026-07-15)
 
 | Axis | Current value |
 |------|---------------|
-| Main lane | **minimal open hub BSP + runtime stratification** |
+| Main lane | **minimal open hub BSP + runtime stratification** (verification/prototyping ground, no business logic) |
 | Host class | SOPHGO **SG2000** / Milk-V Duo S class |
-| Big-core boot | **ARM Cortex-A53, fixed** (not RISC-V) |
-| Runtime | **Zig 100ms `homeagentd` on Linux + C906L FreeRTOS mailbox coprocessor base** |
-| Main candidate | **SMHUB Nano MG24** |
-| Public BSP base | Milk-V Duo **Buildroot SDK v2** |
+| Big-core boot | **RISC-V C906** — booted on Duo S silicon (2026-07-14) |
+| Runtime | **Zig 100ms `homeagentd` on Linux + C906L FreeRTOS mailbox coprocessor base** (target `riscv64-linux-musl`) |
+| Core board | **Milk-V Duo S** (RISC-V, full-stack: own Buildroot → boot → rootfs → runtime) |
+| Commercial reference | **SMHUB Nano MG24** (vendor SMHUB OS, system-application approach) |
+| Public BSP base | Milk-V Duo **Buildroot SDK v2** → own RISC-V build in `bsp/` |
 | RAM target | **512MB-class** for Z2M + MQTT + matter.js/Go measurement |
-| Radio | **onboard EFR32/Gecko**, preferably MG24-class |
+| Radio | Duo S = **USB ZBDongle-E** (EmberZNet 7.4.2); SMHub = onboard **EFR32MG24** |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching |
 | Parked evidence | Tuya THP23-ZB-X / SSD202D / 128MB lower-bound (not active) |
 | Preserved lane | RPi5/Yocto/Hailo/RK evidence as high-spec origin |
@@ -25,8 +26,8 @@
 
 | Device | SoC | RAM | BSP / OS path | Radio | Role | State |
 |--------|-----|-----|---------------|-------|------|-------|
-| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (ARM A53 boot + C906L RTOS) | 512MB-class | `duo-buildroot-sdk-v2` | board-dependent | active BSP + runtime build board | ordered / pending |
-| **SMHUB Nano MG24** | SOPHGO SG2000 (ARM A53 boot + C906L RTOS) | 512MB | vendor image unknown; use public SG2000 baseline first | EFR32MG24 | primary product-shaped minimal hub | ordered / pending |
+| **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (RISC-V C906 boot + C906L RTOS) | 512MB (323MB usable pre-ION-reclaim) | own `bsp/` RISC-V Buildroot (SDK v2 lineage) | USB ZBDongle-E | **core lane** — full-stack build board | **in hand, RISC-V boot verified 2026-07-14** |
+| **SMHUB Nano MG24** | SOPHGO SG2000 (RISC-V C906 boot + C906L RTOS) | 512MB / 8GB eMMC | vendor SMHUB OS (mainline 6.18 + RAUC A/B); system-app approach | onboard EFR32MG24 (ember, EmberZNet 7.4.2 / EZSP 13) | commercial reference | **in hand, OTA beta5 verified** |
 | **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research (parked) | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 8GB | Yocto Scarthgap | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4GB | Yocto Scarthgap, mainline 6.14 | USB EFR32 proof | lab target | SSH/GPU/HDMI verified, NPU parked |
@@ -41,9 +42,9 @@
 | Public SDK | <https://github.com/milkv-duo/duo-buildroot-sdk-v2> (`develop`: linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos) |
 | Docs | <https://milkv.io/docs/duo/getting-started/buildroot-sdk> |
 | SMHUB product reference | mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — diff target (see `runtime/README.md`) |
-| First proof | dev SDK (develop) ARM A53 image build, boot log, serial recovery |
+| First proof | **done (2026-07-14)** — own RISC-V C906 image (`riscv64-musl`), booted on silicon, eth0 DHCP + Wi-Fi (aic8800) |
 | Second proof | minimal packages for MQTT / radio / Zigbee2MQTT / matter.js |
-| Device facts | record here after hardware arrives |
+| Device facts | Duo S live boot: `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, eMMC 7.3G (p4 rootfs 768M) — see `captures/` |
 
 Policy:
 
@@ -60,8 +61,8 @@ Policy:
 | Chip family | Silicon Labs EFR32/Gecko |
 | Preferred class | EFR32MG24 for flash/RAM headroom |
 | Existing proof | SONOFF ZBDongle-E / EFR32MG21 |
-| Final shape | onboard radio module |
-| USB dongles | proof/origin tools only |
+| Duo S radio | **USB ZBDongle-E**, flashed to match board (EmberZNet 7.4.2 / EZSP 13) — `firmware/zbdonglee/` |
+| Final product shape | onboard radio module (SMHub EFR32MG24) |
 | Zigbee | NCP / EmberZNet-style path |
 | Matter/Thread | RCP / OpenThread path |
 | Concurrency | no Zigbee + Thread simultaneous assumption |
@@ -70,10 +71,11 @@ Known proof radios:
 
 | Device | Chip | Role | Firmware | State |
 |--------|------|------|----------|-------|
-| SONOFF ZBDongle-E | EFR32MG21 | Thread RCP proof | `ot-rcp-v2.4.5.0-zbdonglee-460800.gbl` (baudrate 460800) | verified USB origin tool |
-| SONOFF ZBDongle-E | EFR32MG21 | Zigbee NCP proof | EmberZNet (Sonoff Zigbee 3.0 USB Dongle Plus V2) | available proof path |
-| SMHUB Nano MG24 | EFR32MG24 | target onboard radio | TBD after arrival | pending arrival |
-| THP23-ZB-X | EFR32/Gecko-class | in-hand onboard radio to identify | TBD | in hand |
+| SONOFF ZBDongle-E | EFR32MG21 | Zigbee NCP (Duo S lane) | `zbdonglee_zigbee_ncp_7.4.2.0_hw_flow_115200.gbl` (EmberZNet 7.4.2 / EZSP 13, 115200, `rtscts:false`) | in-repo `firmware/zbdonglee/`, board-aligned |
+| SONOFF ZBDongle-E | EFR32MG21 | Zigbee NCP (newer) | `zbdonglee_zigbee_ncp_8.0.3.0_sw_flow_115200.gbl` | in-repo `firmware/zbdonglee/` |
+| SONOFF ZBDongle-E | EFR32MG21 | Thread RCP | `zbdonglee_openthread_rcp_2.5.3.0_no_flow_460800.gbl` (460800) | in-repo `firmware/zbdonglee/` |
+| SMHUB Nano MG24 | EFR32MG24 | onboard coordinator | ember, EmberZNet **7.4.2 [GA]** / EZSP 13 (live verified) | in hand |
+| THP23-ZB-X | EFR32/Gecko-class | parked onboard radio | TBD | in hand (parked) |
 
 Firmware files are part of the firmware-switching record; keep exact filenames and baudrates here, not just generic stack names.
 

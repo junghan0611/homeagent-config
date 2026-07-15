@@ -2,7 +2,7 @@
 
 이 문서는 HomeAgent의 **현재 보드/라디오 전략**이다. 예전 Hailo/RK 보드 탐색 메모가 아니라, 지금 작업의 기준점이다.
 
-HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동했다. RPi5/Yocto/Hailo는 origin/high-spec lane으로 보존하고, 제품 크기의 현재 가설은 SG2000 + 온보드 EFR32 라디오다.
+HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동했다. RPi5/Yocto/Hailo는 origin/high-spec lane으로 보존하고, 현재 코어 레인은 **Milk-V Duo S (SG2000, RISC-V C906) 풀스택 소유**다. SMHub Nano(온보드 EFR32MG24)는 상용 레퍼런스로 비교하고, Duo S는 온보드 라디오가 없어 **USB ZBDongle-E**로 Zigbee/Matter를 붙인다.
 
 ---
 
@@ -10,14 +10,14 @@ HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동�
 
 | Axis | Decision |
 |------|----------|
-| Main target | **SMHUB Nano MG24 / SOPHGO SG2000 class** |
-| Active build lane | **Milk-V Duo S** — public Buildroot SDK v2 + the board the runtime gets built on |
-| **Big-core boot mode** | **ARM Cortex-A53, fixed** (not RISC-V) — see [`../runtime/README.md`](../runtime/README.md) |
-| Public BSP reference | **Milk-V Duo Buildroot SDK v2** (`milkv-duo/duo-buildroot-sdk-v2`) |
+| Core lane | **Milk-V Duo S (SOPHGO SG2000, RISC-V C906)** — own Buildroot build, full-stack |
+| Commercial reference | **SMHUB Nano MG24** — vendor SMHUB OS, system-application approach |
+| **Big-core boot mode** | **RISC-V C906** — booted on Duo S silicon (2026-07-14); see [`../runtime/README.md`](../runtime/README.md) |
+| Public BSP reference | **Milk-V Duo Buildroot SDK v2** (`milkv-duo/duo-buildroot-sdk-v2`) → own RISC-V build in `../bsp/` |
 | Minimum RAM class | **512MB** for Zigbee2MQTT + MQTT + matter.js/Go experiments |
-| Radio | **Onboard Silicon Labs EFR32/Gecko**, preferably MG24-class |
+| Radio | Duo S = **USB ZBDongle-E** (EmberZNet 7.4.2); SMHub = onboard EFR32MG24 |
 | Protocol posture | Zigbee NCP **or** Thread RCP by firmware switching; no concurrent assumption |
-| USB coordinator | Proof/origin tool only, not final product shape |
+| USB coordinator | Duo S working radio (no onboard MG24); dev/proto, not the final product radio |
 | Parked evidence board | Tuya THP23-ZB-X / SSD202D / 128MB — 128MB lower-bound evidence only, **not active** |
 
 ---
@@ -37,8 +37,8 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 
 | Board | SoC | CPU | RAM / storage | Radio | Role | Status |
 |------|-----|-----|---------------|-------|------|--------|
-| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906L RTOS coprocessor | 512MB-class | board-dependent | active BSP + runtime build board | delivery pending |
-| **SMHUB Nano MG24** | **SOPHGO SG2000** | A53 (ARM boot, fixed) + C906L RTOS coprocessor | **512MB / 8GB eMMC** | **EFR32MG24** | primary product-shaped minimal hub | delivery pending |
+| **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | C906 (RISC-V boot) + C906L RTOS coprocessor | 512MB-class | USB ZBDongle-E | **core lane** — full-stack build board | in hand, RISC-V boot verified 2026-07-14 |
+| **SMHUB Nano MG24** | **SOPHGO SG2000** | C906 (RISC-V boot) + C906L RTOS coprocessor | **512MB / 8GB eMMC** | **onboard EFR32MG24** | commercial reference (vendor OS) | in hand, OTA beta5 verified |
 | **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 4×A76 | 8GB | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4×A76 + 4×A55 | 4GB | USB EFR32 proof | lab target | SSH/GPU verified |
@@ -50,7 +50,7 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 SG2000 is a practical middle point for a small hub:
 
 1. **512MB RAM** — enough room to test Zigbee2MQTT, MQTT, matter.js, and a small Go bridge without pretending a 128MB ceiling is enough.
-2. **64-bit ARM** — the big core is booted in **ARM Cortex-A53 mode** (RISC-V boot is available but not used for the hub runtime), making newer Linux/userland paths less awkward than ARMv7-only parts. The C906L RISC-V small core is kept as the real-time / always-on coprocessor layer. See [`../runtime/README.md`](../runtime/README.md).
+2. **64-bit RISC-V** — the big core is booted in **RISC-V C906 mode** (`riscv64-linux-musl`), matching the product / SMHub ISA; the riscv64 toolchain and package maturity measured on the way *is* the portfolio content. The other C906L RISC-V small core stays the real-time / always-on coprocessor layer. (ARM A53 boot is available and kept only as a historical comparison build.) See [`../runtime/README.md`](../runtime/README.md).
 3. **Public SDK path** — Milk-V Duo Buildroot SDK v2 gives a starting point even if a commercial hub ships a different private image.
 4. **Hub-shaped I/O** — Ethernet/PoE/WiFi/eMMC-class integration is closer to a product hub than a loose dev-board stack.
 
@@ -58,7 +58,7 @@ SG2000 is a practical middle point for a small hub:
 
 ## 128MB Ceiling — THP23-ZB-X (parked)
 
-Tuya THP23-ZB-X is in hand, but it is **no longer the active bring-up lane**. It is kept only as **128MB lower-bound evidence**: proof of how far an open Linux hub *can* be liberated at the bottom of the spec range. Active Tuya liberation work is parked; the runtime lane is SG2000-class (Milk-V Duo S / SMHUB Nano MG24) on the ARM boot lane.
+Tuya THP23-ZB-X is in hand, but it is **no longer the active bring-up lane**. It is kept only as **128MB lower-bound evidence**: proof of how far an open Linux hub *can* be liberated at the bottom of the spec range. Active Tuya liberation work is parked; the runtime lane is SG2000-class (Milk-V Duo S / SMHUB Nano MG24) on the RISC-V C906 boot lane.
 
 | Item | Implication |
 |------|-------------|
@@ -92,7 +92,7 @@ Expected outcome:
 | SONOFF ZBDongle-E | EFR32MG21 | Thread RCP proof | verified as USB origin tool |
 | SONOFF ZBDongle-E | EFR32MG21 | Zigbee NCP proof | available proof path |
 
-USB dongles are still useful for firmware and protocol proof. The current target is **onboard EFR32**, not a product that requires a dangling USB coordinator.
+USB dongles are the working radio on the Duo S dev lane (no onboard MG24), version-aligned to the SMHub board (EmberZNet 7.4.2 / EZSP 13). The **product** target is **onboard EFR32** (SMHub); a shipped hub should not require a dangling USB coordinator.
 
 ### Product-shaped candidates
 
@@ -119,7 +119,7 @@ Public reference:
 
 Initial BSP goals:
 
-1. Build the dev SDK (develop) for Duo S in **ARM A53 mode**, bootloader up.
+1. Build our RISC-V C906 image for Duo S from the dev SDK lineage, bootloader up. **(done 2026-07-14)**
 2. Confirm boot log, kernel version, rootfs layout, package manager story, and serial recovery.
 3. Diff against the SMHUB Nano product (mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11) to learn product tuning — only after the dev SDK baseline is understood.
 4. Add only the minimum packages needed for radio and service proof.

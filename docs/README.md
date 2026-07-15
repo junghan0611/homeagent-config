@@ -15,7 +15,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | Doc | Role | Read when |
 |-----|------|-----------|
 | [`../VERSION.md`](../VERSION.md) | stack / version / physical device matrix | checking current board/runtime state |
-| [`../runtime/README.md`](../runtime/README.md) | ARM Linux + Zig state machine + C906L coprocessor architecture | the SG2000 runtime center (ARM boot, L0–L4, C906 base) |
+| [`../runtime/README.md`](../runtime/README.md) | RISC-V Linux + Zig state machine + C906L coprocessor architecture | the SG2000 runtime center (RISC-V C906 boot, L0–L4, C906 base) |
 | [`TARGET_DEVICE.md`](TARGET_DEVICE.md) | board and radio strategy details | SG2000 / SSD202D / EFR32 decisions |
 | [`THP23-LIBERATION.md`](THP23-LIBERATION.md) | THP23-ZB-X liberation research (parked 128MB evidence) | reference for the parked 128MB lower-bound lane |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | ADRs and structure decisions | changing process/backend boundaries |
@@ -47,4 +47,4 @@ These are not first-read docs for new work:
 
 ## Current Direction
 
-HomeAgent is a **minimal open hub BSP** project first. The active runtime lane is SG2000 / Milk-V Duo S / SMHUB Nano class on the **ARM Cortex-A53 boot mode**, with a **Zig 100ms state machine on Linux + a C906L FreeRTOS mailbox coprocessor base** (see `../runtime/README.md`), onboard EFR32, and Buildroot lineage. Tuya THP23-ZB-X is parked as 128MB lower-bound evidence. RPi5/Yocto/Hailo, OPi5, and Android/RK work remain preserved origin or compatibility evidence.
+HomeAgent is a **minimal open hub BSP** project first — a reproducible verification/prototyping ground with **no business logic**. The core lane is **Milk-V Duo S (SG2000, RISC-V C906)**, booted on real silicon from our own Buildroot image (full-stack ownership), with a **Zig 100ms state machine on Linux + a C906L FreeRTOS mailbox coprocessor base** (see `../runtime/README.md`) and radio via **USB ZBDongle-E**. **SMHUB Nano MG24** is the commercial reference (vendor OS, system-application approach, onboard EFR32MG24). Both are SG2000/riscv64; their images are not interchangeable. Tuya THP23-ZB-X is parked as 128MB lower-bound evidence. RPi5/Yocto/Hailo, OPi5, and Android/RK work remain preserved origin or compatibility evidence.

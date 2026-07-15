@@ -9,7 +9,7 @@ HomeAgent는 **미니멀 스펙 오픈소스 hub BSP** 리포다. 목표는 닫�
 
 RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, matter.js, Go controller, Flutter, Hailo/sLLM을 검증한 **high-spec origin lane**이다. 현재 제품 크기의 중심은 **SG2000 / SMHUB Nano / Milk-V Duo S / 512MB / onboard EFR32** 쪽이다.
 
-**런타임 중심축 (2026-06-23)**: SG2000/Duo S는 **ARM Cortex-A53 boot lane으로 고정**(RISC-V 아님). 그 위에 **Zig 100ms 상태머신 `homeagentd`**, 그 아래에 **C906 FreeRTOS mailbox 코프로세서**를 둔다. 공개 쇼케이스 베이스는 이 **ARM Linux ↔ C906 mailbox 연동**이다. Tuya THP23-ZB-X는 능동 작업이 아니라 **128MB 하한 증거로만 보존**한다. 상세: `runtime/README.md`.
+**런타임 중심축 (2026-07-15)**: SG2000/Duo S는 **RISC-V C906 boot lane**(제품 ISA; 런타임 타깃 `riscv64-linux-musl`, 2026-07-14 실기 부팅 확인). 그 위에 **Zig 100ms 상태머신 `homeagentd`**, 그 아래에 **C906L FreeRTOS mailbox 코프로세서**를 둔다. 공개 쇼케이스 베이스는 이 **RISC-V Linux ↔ C906L mailbox 연동**이다. arm64 빌드는 historical(제품 아님). Tuya THP23-ZB-X는 능동 작업이 아니라 **128MB 하한 증거로만 보존**한다. 상세: `runtime/README.md`.
 
 살아있는 문서 세트는 `README.md`, `AGENTS.md`, `NEXT.md`, `CHANGELOG.md`, `ROADMAP.md`다. 장비·버전·스택 상태는 `VERSION.md`로 합친다. br/beads는 폐기되었고 다시 도입하지 않는다.
 
@@ -35,9 +35,9 @@ Keep this repo focused on the hub: Linux host, onboard radio, protocol bridge, r
 | `CHANGELOG.md` | closed work, CalVer release notes |
 | `ROADMAP.md` | phase direction and open lanes |
 | `VERSION.md` | stack, version, physical device matrix |
-| `runtime/README.md` | SG2000 runtime architecture (ARM boot, L0–L4, Zig + C906); front-door for `runtime/` code |
+| `runtime/README.md` | SG2000 runtime architecture (RISC-V C906 boot, L0–L4, Zig + C906L); front-door for `runtime/` code |
 | `docs/TARGET_DEVICE.md` | board/radio strategy details |
-| `docs/HUBS.md` | 인증 Zigbee/Matter 허브 랜드스케이프 (IKEA DIRIGERA 주력), SoC/라디오 비교, 지원 제품군 |
+| `docs/HUBS.md` | 인증 Zigbee/Matter 허브 랜드스케이프 (조사 자료 — 우리 방향 아님), SoC/라디오 비교, 지원 제품군 |
 | `docs/MULTIPROTOCOL.md` | 단일 라디오 Zigbee+Thread 동시 — 전략·시점 (MG21/24/26 → Series 3). "언제 단일칩으로 가나" |
 | `docs/README.md` | docs map |
 
@@ -49,8 +49,8 @@ If a detail will go stale quickly, keep it out of `AGENTS.md`. Put it in `NEXT.m
 
 Prefer work that strengthens:
 
-- Buildroot / BSP bring-up for SG2000-class hubs on the **ARM A53 boot lane**.
-- The **ARM Linux ↔ C906 FreeRTOS mailbox base** as a clean, readable public reference.
+- Buildroot / BSP bring-up for SG2000-class hubs on the **RISC-V C906 boot lane**.
+- The **RISC-V Linux ↔ C906L FreeRTOS mailbox base** as a clean, readable public reference.
 - Zig 100ms `homeagentd` state machine (timerfd/epoll, bounded transitions).
 - Onboard EFR32 detection, reset, bootloader, and firmware switching.
 - Zigbee NCP or Thread RCP proof on one radio, one protocol at a time.

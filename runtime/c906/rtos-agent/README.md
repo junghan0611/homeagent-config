@@ -3,20 +3,20 @@
 **Scope (fixed): SG2000-class only — Milk-V Duo S / SMHUB Nano MG24.**
 Architecture context: [`../../README.md`](../../README.md).
 
-This is the part of the lane meant to be a clean, readable **public base**: the ARM
-Linux application core (`../../zig/homeagentd`) and the C906 FreeRTOS small core
+This is the part of the lane meant to be a clean, readable **public base**: the RISC-V
+C906 Linux application core (`../../zig/homeagentd`) and the C906L FreeRTOS small core
 cooperating over the SoC **mailbox**. The goal is reproducible and readable, not clever.
 
 ## Split of work
 
-Big core (ARM Linux, L3) does the thinking; small core (C906 FreeRTOS, L2) does short,
+Big core (RISC-V C906 Linux, L3) does the thinking; small core (C906L FreeRTOS, L2) does short,
 hard, deterministic work:
 
 ```text
-homeagentd (ARM Linux, L3)
+homeagentd (RISC-V C906 Linux, L3)
       │  mailbox commands
       ▼
-rtos-agent (C906 FreeRTOS, L2)
+rtos-agent (C906L FreeRTOS, L2)
       │  GPIO / reset / LED / watchdog
       ▼
 physical hub body

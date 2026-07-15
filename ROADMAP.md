@@ -33,6 +33,41 @@ remoteproc/rpmsg + open-amp) — see the image-compat table in [`docs/SMHUB.md`]
 
 ---
 
+## North star — a custom Buildroot productization framework
+
+The goal this lane builds toward: **our own customizable Buildroot** that packages a
+**sample hub + app + server as one image**, boots on SG2000/RISC-V, and demonstrates the
+functions all work — a public, reproducible reference for **productizing an open hub**. We
+reference SMHub for *what* a shipped hub sets up (versions + surfaces recorded in
+[`docs/SMHUB.md`](docs/SMHUB.md)), but we **own our Buildroot** rather than depend on a
+vendor image whose setup is partly closed. **No business logic** — the deliverable is
+"it's all wired, open, and reproducible."
+
+What a productization framework has to pre-bake (reusable pre-work carried from prior
+embedded-hub productization on a vendor OpenWrt image):
+
+- **Device network** — DHCP/static, Wi-Fi + Ethernet, hostname / mDNS / provisioning.
+- **Log management** — persistent logs, rotation, a clean ro-root / rw-data split.
+- **Persistence / rw area** — overlay + writable data partition (SMHub uses p7; we design
+  our own equivalent).
+- **Package pre-install** — the minimal service set baked into the rootfs (MQTT broker,
+  Zigbee2MQTT, matter.js / Matterbridge, `homeagentd`, a sample server + app).
+- **Recovery / update path** — A/B or image-replace, first-boot provisioning.
+
+Deliverable = **sample hub + app + server**, end to end, all functions demonstrably working
+in a public repo. That is the meaningful result.
+
+### SDK handling — extend `bsp/`, fork only if forced
+
+The Milk-V sources are cloned at `~/repos/3rd/milkv/` (`duo-buildroot-sdk-v2` = BSP base
+pinned `ad920f839`, `bootloader-riscv`, `milkv.io` docs). Default: keep working through
+**`bsp/`** (committed defconfig + rootfs overlay + patches injected over a pinned, gitignored
+clone — no fork needed). Fork a source repo only when a change **cannot** be expressed as a
+defconfig, overlay, or patch. Detail + experience log: [`docs/BUILDROOT.md`](docs/BUILDROOT.md);
+operational how-to: [`bsp/README.md`](bsp/README.md).
+
+---
+
 ## Now — RISC-V C906 boot owned on Duo S
 
 The big core is booted in **RISC-V C906 mode**. SG2000 boots either A53 (ARM) or C906
@@ -58,8 +93,8 @@ deferred). Architecture center: [`runtime/README.md`](runtime/README.md).
 | 5 | Runtime on RISC-V | Measure Zig 100ms `homeagentd` + C906 mailbox base on silicon | next |
 | 6 | Radio via USB dongle | ZBDongle-E Zigbee NCP / Thread RCP on Duo S, z2m / matter proof | planned |
 | 7 | SMHub reference diff | System-app review of the vendor product, port lessons to Duo S | ongoing |
-| 8 | Service lower-bound | MQTT, Zigbee2MQTT, matter.js, Go evidence on 512MB-class board | planned |
-| 9 | Representative hub | Stable outward hub surface (A2A / A2UI) | planned |
+| 8 | Productization rootfs | our Buildroot pre-bakes network / logging / rw-overlay / package set (the framework) | next major |
+| 9 | Sample hub + app + server | end-to-end open demo — all functions working, reproducibly | goal |
 
 ### BSP base — own the Duo S build, diff the SMHub product
 

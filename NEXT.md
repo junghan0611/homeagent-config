@@ -1,6 +1,7 @@
-# NOW — Duo S RISC-V(코어 레인) ‖ SMHub(상용 레퍼런스): 부팅 소유 → homeagentd 측정 → 라디오/서비스
+# NOW — 커스텀 Buildroot 제품화 틀: 샘플 허브+앱+서버 통합 (SMHub 참고, 우리 buildroot 소유, 비즈니스 로직 없음)
 
-- **현재 (2026-07-15)**: Duo S **RISC-V C906 자체 이미지 실기 부팅 성공**(코어 레인 첫 성공, Phase E) + **표준 문서 ARM→RISC-V 정합화 완결**(Phase D 종료, `v2026.7.15`). 다음 = ① Duo S 메모리 회수(ION ~170MB) ② `homeagentd` riscv64 실기 측정 ③ USB ZBDongle-E(7.4.2) z2m 브링업. SMHub은 상용 레퍼런스로 비교.
+- **북극성 (2026-07-15, GLG)**: **커스텀 Buildroot 제품화 틀**. SMHub를 참고하되(버전/설치면 = `docs/SMHUB.md`) 우리 고유 Buildroot로 **샘플 허브+앱+서버를 통으로 패키징**, 전 기능 동작을 공개 리포로 증명한다. 제품화 사전작업(네트워크/로그/rw-overlay/패키지 프리인스톨/first-boot)을 Buildroot로 제대로 깐다. **비즈니스 로직 없음.** SDK = `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(pin `ad920f839`) → 기본은 `bsp/`에서 작업, 정 안될 때만 포크. 상세 = **Phase F** · `ROADMAP.md`(North star) · `docs/BUILDROOT.md`.
+- **직전 성과 (v2026.7.15)**: Duo S RISC-V C906 자체 이미지 **실기 부팅 성공**(Phase E) + 표준 문서 **ARM→RISC-V 정합화**(Phase D) + 문서 세트 정합(DIRIGERA=landscape화, YOCTO→BUILDROOT 분리). 다음 실작업 = Phase F.
 - **Stem**: 벤더 **SMHUB OS는 무수정**으로 쓰고 제품 기능을 끝까지 검증한 뒤, **버전업(OTA beta5)** 하고
   그 위에 **실제 코드**(RISC-V Zig `homeagentd` 100ms 상태머신 + 선언적 config-set)를 만들어 **종합 테스트**한다.
 - **방향 전환 (2026-07-01, GLG)**: 이전 "코드 아직 안 만든다(버전 드리프트 회피)"에서 **"버전업 후 실제 코드로
@@ -26,7 +27,7 @@
 - **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 붕괴). live IP/MAC/SSH 키/기기
   좌표를 공개 파일에 쓰지 말 것. 표준 sshd host-key 수리에 더 매달리지 말 것(업데이트 후 재평가). "service running"을 "working"으로 판정하지 말 것. `AGENT_ALLOW_UNSAFE_COMMIT`/`--no-verify` 금지.
 
-# ACTIVE — 할 일 전체 (Phase A → C, E; D=문서 ARM→RISC-V 정합화 완결 v2026.7.15)
+# ACTIVE — 할 일 전체 (Phase F=다음 메인; A→C·E=기반; D=문서 정합화 완결 v2026.7.15)
 
 ## Phase A. 0.9.8 무변형 검증 마무리 (남은 것, 리부트 전)
 증거 축적 → `docs/SMHUB.md §4`. GPT 검수(2026-07-01) 반영 = provenance grounded.
@@ -131,6 +132,26 @@ Duo S = 512MB DDR, Wi-Fi6/BT5, 100M 이더넷, eMMC. **MG24 라디오 없음** �
   (SMLIGHT `slzb-os-scripts`는 SLZB-06x Berry 스크립팅 API로, SG2000 OS 빌드 레시피 아님 — 지름길 없음.)
 - [ ] **homeagentd RISC-V 런타임 검증 (이 보드의 진짜 목적)**: 부팅 확인 후 `riscv64-linux-musl` Zig 바이너리를 올려
   timerfd/epoll 100ms tick · RSS · 워치독을 **실기에서 측정**. 지금까지 SMHub에서만 추정하던 값을 우리 보드에서 자유롭게 반복.
+
+## Phase F. 커스텀 Buildroot 제품화 틀 — 샘플 허브+앱+서버 통합 (다음 세션 메인)
+목표: 우리 Buildroot가 **네트워크/로그/rw-overlay/패키지 세트**를 미리 깔아주고, 그 위에 **샘플 허브+앱+서버**가
+통으로 동작함을 공개로 보여준다. 근거 틀 = `ROADMAP.md`(North star) · `docs/BUILDROOT.md`(경험·전략) · `bsp/README.md`(운영).
+SMHub는 "제품이 뭘 깔아주나"의 참고일 뿐(버전/설치면 = `docs/SMHUB.md`) — 벤더 이미지 의존 없이 우리가 짓는다.
+
+- **선행(Phase E 미완 항목 참조, 서비스 세트 fit 위해 먼저)**: 메모리 회수 ~170MB(ION carveout 148M + rtos 22M) + hub-minimal 완결(osdrv 비전 모듈 `cvi_vc_driver`·`cv181x_{ive,jpeg,vcodec,tpu}` 제거).
+
+**제품화 rootfs 레이어 (bsp/ overlay + package selection)**:
+- [ ] **rootfs overlay 골격**: `bsp/board/<board>/` overlay 훅 — **ro-root / rw-data 분리** 설계부터.
+- [ ] **네트워크**: DHCP/static + Wi-Fi(aic8800)/eth0 + hostname/mDNS(avahi) + first-boot 프로비저닝.
+- [ ] **로그 관리**: 지속 로그(rw-data), 회전(logrotate/busybox), ro-root 오염 금지.
+- [ ] **rw/persistence**: writable data 파티션 + overlay(SMHub p7 패턴 참고, 우리 방식). 재부팅·업데이트 생존 검증.
+- [ ] **패키지 프리인스톨(서비스 세트)**: mosquitto(MQTT) + Zigbee2MQTT + matter.js/Matterbridge + `homeagentd` + 샘플 서버 + 샘플 앱. buildroot package 또는 overlay 바이너리. **주의**: Node/riscv64 빌드 벽 = `docs/SMHUB.md §5.5` derisk 참고.
+
+**샘플 허브+앱+서버 종단 데모 (딜리버러블)**:
+- [ ] **통합 부팅 데모**: 이미지 한 장 부팅 → 서비스 세트 자동 기동 → z2m(ZBDongle-E 7.4.2, `firmware/zbdonglee/`) 페어링 → 앱↔서버↔허브 왕복 → "전 기능 동작" 캡처.
+- [ ] **재현성 정본화**: `bsp/build.sh <board>` → flash → 부팅 → 데모가 **반복 가능**(공개 리포 사용자가 따라할 수 있게). 절차는 `docs/BUILDROOT.md`에 정본화.
+
+**경계**: 비즈니스 로직 없음. 특정 제품 상용 코드/벤더 비공개 SDK 내부 금지. 내부 프로젝트명(공개 리포 금지어) 쓰지 말 것.
 
 # 결정 대기 (설계, SMHUB.md §9)
 - (1) 재현 기판: 벤더 beta5 이미지 커스터마이즈 vs 우리 buildroot(flake.nix).

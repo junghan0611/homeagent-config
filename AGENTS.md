@@ -15,6 +15,26 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 
 ---
 
+## 현재 방향 & 연결고리 (2026-07-15)
+
+**북극성**: 커스텀 Buildroot로 **샘플 허브 + 앱 + 서버를 통으로 패키징**해 전 기능 동작을 공개 증명하는
+**제품화 틀**. SMHub는 참고(버전/설치면)일 뿐, 우리 Buildroot를 소유한다. **비즈니스 로직 없음.**
+
+| 무엇을 보나 | 어디 |
+|---|---|
+| 다음에 뭘 할지 (실작업 핸드오프) | `NEXT.md` → **Phase F** |
+| 왜 / 방향 / 제품화 틀 (North star, 페이즈 그리드) | `ROADMAP.md` |
+| Buildroot 경험·전략 / 운영 how-to | `docs/BUILDROOT.md` / `bsp/README.md` |
+| SMHub 실측 버전·설치면 (참고 근거, 벤더 비공개분 포함 좌표) | `docs/SMHUB.md` |
+| Duo S 라디오 펌웨어 (보드 정렬 7.4.2) | `firmware/zbdonglee/` |
+| 런타임 아키텍처 (Zig `homeagentd` + C906L 메일박스) | `runtime/README.md` |
+| 라이브 좌표 / 계정 / 키 | `PRIVATE.md` (공개 파일엔 금지) |
+
+작업 규칙: SDK는 `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(pin `ad920f839`) — 기본은 `bsp/`에서
+defconfig+overlay+patch로 작업하고, defconfig/overlay/patch로 표현 불가할 때만 포크한다.
+
+---
+
 ## Stable Role
 
 - `homeagent-config`: hub-level BSP and runtime surface.
@@ -36,6 +56,8 @@ Keep this repo focused on the hub: Linux host, onboard radio, protocol bridge, r
 | `ROADMAP.md` | phase direction and open lanes |
 | `VERSION.md` | stack, version, physical device matrix |
 | `runtime/README.md` | SG2000 runtime architecture (RISC-V C906 boot, L0–L4, Zig + C906L); front-door for `runtime/` code |
+| `docs/BUILDROOT.md` / `bsp/README.md` | 커스텀 Buildroot 코어 레인 — 경험·전략 / 운영 how-to (제품화 틀의 실제 빌드면) |
+| `docs/SMHUB.md` | SMHub Nano 실측 SSOT — HW/라디오/설치면/버전 (제품이 뭘 깔아주나의 참고 근거) |
 | `docs/TARGET_DEVICE.md` | board/radio strategy details |
 | `docs/HUBS.md` | 인증 Zigbee/Matter 허브 랜드스케이프 (조사 자료 — 우리 방향 아님), SoC/라디오 비교, 지원 제품군 |
 | `docs/MULTIPROTOCOL.md` | 단일 라디오 Zigbee+Thread 동시 — 전략·시점 (MG21/24/26 → Series 3). "언제 단일칩으로 가나" |
@@ -60,7 +82,7 @@ Prefer work that strengthens:
 Defer unless explicitly requested:
 
 - Active Tuya THP23-ZB-X liberation/bring-up (parked as 128MB evidence).
-- Booting SG2000 in RISC-V mode for the hub runtime.
+- ARM A53 boot for the hub runtime (RISC-V C906 is the active lane; arm64 is historical).
 - New high-spec board validation for its own sake.
 - Android-specific server deployment expansion.
 - OPi5 vendor/RKNN resurrection.
@@ -77,7 +99,7 @@ Defer unless explicitly requested:
 - On-device first: cloud may be a fallback, not a dependency for local control.
 - One radio, one protocol: Zigbee and Thread/Matter are firmware-switched unless proven otherwise. Single-chip **concurrent** is a chip-timing question (MG26 / Series 3), tracked in `docs/MULTIPROTOCOL.md`; now = clean separate-stack control, not concurrency.
 - USB coordinators are proof tools; the target hub has an onboard radio.
-- Keep protocol engines and state ownership separated. Go owns hub state; protocol backends do protocol work.
+- Keep protocol engines and state ownership separated. The Zig `homeagentd` runtime owns hub state; protocol backends (Z2M, matter.js) do protocol work. (Go is origin-lane.)
 - WebSocket reads must have a single owner/read loop.
 - LLM output is data to parse, never code to execute directly.
 - UI theme values come from tokens/CSS variables, not component-local literals.

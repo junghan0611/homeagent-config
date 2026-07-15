@@ -4,6 +4,39 @@
 
 - Nothing yet.
 
+## v2026.7.15 — Duo S RISC-V boot + SMHub live SSOT + repo-wide ARM→RISC-V realignment
+
+### Board / BSP (Milk-V Duo S)
+
+- Built a reproducible SG2000 hub image via the official Milk-V Docker (`bsp/`): config-in-repo + a pinned, gitignored SDK clone.
+- **Switched the Duo S lane from ARM to RISC-V C906 and booted our own Buildroot image on real silicon (2026-07-14)** — `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, our defconfig, eth0 DHCP + Wi-Fi (aic8800). First success of the board-ownership lane; the runtime target is `riscv64-linux-musl`, matching the product ISA.
+- Added in-repo RISC-V board configs `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/` (RISC-V + musl + hub-minimal delta), fixed a defconfig-injection bug in `bsp/build.sh` (was matching 3 defconfigs), and scripted the eMMC USB-download flash (`bsp/flash-emmc.sh`: `cdc_acm` unbind, `181x` chip arg, riscv64 ISA guard).
+
+### SMHub reference (single SSOT)
+
+- Merged the former SMHub docs (PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW) into one SSOT `docs/SMHUB.md`, and grounded the live **0.9.8** verify, then the **OTA beta5** stack.
+- Grounded the beta5 live C906L RTOS stack + app wiring (remoteproc/rpmsg + open-amp, `smhub-broker`, ESPHome-on-RTOS), set the install policy (OTA over ssh repair; p7 as the only rw persistence surface), and derisked the RISC-V self-firmware path (RAM/persistence/NCP flow).
+- Mapped the MG24 EmberZNet **7.4.2 [GA] / EZSP v13** host↔NCP version contract, documented the install surface + LED/button/GPIO map for open-source hub devs (incl. the 10s-hold vendor factory-reset conflict), and reconciled the vendor manual against the live Nano MG24.
+
+### Radio
+
+- Added version-aligned ZBDongle-E coordinator firmware for the Duo S lane: `firmware/zbdonglee/zbdonglee_zigbee_ncp_7.4.2.0_hw_flow_115200.gbl` (EmberZNet 7.4.2 / EZSP 13, matching the SMHub board stack) plus `firmware/zbdonglee/README.md` (upstream provenance + sha256, flash procedure, measured z2m `rtscts:false` note).
+
+### Hubs / multiprotocol
+
+- Added the certified Zigbee/Matter hub landscape SSOT `docs/HUBS.md` (SoC/radio comparison, product line) and the single-radio Zigbee+Thread timing SSOT `docs/MULTIPROTOCOL.md` (MG21/24/26 → Series 3; "one radio, one protocol" for now).
+
+### Docs — repo-wide ARM → RISC-V realignment (Phase D)
+
+- Rewrote `ROADMAP.md` around the new stance: a reproducible **verification/prototyping ground** (no business logic), two SG2000/RISC-V lanes — **Duo S full-stack ownership** ‖ **SMHub commercial reference (system-application approach)**, RISC-V-now ISA direction, USB-dongle radio on Duo S. Moved "ARM A53 as the product boot lane" to Deprecated.
+- Realigned the standard doc set from "ARM Cortex-A53, fixed" to "RISC-V C906" across `README.md`, `AGENTS.md`, `VERSION.md`, `docs/README.md`, `docs/TARGET_DEVICE.md`, `runtime/README.md` (Decision + L0–L4 + BSP/phase + portfolio), `runtime/zig/homeagentd/README.md`, `runtime/c906/rtos-agent/README.md`, and the `docs/FLUTTER.md` main-lane pointer.
+- Updated `VERSION.md` physical state — Duo S in hand (RISC-V boot verified), SMHub in hand (OTA beta5 verified) — and corrected the radio matrix to the actual in-repo `firmware/zbdonglee/` files.
+- Recorded the two-lane invariant (Duo S milkv SDK Linux 5.10 + CVITEK `rtos_cmdqu` vs SMHub mainline 6.18 + remoteproc/rpmsg + open-amp — **images not interchangeable**; shared axis = SoC/ISA/musl/toolchain).
+
+### Parked
+
+- Parked the **IKEA DIRIGERA** lane (not bought, not pursued); `docs/HUBS.md` stays as landscape research only, not our direction.
+
 ## v2026.6.23 — SG2000 runtime pivot + RISC-V open-ISA roadmap
 
 ### Added

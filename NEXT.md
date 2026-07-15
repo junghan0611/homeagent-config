@@ -1,5 +1,6 @@
-# NOW — SMHub Nano Mg24: 검증 마무리 → 버전업 → 실제 코드 → 종합 테스트
+# NOW — Duo S RISC-V(코어 레인) ‖ SMHub(상용 레퍼런스): 부팅 소유 → homeagentd 측정 → 라디오/서비스
 
+- **현재 (2026-07-15)**: Duo S **RISC-V C906 자체 이미지 실기 부팅 성공**(코어 레인 첫 성공, Phase E) + **표준 문서 ARM→RISC-V 정합화 완결**(Phase D 종료, `v2026.7.15`). 다음 = ① Duo S 메모리 회수(ION ~170MB) ② `homeagentd` riscv64 실기 측정 ③ USB ZBDongle-E(7.4.2) z2m 브링업. SMHub은 상용 레퍼런스로 비교.
 - **Stem**: 벤더 **SMHUB OS는 무수정**으로 쓰고 제품 기능을 끝까지 검증한 뒤, **버전업(OTA beta5)** 하고
   그 위에 **실제 코드**(RISC-V Zig `homeagentd` 100ms 상태머신 + 선언적 config-set)를 만들어 **종합 테스트**한다.
 - **방향 전환 (2026-07-01, GLG)**: 이전 "코드 아직 안 만든다(버전 드리프트 회피)"에서 **"버전업 후 실제 코드로
@@ -25,7 +26,7 @@
 - **Do not touch**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B rollback 붕괴). live IP/MAC/SSH 키/기기
   좌표를 공개 파일에 쓰지 말 것. 표준 sshd host-key 수리에 더 매달리지 말 것(업데이트 후 재평가). "service running"을 "working"으로 판정하지 말 것. `AGENT_ALLOW_UNSAFE_COMMIT`/`--no-verify` 금지.
 
-# ACTIVE — 할 일 전체 (Phase A → E)
+# ACTIVE — 할 일 전체 (Phase A → C, E; D=문서 ARM→RISC-V 정합화 완결 v2026.7.15)
 
 ## Phase A. 0.9.8 무변형 검증 마무리 (남은 것, 리부트 전)
 증거 축적 → `docs/SMHUB.md §4`. GPT 검수(2026-07-01) 반영 = provenance grounded.
@@ -80,16 +81,6 @@
   결과 = `captures/…/results.jsonl` + `SMHUB.md §4` 반영. **주의**: 구 GPT 하네스(`tests/smhub_verify/`)는 host 미설정 실패 —
   살릴지/버릴지 먼저 결정(NEXT LEDGER의 "GPT 프레임워크 삭제" 지침과 충돌).
 - [ ] 설치 게이트(GLG go): matterbridge/z2m update 등 설치 후 Matter 레인 검수.
-
-## Phase D. Repo docs ARM → RISC-V 정합화 (코드 커밋과 함께)
-CHANGELOG history는 손대지 않는다.
-
-- [ ] `runtime/README.md` · `runtime/zig/homeagentd/README.md`: ARM A53 → riscv64 타깃.
-- [ ] `AGENTS.md`: runtime baseline ARM A53 잔재 정리.
-- [ ] `ROADMAP.md`: ISA lanes 제품 정합 RISC-V 재작성.
-- [ ] `bsp/README.md`: arm64 빌드=historical, riscv64 제품 variant 계획 추가.
-- [ ] `README.md`/`VERSION.md`: 버전 매트릭스 grounded 후에만.
-- [ ] `docs/README.md` "Current Direction" 문단의 ARM Cortex-A53 표현 갱신.
 
 ## Phase E. Milk-V Duo S (SG2000) — 개발보드 레인: 우리 손으로 buildroot 빌드 → RISC-V 부팅
 **⚠️ SMHub과 별개다.** Duo S = **순수 개발보드**(Milk-V), SMHub = **별도 제품 셋업**(벤더 SMHUB OS, mainline 6.18 + RAUC A/B).
@@ -153,7 +144,7 @@ Duo S = 512MB DDR, Wi-Fi6/BT5, 100M 이더넷, eMMC. **MG24 라디오 없음** �
 
 - 2026-07-14: **IKEA DIRIGERA 레인 폐기 + Milk-V Duo S(SG2000) 실기 레인 개시 (Phase E 교체).** DIRIGERA는 구매/진행 안 함 — NEXT에서 전부 제거(`docs/HUBS.md`는 랜드스케이프 자료로만 존속). 대신 **Milk-V Duo S(SG2000) 개발보드 입수** → `bsp/` buildroot 레인을 **ARM64 → RISC-V로 전환**(완전 공개 레인, 벤더 OS 의존 0). **SMHub과는 별개 셋업**(커널 6.18·벤더 private, 이미지 비호환) — 공유되는 건 SoC 계열·ISA·musl·부트체인 지식뿐. 실측: SDK 로컬 클론(`~/repos/3rd/milkv/duo-buildroot-sdk-v2`)이 `bsp/setup.sh` pin(`ad920f839`)과 **동일 커밋**, riscv64-musl 툴체인 이미 확보, 6/23 ARM64 eMMC 빌드 산출물 2개 잔존(historical). **RISC-V delta 5줄 확정**(ARCH/CROSS_COMPILE/ENTRY_HACK_ADDR 0x80200000/TOOLCHAIN_MUSL_RISCV64/BOARD) + stock riscv에 남아있던 카메라·패널 4줄은 hub-minimal로 제거 → `bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/defconfig` 커밋. **`bsp/build.sh` 잠재 버그 수정**(defconfig `find|head -1`이 커널/u-boot defconfig까지 3개 매칭 → `cvitek_*` 제외·1개 강제). 보드 실측: **eMMC 공장 출하 시 비어 있음** → 전원 인가 시 부트 ROM이 USB 다운로드 모드로 낙하(`CVITEK USB Com Port` cdc_acm 열거 확인), **USB 독/허브 뒤에선 열거 실패(`error -110`) → 노트북 직결 필요**. 굽기 도구는 **Linux용 `usb_dl`이 SDK에 존재**(`build/tools/common/usb_dl/Linux/`) — 공식 문서의 "Windows 전용" 안내는 틀림. microSD 카드 없음 → eMMC 직행. **결과: 같은 날 부팅 성공** — 우리가 빌드한 riscv64 이미지가 실기에서 돌아감(`uname` riscv64, 빌드 타임스탬프·SDK pin 일치, USB-NCM + eth0 DHCP + Wi-Fi 드라이버). 굽기 함정 2개 실측(`-c 181x` / `cdc_acm` 선점) → `bsp/flash-emmc.sh`에 내장. **미해결**: `/dev/ttyUSB0`(CP210x) 시리얼 무응답(UART 배선 미확인 — 콘솔은 `ttyS0,115200`), ION carveout 170MB 낭비, hub-minimal 부분적.
 
-- 2026-07-09: **허브 랜드스케이프 + 단일칩 멀티프로토콜 시점 논리 정리** (방향 레인은 2026-07-14에 폐기, 아래 기술 근거만 durable). `docs/HUBS.md` 신설(허브 SoC/라디오/제품군 조사 자료). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V = Phase D 잔류.
+- 2026-07-09: **허브 랜드스케이프 + 단일칩 멀티프로토콜 시점 논리 정리** (방향 레인은 2026-07-14에 폐기, 아래 기술 근거만 durable). `docs/HUBS.md` 신설(허브 SoC/라디오/제품군 조사 자료). `docs/MULTIPROTOCOL.md` 신설 — 단일 MG24 Zigbee+Thread 동시 = **Silabs Multi-PAN RCP + cpcd + zigbeed + otbr**(단일 `/dev/ttyS1`), 동일채널(무 타임슬라이스) vs Concurrent Listening(독립채널 -98dBm, xG21/xG24). **정직 판정**: HA 애드온 폐기(2025-07)·OHF/z2m 2-라디오 권고·**벤더 SMHub도 미해결**(Essential/Premium=2칩, Nano Mg24=Radio mode 재플래시 순차) → 2-라디오 명분. **전략·시점**: MG26(3.2MB/512KB, 허브 타깃) → **Series 3 SiMG301**(멀티코어 전용 라디오 코어, 네이티브 CMP)이 단일칩 종착점, 2026-06 Silabs 200-노드 검증 = 성숙 신호. 벤더 확증: SMLIGHT **SLZB-MR4=CC2674P10+MG26 2-칩 동시**, **SMHUB→MG26**. `README` "Product Direction" 라우팅표 + `AGENTS`/`docs/README` Living Docs 등록. 드리프트 발견: README/AGENTS "ARM A53 fixed" vs 라이브 RISC-V → **Phase D 정합화 완결(v2026.7.15)**.
 
 - 2026-07-03: **물리 제어면(LED·버튼·GPIO) grounded** → `SMHUB.md §3.8`. **LED=raw GPIO 2개**(`led_pwr`/`led_cus`, gpiochip3=3022000 L16/17, 단색 on/off, libgpiod by-name; 벤더 `nano-leds` 소유), LED class 아님, RGB 없음. **버튼=단일 btn_1**(gpiochip1=3020000 L1) → gpio-keys→event0(evdev co-read 가능). **⚠️ 충돌: 벤더 `smhub-reset-daemon`이 btn_1 감시, `HOLD_SEC=10`→10초 홀드=`factory-reset --force`(와이프)** = 앱 10초 롱프레스와 정면 충돌 → 재활용하려면 smhub-reset-daemon/nano-leds 정지·치환 필수(결정대기 6). 10회 연타는 대체로 안전. 부저=pwmchip0(2kHz).
 - 2026-07-03: **설치면(install surface) grounded** → `SMHUB.md §3.7`. homeagent-config=SMHub 지식 SSOT. 설치면 실측: **rootfs(p5/p6)=ro+A/B OTA 통째 교체→설치 금지**, **p7 USER(5.7G)=유일 rw 지속면(리부트+OTA 생존)**, `/etc`=overlay(upper on p7). OTA=RAUC가 비활성 rootfs/kernel 슬롯만 기록·A↔B 플립, p7 미변경. `firstboot-upgrade`=`opkg configure` 재실행(와이프 없음). 소유권=p7 root소유(sudo 가능, pw=smlight), non-root 쓰기=`/home/smlight`(+`/opt/firmware`). PATH=`/usr/bin:/usr/sbin`(/opt/bin 없음→절대경로). 두 패턴: **(a) ipk+OpenRC(제품화, OTA통합)** / **(b) /home/smlight 사이드카(non-root, derisk)**.

@@ -47,11 +47,13 @@ working radio; onboard EFR32 stays the product shape (SMHub). Firmware:
 
 ## Product Direction — Certified Hubs & Radio Timing
 
-**Thesis in one line:** the certified reference is **IKEA DIRIGERA**; the goal is to reproduce its
-Zigbee/Matter functions **1:1 on SG2000/SMHub** for cost + open-source contribution. Single-chip
-**concurrent** Zigbee+Thread is not viable today (industry, Open Home Foundation, and the vendor all use
-2-radio or firmware mode-switch) — it is a **chip-timing question** on the **MG21 → MG24 → MG26 → Series 3**
-line. So the current work is **separate-stack control** (one radio, one protocol), not concurrency.
+**Thesis in one line:** hub certification and radio concurrency are tracked as **landscape research**,
+not a product commitment. Single-chip **concurrent** Zigbee+Thread is not viable today (industry, Open
+Home Foundation, and the vendor all use 2-radio or firmware mode-switch) — it is a **chip-timing
+question** on the **MG21 → MG24 → MG26 → Series 3** line. So the current work is **separate-stack
+control** (one radio, one protocol), not concurrency. *(The IKEA DIRIGERA "reproduce 1:1" lane is
+**parked** as of 2026-07-14 — `docs/HUBS.md` stays landscape research, not our direction; the active
+lanes are Duo S RISC-V + SMHub reference.)*
 
 **Where to look (recurring product-direction questions):**
 
@@ -77,7 +79,7 @@ line. So the current work is **separate-stack control** (one radio, one protocol
 | [`VERSION.md`](VERSION.md) | stack, version, and physical device matrix |
 | [`runtime/README.md`](runtime/README.md) | SG2000 runtime architecture + Zig/C906L code home |
 | [`docs/TARGET_DEVICE.md`](docs/TARGET_DEVICE.md) | board/radio strategy details |
-| [`docs/HUBS.md`](docs/HUBS.md) | certified Zigbee/Matter hub landscape (IKEA DIRIGERA lead), SoC/radio comparison, product line |
+| [`docs/HUBS.md`](docs/HUBS.md) | certified Zigbee/Matter hub landscape research (DIRIGERA lane parked — not our direction), SoC/radio comparison, product line |
 | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) | single-radio Zigbee+Thread concurrency — strategy & timing (MG21/24/26 → Series 3) |
 | [`docs/README.md`](docs/README.md) | docs map |
 

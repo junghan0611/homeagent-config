@@ -30,7 +30,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`A2UI.md`](A2UI.md) | server-driven UI notes | A2UI surface work |
 | [`PLATFORM-MATRIX.md`](PLATFORM-MATRIX.md) | legacy platform comparison | origin-lane platform questions |
 | [`MULTIPROTOCOL.md`](MULTIPROTOCOL.md) | **핵심 난제 SSOT — 단일 EFR32MG24로 Zigbee+Thread 동시** (Multi-PAN RCP + cpcd + zigbeed + otbr). 동일채널 vs Concurrent Listening 모드, HA 애드온 폐기·2-라디오 후퇴의 정직한 판정, SMHub 증명 게이트 G0~G4 | 단일 라디오 멀티프로토콜 설계/증명, MG24 재플래시(RCP), Zigbee+Thread 동시 재현 | 
-| [`HUBS.md`](HUBS.md) | **인증 Zigbee/Matter 허브 랜드스케이프 SSOT** — 인증(CSA Matter)받고 자체 펌웨어/데몬을 올릴 수 있는 개방 허브 조사. IKEA DIRIGERA 전면(주력), Zemismart M1(인증 블랙박스 레퍼런스), SMHub(SG2000 학습 앵커) 비교. Main SoC 동형 분석, Thread TBR vs z2m 경로, 오픈소스 클론 후보 | 인증 허브 선택/조사, DIRIGERA 실기 작업, Thread/TBR 개념 확인 |
+| [`HUBS.md`](HUBS.md) | **인증 Zigbee/Matter 허브 랜드스케이프 SSOT** (조사 자료 — 우리 방향 아님; DIRIGERA 레인 폐기 2026-07-14) — 인증(CSA Matter)받고 자체 펌웨어/데몬을 올릴 수 있는 개방 허브 조사. IKEA DIRIGERA·Zemismart M1(인증 블랙박스 레퍼런스)·SMHub(SG2000 학습 앵커) 비교. Main SoC 동형 분석, Thread TBR vs z2m 경로, 오픈소스 클론 후보 | 허브 랜드스케이프 조사, Thread/TBR 개념 확인 |
 | [`SMHUB.md`](SMHUB.md) | **SMHub Nano Mg24 single SSOT** — HW platform, radios, state model (backend.db/OpenRC/p7), live 0.9.8 verify log, control-boundary/reproduction matrix, info walls, vendor-manual review, open design questions, next verification steps | any SMHub product-verification / bring-up / config-set work (merges former PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW) |
 
 ## Parked / Absorbed Notes

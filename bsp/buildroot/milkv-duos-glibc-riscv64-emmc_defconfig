@@ -1,12 +1,13 @@
-# HomeAgent SG2000 service image — Buildroot config (glibc x riscv64).
+# HomeAgent SG2000 service image -- Buildroot config (glibc x riscv64).
 #
 # The stock SDK ships glibc only for arm64 and riscv64 only with musl, so this
-# combination does not exist upstream; it is the N0 "service image" lane:
+# combination does not exist upstream. It is the N0 "service image" lane:
 #   musl  x riscv64 -> homeagentd minimal baseline (stock boards, untouched)
 #   glibc x riscv64 -> Node / Z2M service image (this file)
 #
-# Derived from the stock buildroot/configs/milkv-duos-musl-riscv64-emmc_defconfig.
-# Deliberate deviations are commented inline.
+# DERIVED from buildroot/configs/milkv-duos-musl-riscv64-emmc_defconfig so that the
+# vendor's own requirements come along (cvi-pinmux SoC selection, rootfs targets,
+# package set). Only the deltas below are ours; each one is commented in place.
 #
 # Install into the SDK as buildroot/configs/<name>_defconfig, then:
 #   make O=output/milkv-duos-glibc-riscv64-emmc milkv-duos-glibc-riscv64-emmc_defconfig
@@ -14,55 +15,162 @@
 
 BR2_riscv=y
 
-# Buildroot composes -march from the BR2_RISCV_ISA_* symbols (arch/arch.mk.riscv)
-# and the external-toolchain wrapper forces that -march on compile AND link. RVC
-# has no "default y", so without this line the target would be built as rv64imafd:
-# no compressed instructions, larger code, and an ISA that diverges from the
-# measured SMHub contract (rv64...c2p0). RVV stays off deliberately -- see below.
+# DELTA: Buildroot composes -march from the BR2_RISCV_ISA_* symbols
+# (arch/arch.mk.riscv) and the external-toolchain wrapper forces that -march on
+# compile AND link. RVC has no "default y", so without this line the target would
+# be rv64imafd: no compressed instructions, larger code, and an ISA that diverges
+# from the measured SMHub contract (rv64...c2p0). RVV stays off deliberately.
 BR2_RISCV_ISA_RVC=y
-
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
-
-# glibc riscv64 cross toolchain that already ships in the SDK's host-tools:
-# Xuantie-900 linux-5.10.4 glibc GCC 10.2.0, rv64gc/lp64d.
-# This is the same toolchain the G0 snapshot-seam experiment measured against,
-# and it satisfies the host gate (GLIBC <= 2.33, GCC >= 10.1 for Node 22).
+# DELTA: the glibc riscv64 cross toolchain already shipped in the SDK's host-tools
+# (Xuantie-900 linux-5.10.4 glibc GCC 10.2.0). Same toolchain the G0 snapshot-seam
+# experiment measured against; satisfies the host gate (GLIBC 2.33, GCC >= 10.1).
 BR2_TOOLCHAIN_EXTERNAL_PATH="$(TOPDIR)/../host-tools/gcc/riscv64-linux-x86_64"
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="riscv64-unknown-linux-gnu"
 BR2_TOOLCHAIN_EXTERNAL_GCC_10=y
 BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
+# DELTA: the glibc toolchain ships riscv64-unknown-linux-gnu-gfortran while the musl
+# one does not, and Buildroot refuses to configure an external toolchain whose Fortran
+# support is present but unselected. The stock *glibc* arm64 board carries this line
+# for the same reason; deriving from the musl board is what drops it.
+BR2_TOOLCHAIN_EXTERNAL_FORTRAN=y
+# DELTA: BR2_TOOLCHAIN_EXTERNAL_INET_RPC defaults to y for glibc toolchains, but this
+# glibc is 2.33, which no longer ships Sun RPC -- sysroot/usr/include/rpc/ holds only
+# netdb.h, no rpc.h, which is exactly what Buildroot's check_glibc_rpc_feature tests
+# for. libtirpc is the replacement if anything ever needs RPC. Must be forced off;
+# the musl board never hit this because the symbol depends on !MUSL.
+# BR2_TOOLCHAIN_EXTERNAL_INET_RPC is not set
 BR2_TOOLCHAIN_EXTERNAL_CXX=y
 BR2_TOOLCHAIN_EXTERNAL_OPENMP=y
-
-# DEVIATION vs the stock riscv64 board: the stock defconfig carries
+# DELTA: the stock board carries
 #   BR2_TARGET_LDFLAGS="-march=rv64imafdcv0p7xthead -mcpu=c906fdv -mabi=lp64d -mcmodel=medany"
-# i.e. the C906's *draft* RVV 0.7. Our host gate requires no RVV in the shipped
-# service binaries, so that whole line is dropped here rather than edited:
-#   -march / -mabi  the external-toolchain wrapper already forces both, from
-#                   BR2_RISCV_ISA_* above -- repeating them in LDFLAGS is noise.
-#   RVV 0.7         off by leaving BR2_RISCV_ISA_RVV unset.
-#   -mcmodel=medany only ever reached the link step here, never the compile step,
-#                   so it was not doing what it looks like it does. Node's ~75MB
-#                   is nowhere near medlow's +/-2GiB reach, so the first proof runs
-#                   without it. If a real relocation failure shows up, it has to go
-#                   into CFLAGS/CXXFLAGS *and* link, not into LDFLAGS alone.
-# Result: a generic rv64gc/lp64d binary on /lib/ld-linux-riscv64-lp64d.so.1
-# (verified against the SDK toolchain), which is the loader the host gate names.
-
+# i.e. the C906's *draft* RVV 0.7. The host gate requires no RVV in shipped service
+# binaries, so the whole line is dropped rather than edited:
+#   -march / -mabi   already forced by the toolchain wrapper from BR2_RISCV_ISA_*.
+#   RVV 0.7          off by leaving BR2_RISCV_ISA_RVV unset.
+#   -mcmodel=medany  only ever reached the link step here, never the compile step,
+#                    so it was not doing what it looks like it does. Node's ~75MB is
+#                    nowhere near medlow's +/-2GiB reach, so the first proof runs
+#                    without it; a measured relocation failure would have to put it
+#                    in CFLAGS/CXXFLAGS *and* link, not LDFLAGS alone.
+# Result: generic rv64gc/lp64d on /lib/ld-linux-riscv64-lp64d.so.1 -- the loader the
+# host gate names (verified directly against the SDK toolchain).
 BR2_OPTIMIZE_S=y
 BR2_PER_PACKAGE_DIRECTORIES=y
-
-BR2_TARGET_GENERIC_HOSTNAME="homeagent"
+BR2_TARGET_GENERIC_HOSTNAME="milkv-duo"
 BR2_TARGET_GENERIC_ISSUE="HomeAgent SG2000 service image (glibc/riscv64)"
+BR2_TARGET_GENERIC_ROOT_PASSWD="milkv"
+# DELTA: no rootfs overlay yet -- this lane's first gate is `make nodejs`, not a
+# bootable image. An overlay lands with the board variant (N1).
+BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
+BR2_PACKAGE_ALSA_UTILS=y
+BR2_PACKAGE_ALSA_UTILS_AMIXER=y
+BR2_PACKAGE_ALSA_UTILS_APLAY=y
+BR2_PACKAGE_ALSA_UTILS_ARECORDMIDI=y
+BR2_PACKAGE_GZIP=y
+BR2_PACKAGE_P7ZIP=y
+BR2_PACKAGE_UNRAR=y
+BR2_PACKAGE_UNZIP=y
+BR2_PACKAGE_ZIP=y
+BR2_PACKAGE_ZSTD=y
+BR2_PACKAGE_FIO=y
+BR2_PACKAGE_GDB=y
+BR2_PACKAGE_GDB_SERVER=y
+BR2_PACKAGE_GDB_DEBUGGER=y
+BR2_PACKAGE_LSOF=y
+BR2_PACKAGE_PV=y
+BR2_PACKAGE_SPIDEV_TEST=y
+BR2_PACKAGE_STRACE=y
+BR2_PACKAGE_STRESS_NG=y
+BR2_PACKAGE_TREE=y
+BR2_PACKAGE_E2FSPROGS=y
+BR2_PACKAGE_E2FSPROGS_RESIZE2FS=y
+BR2_PACKAGE_EVTEST=y
+BR2_PACKAGE_I2C_TOOLS=y
+BR2_PACKAGE_PARTED=y
+BR2_PACKAGE_SPI_TOOLS=y
+BR2_PACKAGE_PYTHON3=y
+BR2_PACKAGE_PYTHON3_PY_PYC=y
+BR2_PACKAGE_PYTHON3_BZIP2=y
+BR2_PACKAGE_PYTHON3_READLINE=y
+BR2_PACKAGE_PYTHON3_SQLITE=y
+BR2_PACKAGE_PYTHON3_XZ=y
+BR2_PACKAGE_PYTHON_NUMPY=y
+BR2_PACKAGE_PYTHON_PIP=y
+BR2_PACKAGE_PYTHON_REQUESTS=y
+BR2_PACKAGE_CA_CERTIFICATES=y
+BR2_PACKAGE_LIBOPENSSL_BIN=y
+BR2_PACKAGE_LIBOPENSSL_ENGINES=y
+BR2_PACKAGE_C_PERIPHERY=y
+BR2_PACKAGE_LIBUSB=y
+BR2_PACKAGE_LIBUSB_EXAMPLES=y
+BR2_PACKAGE_LIBCURL=y
+BR2_PACKAGE_LIBCURL_CURL=y
+BR2_PACKAGE_LIBCURL_VERBOSE=y
+BR2_PACKAGE_LIBCURL_WEBSOCKETS_SUPPORT=y
+BR2_PACKAGE_BLUEZ_TOOLS=y
+BR2_PACKAGE_BLUEZ5_UTILS=y
+BR2_PACKAGE_BLUEZ5_UTILS_OBEX=y
+BR2_PACKAGE_BLUEZ5_UTILS_CLIENT=y
+BR2_PACKAGE_BLUEZ5_UTILS_MONITOR=y
+BR2_PACKAGE_BLUEZ5_UTILS_TOOLS=y
+BR2_PACKAGE_BLUEZ5_UTILS_DEPRECATED=y
+BR2_PACKAGE_BLUEZ5_UTILS_EXPERIMENTAL=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_AUDIO=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_HEALTH=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_HID=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_MESH=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_MIDI=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_NFC=y
+BR2_PACKAGE_DHCPCD=y
+BR2_PACKAGE_DNSMASQ=y
+BR2_PACKAGE_DROPBEAR=y
+BR2_PACKAGE_ETHTOOL=y
+BR2_PACKAGE_GESFTPSERVER=y
+BR2_PACKAGE_IPERF3=y
+BR2_PACKAGE_IW=y
+BR2_PACKAGE_NETCAT=y
+BR2_PACKAGE_NTP=y
+BR2_PACKAGE_NTP_NTPDATE=y
+BR2_PACKAGE_NTP_NTPTIME=y
+BR2_PACKAGE_WGET=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPS=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPA3=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPA_CLIENT_SO=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+BR2_PACKAGE_FILE=y
+BR2_PACKAGE_CVI_PINMUX=y
+BR2_PACKAGE_CVI_PINMUX_SG200X=y
+BR2_PACKAGE_DUO_PINMUX=y
+BR2_PACKAGE_DUO_PINMUX_DUOS=y
+BR2_PACKAGE_DUO_WIRINGX=y
+BR2_PACKAGE_ANDROID_TOOLS=y
+BR2_PACKAGE_ANDROID_TOOLS_ADB=y
+BR2_PACKAGE_ANDROID_TOOLS_ADBD=y
+BR2_PACKAGE_COREUTILS=y
+BR2_PACKAGE_HTOP=y
+BR2_PACKAGE_KMOD=y
+BR2_PACKAGE_TAR=y
+BR2_PACKAGE_UTIL_LINUX_BINARIES=y
+BR2_PACKAGE_UTIL_LINUX_RFKILL=y
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+BR2_TARGET_ROOTFS_EXT2_SIZE="786432K"
+BR2_TARGET_ROOTFS_TAR_XZ=y
+BR2_PACKAGE_HOST_GENIMAGE=y
 
-# Node 22.22.0 via the riscv64 pure-cross recipe
-# (bsp/patches/0002-buildroot-nodejs-riscv64-pure-cross.patch).
+# DELTA: Node 22.22.0 through the riscv64 pure-cross recipe
+# (bsp/patches/0002-buildroot-nodejs-riscv64-pure-cross.patch). OpenSSL is shared
+# from Buildroot rather than Node's bundle; --without-ssl is not a product path
+# because Z2M needs TLS.
 BR2_PACKAGE_NODEJS=y
 BR2_PACKAGE_OPENSSL=y
 
-# Intl is deliberately OFF for the first build: with BR2_PACKAGE_ICU unset the
-# recipe passes --with-intl=none, which keeps the first pure-cross target build
-# to the smallest surface that still proves the recipe. ICU (system-icu 73.2) is
-# the immediate follow-up, not a permanent decision.
+# Intl is deliberately off for the first build: with BR2_PACKAGE_ICU unset the
+# recipe passes --with-intl=none, keeping the first pure-cross target build to the
+# smallest surface that still proves the recipe. system-icu is the next step, not a
+# permanent decision.

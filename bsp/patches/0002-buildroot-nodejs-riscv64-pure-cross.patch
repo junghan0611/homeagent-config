@@ -33,6 +33,49 @@ Also bumps the package to Node 22.22.0 -- the version our product contract pins 
 the one SMHub ships -- refreshing every entry in nodejs.hash from the upstream
 SHASUMS256.txt, including the prebuilt-binary rows that host-nodejs-bin consumes.
 
+diff --git a/buildroot/package/libuv/libuv.hash b/buildroot/package/libuv/libuv.hash
+index 6618450af..8becf44d5 100644
+--- a/buildroot/package/libuv/libuv.hash
++++ b/buildroot/package/libuv/libuv.hash
+@@ -1,4 +1,4 @@
+ # Locally calculated
+-sha256  c42c51d4e630f95dcefcafff95bf003ea52939e312d5e6584e7d9e102ead3e9e  libuv-v1.50.0-dist.tar.gz
++sha256  2ceca1a7577633cf92794db5bf5512370f6cd45a5746d6e14f8c20aeab0a547b  libuv-v1.51.0-dist.tar.gz
+ sha256  16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c  LICENSE
+ sha256  262c44bd2cdba037e6d2a82fba15f5800d292bc993a6f5d6b6ea487744d02836  LICENSE-extra
+diff --git a/buildroot/package/libuv/libuv.mk b/buildroot/package/libuv/libuv.mk
+index 57c128abf..0522ff6b0 100644
+--- a/buildroot/package/libuv/libuv.mk
++++ b/buildroot/package/libuv/libuv.mk
+@@ -6,7 +6,7 @@
+ 
+ # When bumping libuv, check if a new version of uvw is available
+ # and bump it too.
+-LIBUV_VERSION = 1.50.0
++LIBUV_VERSION = 1.51.0
+ LIBUV_SOURCE = libuv-v$(LIBUV_VERSION)-dist.tar.gz
+ LIBUV_SITE = https://dist.libuv.org/dist/v$(LIBUV_VERSION)
+ LIBUV_DEPENDENCIES = host-pkgconf
+@@ -16,3 +16,7 @@ LIBUV_LICENSE_FILES = LICENSE LICENSE-extra
+ LIBUV_CPE_ID_VENDOR = libuv
+ 
+ $(eval $(autotools-package))
++# Needed by nodejs on architectures that build the V8 host tools with a real host
++# toolset (riscv64 pure-cross): tools/js2c.cc includes uv.h, and with --shared-libuv
++# that header only exists in the target sysroot.
++$(eval $(host-autotools-package))
+diff --git a/buildroot/package/nghttp2/nghttp2.mk b/buildroot/package/nghttp2/nghttp2.mk
+index 98f837e28..99688e2cd 100644
+--- a/buildroot/package/nghttp2/nghttp2.mk
++++ b/buildroot/package/nghttp2/nghttp2.mk
+@@ -22,3 +22,7 @@ endef
+ NGHTTP2_POST_INSTALL_TARGET_HOOKS += NGHTTP2_INSTALL_CLEAN_HOOK
+ 
+ $(eval $(autotools-package))
++# Needed by nodejs on architectures that build the V8 host tools with a real host
++# toolset (riscv64 pure-cross): node.gyp puts every --shared-* library on the host
++# link line as well, so a host libnghttp2 has to exist.
++$(eval $(host-autotools-package))
 diff --git a/buildroot/package/nodejs/Config.in b/buildroot/package/nodejs/Config.in
 index 50d136071..72cf9ed45 100644
 --- a/buildroot/package/nodejs/Config.in
@@ -63,7 +106,7 @@ index 50d136071..72cf9ed45 100644
  	select BR2_PACKAGE_LIBUV
  	select BR2_PACKAGE_ZLIB
 diff --git a/buildroot/package/nodejs/nodejs-src/nodejs-src.mk b/buildroot/package/nodejs/nodejs-src/nodejs-src.mk
-index 8f934202b..b94fccc15 100644
+index 8f934202b..f6c536446 100644
 --- a/buildroot/package/nodejs/nodejs-src/nodejs-src.mk
 +++ b/buildroot/package/nodejs/nodejs-src/nodejs-src.mk
 @@ -20,7 +20,6 @@ NODEJS_SRC_DEPENDENCIES = \
@@ -92,7 +135,7 @@ index 8f934202b..b94fccc15 100644
  else ifeq ($(BR2_mips),y)
  NODEJS_SRC_CPU = mips
  else ifeq ($(BR2_mipsel),y)
-@@ -188,13 +189,60 @@ define NODEJS_SRC_INSTALL_V8_QEMU_WRAPPER
+@@ -188,13 +189,79 @@ define NODEJS_SRC_INSTALL_V8_QEMU_WRAPPER
  	$(SED) "s%@QEMU_USERMODE_ARGS@%$(call qstrip,$(BR2_PACKAGE_HOST_QEMU_USER_MODE_ARGS))%g" \
  		$(@D)/out/Release/v8-qemu-wrapper
  endef
@@ -145,6 +188,25 @@ index 8f934202b..b94fccc15 100644
 +	$(SED) "s%@MAYBE_WRAPPER@%%g" $(@D)/tools/v8_gypfiles/v8.gyp
 +endef
 +NODEJS_SRC_PRE_CONFIGURE_HOOKS += NODEJS_SRC_WRAPPER_FIXUP_NONE
++
++# A real separate host toolset means every --shared-* dependency that a *host* tool
++# pulls in must also exist for the host. Buildroot's stock qemu path never notices
++# this: there the "host" toolset is the target toolchain, so the target staging dir
++# satisfies those includes. Here tools/js2c.cc -> tools/executable_wrapper.h needs
++# uv.h, and node.gyp hands every --shared-* library to the host link too, so
++# node_js2c is linked with -lz -luv -lcares -lnghttp2 -lcrypto -lssl against the
++# *target* sysroot ("skipping incompatible ... cannot find -lcares"). Buildroot's
++# HOST_LDFLAGS -L comes first, so providing host builds of those libraries resolves
++# it. host-c-ares/host-zlib/host-libopenssl already existed; host-libuv and
++# host-nghttp2 did not, so those two packages gain a host variant.
++NODEJS_SRC_DEPENDENCIES += \
++	host-c-ares \
++	host-libuv \
++	host-nghttp2 \
++	host-zlib
++ifeq ($(BR2_PACKAGE_OPENSSL),y)
++NODEJS_SRC_DEPENDENCIES += host-libopenssl
++endif
 +else
 +NODEJS_SRC_GENERATOR = --ninja
 +NODEJS_SRC_HOST_TOOLSET_ENV =
@@ -155,7 +217,7 @@ index 8f934202b..b94fccc15 100644
  
  # Do not run the qemu-wrapper for the host build.
  define HOST_NODEJS_SRC_WRAPPER_FIXUP
-@@ -206,6 +254,7 @@ HOST_NODEJS_SRC_PRE_CONFIGURE_HOOKS += HOST_NODEJS_SRC_WRAPPER_FIXUP
+@@ -206,6 +273,7 @@ HOST_NODEJS_SRC_PRE_CONFIGURE_HOOKS += HOST_NODEJS_SRC_WRAPPER_FIXUP
  define NODEJS_SRC_CONFIGURE_CMDS
  	(cd $(@D); \
  		$(TARGET_CONFIGURE_OPTS) \

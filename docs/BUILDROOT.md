@@ -69,6 +69,35 @@ Operational steps live in `../bsp/README.md`; these are the traps that cost time
 - **ISA guard** — `flash-emmc.sh` refuses a non-riscv64 image (the historical arm64 zips share
   `out/`, and flashing one against an `RV`-switched board looks exactly like a brick).
 
+## Node.js pure cross-compile — proven on riscv64 (2026-07-21)
+
+Buildroot's stock `nodejs` package cross-compiles by building a **target** `mksnapshot` and running
+it under **qemu-user** (`package/nodejs/nodejs-src/`: `v8-qemu-wrapper`,
+`select BR2_PACKAGE_HOST_QEMU_LINUX_USER_MODE`), and its arch allowlist has no riscv at all. Our
+build policy forbids that path. The alternative — build the host tools with the **host** toolchain
+and drop qemu — is meta-oe's same-width branch (`nodejs_20.20.0.bb`: `HOST_AND_TARGET_SAME_WIDTH=1`
+→ `CC_host=BUILD_CC`, empty qemu wrapper), a mechanism that ships for aarch64 but that the same
+recipe *disables* for riscv (`COMPATIBLE_HOST:riscv64 = "null"`). It is now measured working:
+
+- **V8 auto-enables its RISC-V simulator when the toolsets differ** —
+  `deps/v8/src/common/globals.h`: `V8_TARGET_ARCH_RISCV64 && !V8_HOST_ARCH_RISCV64 → USE_SIMULATOR 1`.
+  An x86-64 `mksnapshot` can therefore serialize a riscv64 snapshot without executing any RISC-V code.
+- **Measured** (Node `v22.22.0`, target = SDK Xuantie glibc GCC 10.2, host = x86-64): `mksnapshot`,
+  `torque`, `bytecode_builtins_list_generator` all build as x86-64 ELF (26m55s at `-j16`); the
+  snapshot action emits a 6.5MB riscv64 `embedded.S` in **1.08s**; `qemu` / target execution /
+  `Exec format error` = 0. The output assembles as `rv64…c_xtheadc`, lp64d, no RVV.
+- **Trap — the ninja generator is unusable here.** With `want_separate_host_toolset=1`,
+  `tools/v8_gypfiles/v8.gyp`'s `v8_inspector_headers` (`toolsets: ['host','target']`) writes into the
+  toolset-shared `gen/`, so both toolsets declare the same output and ninja hard-errors
+  (`multiple rules generate …/js_protocol.stamp`). Use the **GYP make generator** — which is what
+  Buildroot and meta-oe use anyway. `--without-inspector` does not help: that is V8's inspector, not
+  Node's.
+- **No target-toolset `mksnapshot` is generated at all** (`mksnapshot.host.mk` only), and the snapshot
+  action invokes the host binary with no wrapper. QEMU has no place in the graph; Buildroot's stock
+  recipe uses it by choice, not by necessity.
+
+Evidence bundle: `captures/n0-g0-*/RESULT.md` (gitignored).
+
 ## Open items (post-boot)
 
 - **Reclaim ~170MB** — the camera/codec ION carveout (`0x9400000` = 148MB + rtos 22MB) is

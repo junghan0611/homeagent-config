@@ -77,10 +77,10 @@ The productization packages (Node first, then Mosquitto / Z2M) are built **pure 
 in our own Buildroot and shipped as **`.ipk` under `/opt` + OpenRC**. Build policy:
 
 - **No QEMU-user, no native RISC-V runner.** Product packages are cross-compiled on the host; no
-  target binary is executed at build time. V8's mksnapshot is the constraint's technical gate:
-  the first step is to prove a **host cross-snapshot (or equivalent V8 pure-cross) path**.
-  `--without-node-snapshot` is a candidate, not a confirmed elimination of target execution — the
-  failure boundary separates Node snapshot from V8 snapshot.
+  target binary is executed at build time. V8's mksnapshot was the constraint's technical gate —
+  **closed 2026-07-21**: an x86-64 host `mksnapshot` emits a riscv64 `embedded.S` with zero qemu
+  and zero target execution, because V8 auto-enables its RISC-V simulator when the two toolsets
+  differ. Mechanism, measurements and traps: [`docs/BUILDROOT.md`](docs/BUILDROOT.md).
 - **SMHub is a reverse-engineered reference for the contract, not a source.** Its shipped image
   measures the *contract* — `nodejs 22.22.0-2` (`riscv64`, glibc), `/opt` install, deps, service
   wiring (`docs/SMHUB.md`). Its feed (`pkg.smlight.tech`) serves `.ipk` binaries only (no source);

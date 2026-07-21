@@ -1,24 +1,34 @@
-# NOW — N0 pure-cross Node: **G0 통과**, 다음은 G1(Buildroot 이식)
+# NOW — N0 pure-cross Node: G0 통과, **G1 8차 빌드 중단 지점에서 재개**
 
 - **Stem**: 우리 Milk-V SDK(Buildroot 2025.02, linux 5.10)에서 **Node 22.22.0을 순수 크로스컴파일**해
   `rv64gc/glibc` `.ipk`로 `/opt`에 설치하고, 이후 Mosquitto → Z2M → Zigbee/HA 수직 슬라이스를 닫는다.
-- **현재 — G0 PASS (2026-07-21)**: x86-64 호스트 `mksnapshot`이 riscv64 `embedded.S`(6.5MB)를
-  **1.08초, qemu·네이티브 RISC-V 실행 0회**로 생성했다. 생성물은 타깃 어셈블러로
-  `rv64gc + xthead / lp64d, RVV 없음`으로 검증됐다. §14 **D3의 유일한 잔여 미지수(V8 RISC-V 시뮬레이터
-  자동 활성)가 실측으로 닫혔다** — 추정에서 확인으로 승격.
-  전체 결과·발견·증거: `captures/n0-g0-20260721T150942+0900/RESULT.md` (gitignored).
-- **다음 한 걸음 — G1 (착수 승인됨, 2026-07-21)**: §14 **D1–D7을 gitignored SDK 워킹클론에 이식**하고
-  `milkv-duos-glibc-riscv64-emmc` 보드를 신설해 타깃 Node를 빌드한다. 아래 "N0 통합 순서" 참조.
-  SDK 워킹트리는 **이미 있다** — `HOMEAGENT_BSP_SDK=~/repos/3rd/milkv/duo-buildroot-sdk-v2`
-  (`bsp/README.md` 문서화된 경로, 핀 `ad920f839`, host-tools 6.8G·`buildroot/output`·07-14 부팅 이미지 보유).
-  **재클론·재다운로드 불필요**하고 tracked 수정 4건은 `build.sh`가 주입한 정상 상태다.
-- **정지 조건**: `make` 걸기 전에 D1–D7 diff를 GLG에게 보인다. 그 다음 host gate까지 진행.
-- **Blocker**: none. **Duo S 실기 연결됨(2026-07-21 사무실)** — host gate 통과 후 runtime gate
-  (`node -p 'process.arch+":"+process.versions.node'` = `riscv64:22.22.0`)까지 이번 레인에서 닫을 수 있다.
-  단 실기 flash/deploy는 그 시점에 별도 승인.
+- **G0 PASS (2026-07-21)**: x86-64 호스트 `mksnapshot`이 riscv64 `embedded.S`(6.5MB)를
+  **1.08초, qemu·네이티브 RISC-V 실행 0회**로 생성. `rv64gc+xthead / lp64d, RVV 없음`으로 검증.
+  D3의 유일한 잔여 미지수(V8 RISC-V 시뮬레이터 자동 활성)가 실측으로 닫혔다.
+  증거: `captures/n0-g0-20260721T150942+0900/RESULT.md` (gitignored).
+- **G1 진행 중 — 8차 빌드가 세션 종료 시점에 실행 중이었다.** 마지막 관측(경과 ~30분):
+  타깃 `.o` 1,526개, `v8_base_without_compiler` 666/865, 컴파일/링크 에러 0, qemu 호출 0.
+  Node 본체 `libnode.a`와 대부분의 deps는 이미 통과했고 V8 본체를 갈던 중이었다.
+- **다음 한 걸음 — 재개 후 host gate 판정**:
+  ```bash
+  HOMEAGENT_BSP_SDK=~/repos/3rd/milkv/duo-buildroot-sdk-v2 ./bsp/build-package.sh
+  ```
+  Buildroot는 증분이라 **중단돼도 이어서 간다**(`G1_CLEAN=1`은 recipe를 또 고쳤을 때만).
+  로그는 리포 밖 `~/tmp/homeagent-n0-g0/g1-build.log`. 산출물은
+  `<sdk>/buildroot/output/milkv-duos-glibc-riscv64-emmc/target/usr/bin/node`.
+- **정지 조건**: 빌드가 실패하면 **자동 수정·재실행 금지.** 첫 실제 에러와 필요한 변경 범위를 먼저 보고한다.
+  재판정선 = Node/V8 시맨틱 패치 · qemu · ABI gate 완화 · 연쇄적 global 패키지 업그레이드.
+  지금까지의 libuv bump와 host variant 추가는 그 선 안쪽이다.
+- **⚠️ Blocker(런타임 게이트) — 실기에 바로 못 올린다.** 현재 보드에 flash된 baseline은 **musl**이고
+  이 레인은 **glibc**(`/lib/ld-linux-riscv64-lp64d.so.1` 요구)다. 지금 rootfs에 바이너리만 복사하는 건
+  유효한 런타임 시험이 아니다. runtime gate는 glibc rootfs 또는 `/opt` 자립 페이로드가 선행돼야 한다.
 - **추적면**: GitHub **issue #6** "Build and package Node.js 22.22.0 for SG2000 with pure-cross Buildroot"
-  = G1/host gate/runtime gate/package gate 체크리스트의 공개 SSOT. 모든 게이트가 닫히면 증거·provenance를
-  최종 코멘트로 남기고 close한다.
+  = G1/host gate/runtime gate/package gate 체크리스트의 공개 SSOT. 2026-07-21 체크포인트 코멘트에
+  라이브 상태가 정리돼 있다. 모든 게이트가 닫히면 증거·provenance를 최종 코멘트로 남기고 close한다.
+- **G1 통과 직후 할 일**: 우리 산출물과 SMHub 실측(`captures/smhub-beta5-20260630/extracted/`의
+  `node-config-gypi.json`, ELF/NEEDED/snapshot 심볼)을 대조해 각 항목을 셋으로 분류한다 —
+  ① 맞춰야 할 제품 계약(`/opt`, shared deps, ICU, RUNPATH) ② **우리 pure-cross 때문에 의도적으로 다른 것**
+  (벤더의 `host_arch=riscv64`·qemu 계열은 복사 대상이 아니다) ③ 벤더 빌드 환경에만 해당하는 것.
 - **Read**: `captures/n0-g0-20260721T150942+0900/RESULT.md`(G0 결과+발견),
   `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§12–§16**(패치 초안 D1–D7),
   `docs/BUILDROOT.md` "Node.js pure cross-compile"(공개 SSOT로 승격된 메커니즘·함정).

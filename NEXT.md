@@ -1,55 +1,49 @@
-# NOW — N0 pure-cross Node: G0-α(소스 판정) → G0(snapshot seam 실측)
+# NOW — N0 pure-cross Node: **G0 통과**, 다음은 G1(Buildroot 이식)
 
 - **Stem**: 우리 Milk-V SDK(Buildroot 2025.02, linux 5.10)에서 **Node 22.22.0을 순수 크로스컴파일**해
   `rv64gc/glibc` `.ipk`로 `/opt`에 설치하고, 이후 Mosquitto → Z2M → Zigbee/HA 수직 슬라이스를 닫는다.
-- **현재**: 준비 100% / 실행 0. 패치 초안 D1–D7, G0·G1 명령, 합격선까지 전부 문서화돼 있다.
-  타깃 툴체인도 이미 로컬에 있다 — `host-tools/gcc/riscv64-linux-x86_64/bin/riscv64-unknown-linux-gnu-gcc`
-  = Xuantie glibc **GCC 10.2.0**, `ld-linux-riscv64-lp64d.so.1`(= 합격선 GCC 10.2 / GLIBC ≤ 2.33 일치).
-  받아야 할 것은 Node tarball 하나뿐이고, **빌드는 전부 x86 호스트 크로스** — 보드는 마지막 runtime gate에만 등장한다.
-- **다음 한 걸음 — 2단, G0까지만**:
-  1. **G0-α (2분, 빌드 아님)**: tarball sha256 검증 후 `deps/v8/src/common/globals.h`에서 `USE_SIMULATOR`가
-     `V8_TARGET_ARCH_RISCV64 && !V8_HOST_ARCH_RISCV64`로 자동 정의되는지 **소스로 판정**한다.
-     riscv64가 목록에 없으면 G0을 돌리기 전에 계획부터 고친다(§14 residual이 여기서 반쯤 닫힌다).
-  2. **G0 (2~3시간)**: scratch에서 Node `v22.22.0`을 최소 기능으로 configure하고 **x86 host `mksnapshot` +
-     `v8_snapshot/embedded.S` action만 targeted build**한다. full Node/SDK 통합은 하지 않는다.
-- **정지 조건**: G0 pass/fail과 정확한 로그를 남긴 즉시 멈춘다. G1으로 자동 진입하지 않는다.
-- **Blocker**: none — **GLG G0 실행 승인(2026-07-21)**. 실기 flash·commit·push는 여전히 별도 승인.
-- **Read**: `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§12–§16**(gitignored),
-  `yocto/sources/meta-openembedded/meta-oe/recipes-devtools/nodejs/nodejs_20.20.0.bb`(선례 원본).
-- **Do not touch**: SDK 트리 · `bsp/patches/` · 보드 · SMHub 실기. G0은 gitignored scratch 안에서만 돈다.
+- **현재 — G0 PASS (2026-07-21)**: x86-64 호스트 `mksnapshot`이 riscv64 `embedded.S`(6.5MB)를
+  **1.08초, qemu·네이티브 RISC-V 실행 0회**로 생성했다. 생성물은 타깃 어셈블러로
+  `rv64gc + xthead / lp64d, RVV 없음`으로 검증됐다. §14 **D3의 유일한 잔여 미지수(V8 RISC-V 시뮬레이터
+  자동 활성)가 실측으로 닫혔다** — 추정에서 확인으로 승격.
+  전체 결과·발견·증거: `captures/n0-g0-20260721T150942+0900/RESULT.md` (gitignored).
+- **다음 한 걸음 — G1 (GLG go 필요)**: §14 **D1–D7을 gitignored SDK 워킹클론에 이식**하고
+  `milkv-duos-glibc-riscv64-emmc` 보드를 신설해 타깃 Node를 빌드한다. 아래 "N0 통합 순서" 참조.
+- **정지 조건**: G1은 host gate(ELF/ABI 검증)까지만. 실기 flash·deploy는 별도 승인.
+- **Blocker**: none — G1 착수는 GLG go 대기.
+- **Read**: `captures/n0-g0-20260721T150942+0900/RESULT.md`(G0 결과+발견),
+  `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§12–§16**(패치 초안 D1–D7).
+- **Do not touch**: `bsp/patches/`는 D1–D7 적용 전까지 무접촉. SMHub 실기 접속 금지.
 
-## 3분 부트 순서
+## G0에서 확정된 것 (G1이 물려받는 계약)
 
-1. 읽기:
-   - `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§7–§16** (gitignored 포렌식/실험안)
-   - `yocto/sources/meta-openembedded/meta-oe/recipes-devtools/nodejs/nodejs_20.20.0.bb` (same-width 선례 원본)
-   - SDK `buildroot/package/nodejs/{Config.in,nodejs.mk,nodejs-src/}`
-2. source: `node-v22.22.0.tar.xz`, SHA256
-   `4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683` 검증 후 gitignored scratch에 푼다.
-3. **G0-α**: `deps/v8/src/common/globals.h`의 `USE_SIMULATOR` 정의 조건에 RISCV64가 있는지 확인 → pass/fail 기록.
-4. configure(G0 최소면):
-   - target `CC/CXX` = `host-tools/gcc/riscv64-linux-x86_64/bin/riscv64-unknown-linux-gnu-{gcc,g++}` (rv64gc/lp64d)
-   - host `CC_host/CXX_host/AR_host` = x86_64 host toolchain
-   - `--cross-compiling --dest-cpu=riscv64 --dest-os=linux --with-intl=none --without-npm --without-corepack --ninja`
-5. Ninja graph에서 실제 target 이름을 찾고 **host tool + V8 snapshot action만** 빌드한다.
-6. 로그·ELF·generated `embedded.S`를 gitignored capture에 보존하고 결과를 보고한다.
+1. **제너레이터는 make, ninja 아님.** `want_separate_host_toolset=1`이면 `v8.gyp`의 `v8_inspector_headers`가
+   `toolsets:['host','target']`인데 출력이 toolset 공용 `gen/`이라 **같은 stamp를 두 번 선언** → ninja 하드 에러.
+   make는 용인. Buildroot `nodejs-src.mk`·meta-oe 둘 다 make라 영향 없음. **§16의 ninja 전제는 폐기.**
+2. **타깃 toolset mksnapshot은 생성조차 되지 않는다** (`mksnapshot.host.mk`만 존재). snapshot action은
+   래퍼 없이 host 바이너리를 직접 호출한다 → **qemu가 낄 자리가 구조적으로 없다.**
+3. 실측 configure 면: `--dest-cpu=riscv64 --dest-os=linux --cross-compiling --with-intl=none
+   --without-npm --without-corepack --without-inspector`, `CC/CXX`=SDK riscv64 gcc 10.2,
+   `CC_host/CXX_host/AR_host`=x86_64. 호스트 컴파일러는 clang 21로도 error 0.
+4. host mksnapshot 빌드 실측 **26m55s / 16코어**. G1 full 타깃 빌드는 이보다 크다.
+5. `--without-inspector`는 G0 최소면 선택이었다. **제품 빌드에서 inspector를 켤지는 G1에서 재판단**한다.
 
-### G0 합격 기준
+### G1 host gate (합격선 불변)
 
-- generated config: `host_arch=x64`, `target_arch=riscv64`, `want_separate_host_toolset=1`,
-  `node_use_node_snapshot=false`.
-- `mksnapshot` 및 필요한 host generators = **x86-64 ELF**.
-- `v8_snapshot` action이 x86 host tool을 실행해 RISC-V `embedded.S`를 생성한다.
-- build trace에 `qemu`, RISC-V ELF 실행, `Exec format error`가 없다.
-- 실패 시 simulator/host-link/variable-propagation 중 정확한 경계를 기록하며 QEMU로 우회하지 않는다.
+- `file node` = riscv64 lp64d, interp `/lib/ld-linux-riscv64-lp64d.so.1`.
+- `readelf -V node` 최대 **GLIBC ≤ 2.33 / GLIBCXX ≤ 3.4.28** (벤더 2.38/3.4.32는 참조일 뿐).
+- `readelf -A` = rv64gc, **RVV 없음**. `v8_Default_embedded_blob_code_` 존재.
+- build trace에 `qemu` / RISC-V 실행 / `Exec format error` **0건**.
+- provenance 기록: source sha256, toolchain, docker RepoDigest(`:latest` 금지).
 
-### G0 금지선
+### 금지선
 
-- full Node build, SDK/`bsp/patches/` 수정, `.ipk` 생성, 실기 flash/deploy 금지.
-- SMHub SSH 활성화·설정 변경·opkg mutation 금지. live probe는 N1.5에서 별도 승인한다.
+- SDK 포크 금지 — pinned 워킹클론에 defconfig/overlay/patch로만 표현. patch nonapply는 fail-closed.
+- qemu-user / 네이티브 RISC-V 빌드로의 우회 금지. 막히면 **경계를 기록하고 멈춘다.**
+- 실기 flash/deploy, SMHub SSH·설정 변경·opkg mutation 금지.
 - host `-latomic`은 실제 `__atomic_*` link 실패 때만 추가한다.
 
-# G0 통과 뒤 — N0 통합 순서
+# G1 — N0 통합 순서
 
 1. **보드 변형**: `milkv-duos-glibc-riscv64-emmc` 추가. SDK 보드 목록은 `glibc_arm64_{sd,emmc}` +
    `musl_riscv64_{sd,emmc}`뿐이라 **glibc×riscv64 조합은 존재하지 않는다 — N0이 신설**한다.
@@ -58,6 +52,8 @@
    2026.02 Node package의 22.22.0 source/hash/patch delta만 비교해 최소 backport한다.
 3. **RISC-V pure-cross recipe**: `BR2_RISCV_64` allowlist + `NODEJS_SRC_CPU=riscv64` +
    riscv64에서 `CC_host/HOSTCC` 분리 + QEMU wrapper/dependency 비활성. 다른 arch 동작은 보존.
+   **D3는 G0에서 실측 검증됨** — Buildroot `HOSTCC/HOSTCXX/HOSTAR` = OE `BUILD_CC/BUILD_CXX/BUILD_AR`를
+   `CC_host/CXX_host/AR_host`로 넘기면 된다(meta-oe `nodejs_20.20.0.bb` same-width 분기와 동형).
 4. **ICU**: system ICU 73.2 configure-check가 우선. 실패/기능 부족 시 small-icu 또는 full-icu를 선택하되,
    추가 source/data URL·hash와 offline 재현 비용을 명시한다.
 5. **패키징**: Node/npm/pnpm을 package manager가 추적하는 `.ipk`(absolute `/opt`, RUNPATH `/opt/lib`) + OpenRC로 구성.
@@ -75,6 +71,11 @@
 
 # RECENT
 
+- **2026-07-21 G0 PASS**: x86-64 host `mksnapshot`(+torque, bytecode_builtins_list_generator)이 전부 x86-64 ELF로
+  빌드되고, 1.08초 만에 riscv64 `embedded.S` 6,522,652B + `snapshot.cc` 1,030,517B를 생성했다. 로그의
+  qemu / `Exec format error` / RISC-V 실행 = **0건**. 생성물은 SDK 어셈블러로
+  `rv64i2p0_m2p0_a2p0_f2p0_d2p0_c2p0_xtheadc2p0` (rv64gc+xthead, lp64d, RVV 없음)으로 확증.
+  증거 `captures/n0-g0-20260721T150942+0900/`. **pure-cross Node는 이제 가설이 아니라 실측이다.**
 - **2026-07-15 포렌식**: SMHub Node `22.22.0-2`의 config.gypi·symbols·opkg index를 복원했다.
   `host_arch=riscv64`, separate host toolset, Node snapshot/code-cache off, V8 embedded blob on, `/opt` prefix,
   shared deps를 확인했다. 공개 측정 계약은 `docs/SMHUB.md §5.2`; 상세 raw는 gitignored forensic report.

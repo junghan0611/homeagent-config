@@ -1,29 +1,38 @@
-# NOW — N0 pure-cross Node: 내일 G0 host-snapshot seam부터
+# NOW — N0 pure-cross Node: G0-α(소스 판정) → G0(snapshot seam 실측)
 
 - **Stem**: 우리 Milk-V SDK(Buildroot 2025.02, linux 5.10)에서 **Node 22.22.0을 순수 크로스컴파일**해
   `rv64gc/glibc` `.ipk`로 `/opt`에 설치하고, 이후 Mosquitto → Z2M → Zigbee/HA 수직 슬라이스를 닫는다.
-- **현재**: 방향·선례·패치 면은 정리됐고 **아직 컴파일/패치/보드 변경은 0**이다. SMHub ELF 포렌식에서
-  Node snapshot은 off지만 V8 embedded blob은 있음을 확인했고, meta-oe의 same-width 해법
-  (`CC_host`=x86 host toolchain)으로 QEMU/native-RISC-V 없이 blob을 만들 수 있는 출하 선례를 찾았다.
-- **다음 한 걸음 — G0만**: GLG go 후 scratch에서 Node `v22.22.0`을 최소 기능으로 configure하고
-  **x86 host `mksnapshot` + `v8_snapshot/embedded.S` action만 targeted build**한다. full Node/SDK 통합은 하지 않는다.
+- **현재**: 준비 100% / 실행 0. 패치 초안 D1–D7, G0·G1 명령, 합격선까지 전부 문서화돼 있다.
+  타깃 툴체인도 이미 로컬에 있다 — `host-tools/gcc/riscv64-linux-x86_64/bin/riscv64-unknown-linux-gnu-gcc`
+  = Xuantie glibc **GCC 10.2.0**, `ld-linux-riscv64-lp64d.so.1`(= 합격선 GCC 10.2 / GLIBC ≤ 2.33 일치).
+  받아야 할 것은 Node tarball 하나뿐이고, **빌드는 전부 x86 호스트 크로스** — 보드는 마지막 runtime gate에만 등장한다.
+- **다음 한 걸음 — 2단, G0까지만**:
+  1. **G0-α (2분, 빌드 아님)**: tarball sha256 검증 후 `deps/v8/src/common/globals.h`에서 `USE_SIMULATOR`가
+     `V8_TARGET_ARCH_RISCV64 && !V8_HOST_ARCH_RISCV64`로 자동 정의되는지 **소스로 판정**한다.
+     riscv64가 목록에 없으면 G0을 돌리기 전에 계획부터 고친다(§14 residual이 여기서 반쯤 닫힌다).
+  2. **G0 (2~3시간)**: scratch에서 Node `v22.22.0`을 최소 기능으로 configure하고 **x86 host `mksnapshot` +
+     `v8_snapshot/embedded.S` action만 targeted build**한다. full Node/SDK 통합은 하지 않는다.
 - **정지 조건**: G0 pass/fail과 정확한 로그를 남긴 즉시 멈춘다. G1으로 자동 진입하지 않는다.
-- **Blocker**: 오늘은 종료. 내일 GLG의 G0 실행 go.
+- **Blocker**: none — **GLG G0 실행 승인(2026-07-21)**. 실기 flash·commit·push는 여전히 별도 승인.
+- **Read**: `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§12–§16**(gitignored),
+  `yocto/sources/meta-openembedded/meta-oe/recipes-devtools/nodejs/nodejs_20.20.0.bb`(선례 원본).
+- **Do not touch**: SDK 트리 · `bsp/patches/` · 보드 · SMHub 실기. G0은 gitignored scratch 안에서만 돈다.
 
-## 내일 3분 부트 순서
+## 3분 부트 순서
 
 1. 읽기:
    - `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§7–§16** (gitignored 포렌식/실험안)
-   - `yocto/sources/meta-openembedded/meta-oe/recipes-devtools/nodejs/` (과거 Yocto에서 쓴 local meta-oe 선례)
+   - `yocto/sources/meta-openembedded/meta-oe/recipes-devtools/nodejs/nodejs_20.20.0.bb` (same-width 선례 원본)
    - SDK `buildroot/package/nodejs/{Config.in,nodejs.mk,nodejs-src/}`
 2. source: `node-v22.22.0.tar.xz`, SHA256
    `4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683` 검증 후 gitignored scratch에 푼다.
-3. configure(G0 최소면):
-   - target `CC/CXX` = SDK `riscv64-unknown-linux-gnu-*`, `rv64gc/lp64d`
+3. **G0-α**: `deps/v8/src/common/globals.h`의 `USE_SIMULATOR` 정의 조건에 RISCV64가 있는지 확인 → pass/fail 기록.
+4. configure(G0 최소면):
+   - target `CC/CXX` = `host-tools/gcc/riscv64-linux-x86_64/bin/riscv64-unknown-linux-gnu-{gcc,g++}` (rv64gc/lp64d)
    - host `CC_host/CXX_host/AR_host` = x86_64 host toolchain
    - `--cross-compiling --dest-cpu=riscv64 --dest-os=linux --with-intl=none --without-npm --without-corepack --ninja`
-4. Ninja graph에서 실제 target 이름을 찾고 **host tool + V8 snapshot action만** 빌드한다.
-5. 로그·ELF·generated `embedded.S`를 gitignored capture에 보존하고 PM 검토로 반환한다.
+5. Ninja graph에서 실제 target 이름을 찾고 **host tool + V8 snapshot action만** 빌드한다.
+6. 로그·ELF·generated `embedded.S`를 gitignored capture에 보존하고 결과를 보고한다.
 
 ### G0 합격 기준
 
@@ -42,7 +51,9 @@
 
 # G0 통과 뒤 — N0 통합 순서
 
-1. **보드 변형**: `milkv-duos-glibc-riscv64-emmc` 추가. 기존 musl sd/emmc는 `homeagentd` baseline으로 보존.
+1. **보드 변형**: `milkv-duos-glibc-riscv64-emmc` 추가. SDK 보드 목록은 `glibc_arm64_{sd,emmc}` +
+   `musl_riscv64_{sd,emmc}`뿐이라 **glibc×riscv64 조합은 존재하지 않는다 — N0이 신설**한다.
+   기존 musl sd/emmc는 `homeagentd` baseline으로 보존.
 2. **Buildroot base**: pinned SDK/Buildroot 2025.02 유지. 전체 2026.02 업그레이드 금지.
    2026.02 Node package의 22.22.0 source/hash/patch delta만 비교해 최소 backport한다.
 3. **RISC-V pure-cross recipe**: `BR2_RISCV_64` allowlist + `NODEJS_SRC_CPU=riscv64` +
@@ -67,8 +78,19 @@
 - **2026-07-15 포렌식**: SMHub Node `22.22.0-2`의 config.gypi·symbols·opkg index를 복원했다.
   `host_arch=riscv64`, separate host toolset, Node snapshot/code-cache off, V8 embedded blob on, `/opt` prefix,
   shared deps를 확인했다. 공개 측정 계약은 `docs/SMHUB.md §5.2`; 상세 raw는 gitignored forensic report.
-- **2026-07-15 pure-cross 선례**: meta-oe의 same-width(x86_64→riscv64) recipe가 host generators를
-  `BUILD_CC`로 빌드해 QEMU 없이 실행한다. N0은 깊은 V8 포트가 아니라 Buildroot host/target toolchain 분리 문제로 좁혀졌다.
+- **2026-07-21 선례 정밀 판독 + 07-15 표현 정정**: meta-oe `nodejs_20.20.0.bb`를 직접 읽었다.
+  same-width(64→64)면 `CC_host=BUILD_CC`(x86 호스트 컴파일러) + `qemu_cmd=""`(래퍼 공백) = **QEMU 0회**,
+  different-width(64→32)면 타깃 컴파일러 + QEMU 실행. **우리 §14 D3 초안과 1:1 일치**하고
+  Buildroot `HOSTCC/HOSTCXX` = OE `BUILD_CC/BUILD_CXX`로 그대로 옮겨 적을 수 있다.
+  ⚠️ **단 같은 레시피가 `COMPATIBLE_HOST:riscv64 = "null"`로 riscv를 배제**한다 — 메커니즘은 다른 arch에서
+  출하 검증됐지만 **riscv64로는 미증명**이다. 07-15 RECENT의 "same-width(x86_64→riscv64) 출하 선례" 표현은
+  과했고, 배제 사유(미검증 vs 실패)는 미상(로컬 meta-oe는 shallow clone이라 이력 추적 불가).
+  → G0은 남의 선례로 대체할 수 없는 실측이다.
+- **2026-07-21 벤더 요청 검토 종결**: SMLIGHT에 Node 관련으로 **요청할 것이 없다.** Node은 MIT(GPL 의무 없음),
+  그쪽은 Buildroot 정규 recipe = **qemu-user 경로**(우리가 닫은 방법)이며, 베이스도 glibc 2.42 / GCC 15.2 /
+  kernel 6.18로 우리(2.33 / 10.2 / 5.10)와 불일치해 recipe·바이너리 모두 이식 불가. 남은 요청 후보는
+  `docs/SMHUB.md §6-5` **ESPHome C906L 컴포넌트(GPLv3 근거)** 하나뿐이며 별개 레인이다.
+  `YoeDistro/meta-riscv`에도 nodejs 레시피는 없다(커널/BSP 전용).
 - **`3c2d836`**: 순수 cross Node service lane을 NEXT/ROADMAP/SMHUB SSOT에 잠금.
 
 # LEDGER / 불변식

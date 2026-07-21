@@ -9,12 +9,16 @@
   전체 결과·발견·증거: `captures/n0-g0-20260721T150942+0900/RESULT.md` (gitignored).
 - **다음 한 걸음 — G1 (착수 승인됨, 2026-07-21)**: §14 **D1–D7을 gitignored SDK 워킹클론에 이식**하고
   `milkv-duos-glibc-riscv64-emmc` 보드를 신설해 타깃 Node를 빌드한다. 아래 "N0 통합 순서" 참조.
-  워킹클론은 `bsp/setup.sh`로 뜨되, 핀 커밋 `ad920f839`와 동일한 참조 클론이 `~/repos/3rd/milkv/`에
-  이미 있으므로 **로컬 클론으로 5.6G 재다운로드를 피한다**(참조 클론 자체는 tracked 수정 상태 — 직접 쓰지 않는다).
+  SDK 워킹트리는 **이미 있다** — `HOMEAGENT_BSP_SDK=~/repos/3rd/milkv/duo-buildroot-sdk-v2`
+  (`bsp/README.md` 문서화된 경로, 핀 `ad920f839`, host-tools 6.8G·`buildroot/output`·07-14 부팅 이미지 보유).
+  **재클론·재다운로드 불필요**하고 tracked 수정 4건은 `build.sh`가 주입한 정상 상태다.
 - **정지 조건**: `make` 걸기 전에 D1–D7 diff를 GLG에게 보인다. 그 다음 host gate까지 진행.
 - **Blocker**: none. **Duo S 실기 연결됨(2026-07-21 사무실)** — host gate 통과 후 runtime gate
   (`node -p 'process.arch+":"+process.versions.node'` = `riscv64:22.22.0`)까지 이번 레인에서 닫을 수 있다.
   단 실기 flash/deploy는 그 시점에 별도 승인.
+- **추적면**: GitHub **issue #6** "Build and package Node.js 22.22.0 for SG2000 with pure-cross Buildroot"
+  = G1/host gate/runtime gate/package gate 체크리스트의 공개 SSOT. 모든 게이트가 닫히면 증거·provenance를
+  최종 코멘트로 남기고 close한다.
 - **Read**: `captures/n0-g0-20260721T150942+0900/RESULT.md`(G0 결과+발견),
   `captures/smhub-beta5-20260630/extracted/node-build-forensics.md` **§12–§16**(패치 초안 D1–D7),
   `docs/BUILDROOT.md` "Node.js pure cross-compile"(공개 SSOT로 승격된 메커니즘·함정).

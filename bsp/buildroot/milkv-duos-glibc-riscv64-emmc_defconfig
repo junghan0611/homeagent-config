@@ -1,0 +1,68 @@
+# HomeAgent SG2000 service image — Buildroot config (glibc x riscv64).
+#
+# The stock SDK ships glibc only for arm64 and riscv64 only with musl, so this
+# combination does not exist upstream; it is the N0 "service image" lane:
+#   musl  x riscv64 -> homeagentd minimal baseline (stock boards, untouched)
+#   glibc x riscv64 -> Node / Z2M service image (this file)
+#
+# Derived from the stock buildroot/configs/milkv-duos-musl-riscv64-emmc_defconfig.
+# Deliberate deviations are commented inline.
+#
+# Install into the SDK as buildroot/configs/<name>_defconfig, then:
+#   make O=output/milkv-duos-glibc-riscv64-emmc milkv-duos-glibc-riscv64-emmc_defconfig
+#   make O=output/milkv-duos-glibc-riscv64-emmc nodejs
+
+BR2_riscv=y
+
+# Buildroot composes -march from the BR2_RISCV_ISA_* symbols (arch/arch.mk.riscv)
+# and the external-toolchain wrapper forces that -march on compile AND link. RVC
+# has no "default y", so without this line the target would be built as rv64imafd:
+# no compressed instructions, larger code, and an ISA that diverges from the
+# measured SMHub contract (rv64...c2p0). RVV stays off deliberately -- see below.
+BR2_RISCV_ISA_RVC=y
+
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+
+# glibc riscv64 cross toolchain that already ships in the SDK's host-tools:
+# Xuantie-900 linux-5.10.4 glibc GCC 10.2.0, rv64gc/lp64d.
+# This is the same toolchain the G0 snapshot-seam experiment measured against,
+# and it satisfies the host gate (GLIBC <= 2.33, GCC >= 10.1 for Node 22).
+BR2_TOOLCHAIN_EXTERNAL_PATH="$(TOPDIR)/../host-tools/gcc/riscv64-linux-x86_64"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="riscv64-unknown-linux-gnu"
+BR2_TOOLCHAIN_EXTERNAL_GCC_10=y
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+BR2_TOOLCHAIN_EXTERNAL_OPENMP=y
+
+# DEVIATION vs the stock riscv64 board: the stock defconfig carries
+#   BR2_TARGET_LDFLAGS="-march=rv64imafdcv0p7xthead -mcpu=c906fdv -mabi=lp64d -mcmodel=medany"
+# i.e. the C906's *draft* RVV 0.7. Our host gate requires no RVV in the shipped
+# service binaries, so that whole line is dropped here rather than edited:
+#   -march / -mabi  the external-toolchain wrapper already forces both, from
+#                   BR2_RISCV_ISA_* above -- repeating them in LDFLAGS is noise.
+#   RVV 0.7         off by leaving BR2_RISCV_ISA_RVV unset.
+#   -mcmodel=medany only ever reached the link step here, never the compile step,
+#                   so it was not doing what it looks like it does. Node's ~75MB
+#                   is nowhere near medlow's +/-2GiB reach, so the first proof runs
+#                   without it. If a real relocation failure shows up, it has to go
+#                   into CFLAGS/CXXFLAGS *and* link, not into LDFLAGS alone.
+# Result: a generic rv64gc/lp64d binary on /lib/ld-linux-riscv64-lp64d.so.1
+# (verified against the SDK toolchain), which is the loader the host gate names.
+
+BR2_OPTIMIZE_S=y
+BR2_PER_PACKAGE_DIRECTORIES=y
+
+BR2_TARGET_GENERIC_HOSTNAME="homeagent"
+BR2_TARGET_GENERIC_ISSUE="HomeAgent SG2000 service image (glibc/riscv64)"
+
+# Node 22.22.0 via the riscv64 pure-cross recipe
+# (bsp/patches/0002-buildroot-nodejs-riscv64-pure-cross.patch).
+BR2_PACKAGE_NODEJS=y
+BR2_PACKAGE_OPENSSL=y
+
+# Intl is deliberately OFF for the first build: with BR2_PACKAGE_ICU unset the
+# recipe passes --with-intl=none, which keeps the first pure-cross target build
+# to the smallest surface that still proves the recipe. ICU (system-icu 73.2) is
+# the immediate follow-up, not a permanent decision.

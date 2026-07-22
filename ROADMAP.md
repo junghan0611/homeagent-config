@@ -195,6 +195,10 @@ This repo is a multi-board record. Active and parked lanes:
   SMHub is a reverse-engineered reference for versions and service shape, not a libc/package
   distribution to copy. The pinned public SDK fork carries common package code; this repo owns
   the complete musl image configuration.
+- **Keep the downstream maintenance surface bounded.** Buildroot recipes, defconfigs, overlays,
+  and a few small auditable compatibility patches are acceptable; downstream Node.js, V8, libc,
+  or toolchain forks are not. If this BSP needs an expanding patch series or runtime semantic
+  changes, stop and ask upstream before changing the product baseline.
 - **No business logic in this repo** — verification surfaces and prototypes only; product
   logic stays in its own repos.
 - One radio, one protocol at a time — Zigbee NCP **or** Thread RCP by firmware switching.

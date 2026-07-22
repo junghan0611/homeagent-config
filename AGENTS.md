@@ -97,6 +97,7 @@ Defer unless explicitly requested:
 - Own the box: serial console, bootloader/recovery, rootfs, service lifecycle, and radio path must be inspectable.
 - Public repo only: no private business logic, secrets, internal production details, or closed firmware blobs.
 - Reproducibility over cleverness: prefer a boring image that can be rebuilt and reflashed.
+- **Downstream maintenance budget:** own Buildroot recipes, defconfigs, overlays, and at most a few small auditable compatibility patches. Do not maintain downstream forks of Node.js, V8, libc, or the toolchain. If the vertical slice requires an expanding source-patch stack or runtime semantic changes, stop, ask upstream, and reconsider the baseline instead of repairing the ecosystem locally.
 - On-device first: cloud may be a fallback, not a dependency for local control.
 - One radio, one protocol: Zigbee and Thread/Matter are firmware-switched unless proven otherwise. Single-chip **concurrent** is a chip-timing question (MG26 / Series 3), tracked in `docs/MULTIPROTOCOL.md`; now = clean separate-stack control, not concurrency.
 - USB coordinators are proof tools; the target hub has an onboard radio.

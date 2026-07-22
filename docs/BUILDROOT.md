@@ -23,20 +23,22 @@ sit in different lanes.
 
 ## The Duo S Buildroot lane — what we own
 
-BSP base = **`milkv-duo/duo-buildroot-sdk-v2`** (pinned `develop @ ad920f839`), a single in-tree
-monorepo carrying the whole boot chain + CVITEK libs. Our reproducible SSOT is the **committed
-board defconfig**, which `bsp/build.sh` injects over the SDK's stock defconfig at build time so
-the upstream clone stays pristine:
+BSP base = **`junghan0611/duo-buildroot-sdk-v2`** branch
+`feat/riscv64-nodejs-pure-cross`, pinned at `087547cf8` (upstream base `ad920f839`). The fork
+carries common Buildroot package support; product configuration remains in this repo and
+`bsp/build.sh` injects both the outer SDK board config and the Buildroot userspace config:
 
 - `bsp/board/milkv-duos-musl-riscv64-sd/defconfig` — RISC-V + musl, microSD
 - `bsp/board/milkv-duos-musl-riscv64-emmc/defconfig` — RISC-V + musl, eMMC
+- `bsp/buildroot/milkv-duos-musl-riscv64-emmc_defconfig` — Node/Z2M userspace base
 - `bsp/board/milkv-duos-glibc-arm64-emmc/defconfig` — **historical**, arm64, not the product ISA
 
 **RISC-V + musl, not ARM.** The runtime target is `riscv64-linux-musl`, so we build the C906
 RISC-V lane (physical `RV` switch; boot-log first char `C`). The delta from the stock SDK board
 config is small and pinned: `CONFIG_ARCH=riscv`, `CROSS_COMPILE=riscv64-unknown-linux-musl-`,
 `KERNEL_ENTRY_HACK_ADDR=0x80200000` (ARM was `0x80108000`), `TOOLCHAIN_MUSL_RISCV64`. `musl`
-matches the product / SMHub userspace and the `homeagentd` target.
+is the native Milk-V product baseline and the `homeagentd` target. SMHub is a glibc reference
+product; its versions and service shape inform us, but its libc and image are not copied.
 
 **hub-minimal delta (partial).** A hub has no camera: the defconfig drops the CVITEK image
 sensors + MIPI panel (`bsp/patches/0001-hub-minimal-skip-vision-stack.patch`). *Still partial* —
@@ -82,10 +84,12 @@ recipe *disables* for riscv (`COMPATIBLE_HOST:riscv64 = "null"`). It is now meas
 - **V8 auto-enables its RISC-V simulator when the toolsets differ** —
   `deps/v8/src/common/globals.h`: `V8_TARGET_ARCH_RISCV64 && !V8_HOST_ARCH_RISCV64 → USE_SIMULATOR 1`.
   An x86-64 `mksnapshot` can therefore serialize a riscv64 snapshot without executing any RISC-V code.
-- **Measured** (Node `v22.22.0`, target = SDK Xuantie glibc GCC 10.2, host = x86-64): `mksnapshot`,
-  `torque`, `bytecode_builtins_list_generator` all build as x86-64 ELF (26m55s at `-j16`); the
-  snapshot action emits a 6.5MB riscv64 `embedded.S` in **1.08s**; `qemu` / target execution /
-  `Exec format error` = 0. The output assembles as `rv64…c_xtheadc`, lp64d, no RVV.
+- **Measured mechanism proof** (Node `v22.22.0`, target = SDK Xuantie glibc GCC 10.2,
+  host = x86-64): `mksnapshot`, `torque`, `bytecode_builtins_list_generator` all build as
+  x86-64 ELF (26m55s at `-j16`); the snapshot action emits a 6.5MB riscv64 `embedded.S` in
+  **1.08s**; `qemu` / target execution / `Exec format error` = 0. A subsequent full target
+  build also passed. This glibc artifact is historical evidence for the libc-neutral build
+  mechanism, not the product binary; the product gate now applies it to the stock musl board.
 - **Trap — the ninja generator is unusable here.** With `want_separate_host_toolset=1`,
   `tools/v8_gypfiles/v8.gyp`'s `v8_inspector_headers` (`toolsets: ['host','target']`) writes into the
   toolset-shared `gen/`, so both toolsets declare the same output and ninja hard-errors
@@ -96,7 +100,23 @@ recipe *disables* for riscv (`COMPATIBLE_HOST:riscv64 = "null"`). It is now meas
   action invokes the host binary with no wrapper. QEMU has no place in the graph; Buildroot's stock
   recipe uses it by choice, not by necessity.
 
-Evidence bundle: `captures/n0-g0-*/RESULT.md` (gitignored).
+Evidence bundles: `captures/n0-g0-*/RESULT.md` (snapshot seam),
+`captures/n0-g1-*/RESULT.md` (full target build), and
+`captures/n0-musl-gap-*/{GAP,COMPARISON}.md` (native-musl decision) — all gitignored.
+
+### Native-musl product contract (2026-07-22)
+
+N0 follows Buildroot's normal embedded model: Node and its dependencies are baked into the
+validated rootfs, not installed through an on-device distribution layer. The musl board keeps
+its existing C906/RVV 0.7 toolchain and BusyBox init. Node installs under `/usr`; npm and
+Corepack stay off; Z2M is built host-side from a pinned lockfile. System ICU is enabled for
+normal `Intl` compatibility. `/opt`, opkg, OpenRC and independent app updates remain a later
+product-distribution decision, not prerequisites for proving Node and Z2M on this board.
+
+The next acceptance gate is a single clean package build against
+`milkv-duos-musl-riscv64-emmc`: musl interpreter present in the generated image, no `GLIBC_*`
+symbols, `GLIBCXX <= 3.4.28`, module ABI 127, V8 embedded blob present, and zero QEMU or target
+execution. Reuse the same output tree for the complete image so V8 is not rebuilt unnecessarily.
 
 ## Open items (post-boot)
 
@@ -117,7 +137,7 @@ SMHub Nano is the same SG2000, but SMLIGHT ships a **separate, more mainline pro
 (kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11, standard remoteproc/rpmsg +
 open-amp, RAUC A/B). We **don't rebuild it** — we read and diff it as a system-application
 developer (`SMHUB.md`). The two images are **not interchangeable**; the shared axis is
-SoC / ISA / musl / toolchain / boot-chain knowledge, not the image.
+SoC / ISA / product-version / service-shape knowledge, not libc or the image.
 
 ---
 

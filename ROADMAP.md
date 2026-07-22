@@ -27,11 +27,11 @@ Two SG2000 / RISC-V lanes anchor the current work:
   lessons over into the Duo S lane in our own way.
 
 Both are **SG2000 / riscv64**, so the shared axis is real: SoC family, ISA, boot-chain
-knowledge, cross-toolchain. **libc differs** — our minimal boards are `musl`, while the SMHub
-shipped image measures **glibc** (`docs/SMHUB.md`); our own Node service image is glibc too.
-The **images are not interchangeable** (Duo S = milkv SDK Linux 5.10 + CVITEK `rtos_cmdqu`;
-SMHub = kernel 6.18 + standard remoteproc/rpmsg + open-amp) — see the image-compat table in
-[`docs/SMHUB.md`](docs/SMHUB.md).
+knowledge and application versions. **libc differs by design** — our product image keeps the
+Milk-V SDK's native `musl`; SMHub measures `glibc` (`docs/SMHUB.md`). The images are not
+interchangeable (Duo S = linux 5.10 + CVITEK `rtos_cmdqu`; SMHub = kernel 6.18 + standard
+remoteproc/rpmsg + open-amp). SMHub proves the service stack and informs versions; it does not
+dictate our libc or distribution model.
 
 ---
 
@@ -52,29 +52,26 @@ embedded-hub productization on a vendor OpenWrt image):
 - **Log management** — persistent logs, rotation, a clean ro-root / rw-data split.
 - **Persistence / rw area** — overlay + writable data partition (SMHub uses p7; we design
   our own equivalent).
-- **Package pre-install** — the minimal service set as **cross-built `.ipk` packages under
-  `/opt`** (MQTT broker, Zigbee2MQTT, matter.js / Matterbridge, `homeagentd`, a sample server +
-  app). Node.js is the foundation the JS stack rides on. We match SMHub's *shipped contract*
-  (version / rv64gc-glibc ABI / `/opt` layout / deps / OpenRC service), **not** their vendor
-  kernel/BSP or unpublished Buildroot recipe — see the locked build method below.
+- **Image-baked services first** — Node, MQTT, Zigbee2MQTT, `homeagentd`, sample server and app
+  are cross-built as ordinary Buildroot target packages into one validated musl rootfs. Node.js
+  is the JS foundation. Independent `.ipk`/`/opt` app updates are a later product-distribution
+  choice, not a prerequisite for proving the vertical slice.
 - **Recovery / update path** — A/B or image-replace, first-boot provisioning.
 
 Deliverable = **sample hub + app + server**, end to end, all functions demonstrably working
 in a public repo. That is the meaningful result.
 
-### SDK handling — extend `bsp/`, fork only if forced
+### SDK handling — fork common code, keep product config in `bsp/`
 
-The Milk-V sources are cloned at `~/repos/3rd/milkv/` (`duo-buildroot-sdk-v2` = BSP base
-pinned `ad920f839`, `bootloader-riscv`, `milkv.io` docs). Default: keep working through
-**`bsp/`** (committed defconfig + rootfs overlay + patches injected over a pinned, gitignored
-clone — no fork needed). Fork a source repo only when a change **cannot** be expressed as a
-defconfig, overlay, or patch. Detail + experience log: [`docs/BUILDROOT.md`](docs/BUILDROOT.md);
-operational how-to: [`bsp/README.md`](bsp/README.md).
+The Buildroot package changes are maintained on `junghan0611/duo-buildroot-sdk-v2` branch
+`feat/riscv64-nodejs-pure-cross`, pin `087547cf8` (upstream base `ad920f839`). Product board,
+userspace and overlay choices remain committed under **`bsp/`** and are injected fail-closed.
+Detail: [`docs/BUILDROOT.md`](docs/BUILDROOT.md); operations: [`bsp/README.md`](bsp/README.md).
 
-### Locked build method (2026-07-15) — pure cross-compile, reproduce from the shipped contract
+### Locked build method (2026-07-22) — native-musl Buildroot, pure cross-compile
 
-The productization packages (Node first, then Mosquitto / Z2M) are built **pure cross-compile**
-in our own Buildroot and shipped as **`.ipk` under `/opt` + OpenRC**. Build policy:
+Node first, then MQTT/Z2M, are built **pure cross-compile** and baked into the stock Milk-V
+musl rootfs. BusyBox init and whole-image validation remain the baseline. Build policy:
 
 - **No QEMU-user, no native RISC-V runner.** Product packages are cross-compiled on the host; no
   target binary is executed at build time. V8's mksnapshot was the constraint's technical gate —
@@ -87,10 +84,10 @@ in our own Buildroot and shipped as **`.ipk` under `/opt` + OpenRC**. Build poli
   it ships **kernel 6.18** (vs our 5.10) on a separate, non-public vendor Buildroot tree, and we
   do not adopt its SLZB-OS distribution model. We **reproduce our own** packages from public
   upstream source (`nodejs/node`, `Koenkk/zigbee2mqtt`, …).
-- **No SDK fork.** Everything is a `bsp/patches/` injection over the pinned, unforked working clone; the
-  kernel stays **linux 5.10** (we do not follow SMHub's 6.18) — preserving the Duo S ≠ SMHub line.
-- **libc dual-lane.** The service image is glibc (a new `milkv-duos-glibc-riscv64-emmc` variant);
-  the existing `…-musl-riscv64-{sd,emmc}` boards remain the `homeagentd` / minimal baseline.
+- **Pinned SDK fork, minimal product delta.** Common riscv64 Node support is committed in the
+  fork; defconfig and overlays stay here. Kernel remains **linux 5.10**.
+- **One native libc lane.** Node, Z2M and `homeagentd` all target the existing
+  `milkv-duos-musl-riscv64-{sd,emmc}` boards. No glibc compatibility payload or wrapper.
 
 ---
 
@@ -100,10 +97,9 @@ The big core is booted in **RISC-V C906 mode**. SG2000 boots either A53 (ARM) or
 (RISC-V) by a board switch; the `homeagentd` baseline target is `riscv64-linux-musl`, so
 RISC-V is the point. **First success (2026-07-14):** our own Buildroot image booted on Duo S
 real silicon — `Linux milkv-duo 5.10.4 riscv64`, our build timestamp, our defconfig, eth0 DHCP
-+ Wi-Fi (aic8800) up. The **active lane is now the productization stack**: cross-build Node
-22.22.0 as a glibc `.ipk` under `/opt` (`NEXT.md` N0). Memory reclaim / hub-minimal trimming
-is re-placed as a gate **after Node, before Z2M**; measuring `homeagentd` on real silicon runs
-in parallel on the musl baseline.
++ Wi-Fi (aic8800) up. The **active lane is now the productization stack**: build Node 22.22.0
+as a native-musl Buildroot target package, bake it into the same rootfs, then run Z2M on silicon
+(`NEXT.md` N0). Memory reclaim remains after Node and before Z2M.
 
 The runtime is a **Zig 100ms `homeagentd` state machine on Linux (L3)** over a **C906
 FreeRTOS mailbox coprocessor (L2)**, with radio at L0 and an 8051 always-on layer (L1,
@@ -121,15 +117,14 @@ deferred). Architecture center: [`runtime/README.md`](runtime/README.md).
 | 5 | Runtime on RISC-V | Measure Zig 100ms `homeagentd` + C906 mailbox base on silicon (musl baseline) | parallel |
 | 6 | Radio via USB dongle | ZBDongle-E Zigbee NCP / Thread RCP on Duo S, z2m / matter proof | planned |
 | 7 | SMHub reference diff | System-app review of the vendor product, port lessons to Duo S | ongoing |
-| 8 | Productization stack | cross-build Node `.ipk`/`/opt` (**current, `NEXT.md` N0**) → Mosquitto → Z2M → sample set | **current** |
+| 8 | Productization stack | native-musl Node in Buildroot rootfs (**current, `NEXT.md` N0**) → Mosquitto → Z2M → sample set | **current** |
 | 9 | Sample hub + app + server | end-to-end open demo — all functions working, reproducibly | goal |
 
 ### BSP base — own the Duo S build, diff the SMHub product
 
-Duo S BSP base is **`milkv-duo/duo-buildroot-sdk-v2`** — the whole boot chain in one tree
-(fsbl/opensbi/u-boot/linux_5.10/ramdisk/**freertos**). Our config lives in-repo under
-`bsp/board/milkv-duos-musl-riscv64-{sd,emmc}/` (RISC-V + `musl` + hub-minimal delta); the
-SDK itself is a pinned, gitignored clone. The SMHUB Nano is the same SG2000 but SMLIGHT
+Duo S BSP base is our pinned **`junghan0611/duo-buildroot-sdk-v2`** fork — the whole boot chain
+in one tree (fsbl/opensbi/u-boot/linux_5.10/ramdisk/**freertos**). Product config lives in-repo
+under `bsp/board/` and `bsp/buildroot/`; the SDK working tree is gitignored. The SMHUB Nano is the same SG2000 but SMLIGHT
 ships a **separate mainline product Buildroot** (kernel 6.18 / OpenSBI 1.8 / U-Boot
 2026.04 / Buildroot 2025.11) we do **not** rebuild — we read and diff it as a system-app
 developer. Detail in [`runtime/README.md`](runtime/README.md),
@@ -191,17 +186,15 @@ This repo is a multi-board record. Active and parked lanes:
 
 - **RISC-V C906 is the target boot lane** for the Duo S core lane. ARM A53 builds are
   historical comparison only, not the product.
-- **Runtime is dual-lane libc**: `homeagentd` = a `riscv64-linux-musl` artifact baseline
-  (the existing `…-musl-riscv64-{sd,emmc}` boards), and the **Node service image = glibc**
-  (a new `…-glibc-riscv64-emmc` variant). `homeagentd` joins the service image as a
-  static/portable artifact. This is a refinement of the old "musl-only" line, not a reversal.
+- **Runtime is one native-musl lane**: Node, Z2M and `homeagentd` all run on the existing
+  `…-musl-riscv64-{sd,emmc}` boards. A glibc compatibility payload is not a product path.
 - **Duo S and SMHub images are not interchangeable** — different kernel (**our linux 5.10 vs
   SMHub's 6.18**), inter-core IPC, init, and update system. We do **not** chase SMHub's vendor
   kernel/BSP. Do not treat a Duo S image as a product image, or flash one where the other belongs.
-- **Productization is pure cross-compile, reproduced from the shipped contract** — no QEMU,
-  no native RISC-V runner, no SDK fork, no vendor `.ipk`/recipe/distribution import. SMHub is a
-  reverse-engineered reference for the *contract* only (see "Locked build method"). Packages are
-  our own cross-built `.ipk` under `/opt`.
+- **Productization is pure cross-compile and image-baked** — no QEMU or native RISC-V runner.
+  SMHub is a reverse-engineered reference for versions and service shape, not a libc/package
+  distribution to copy. The pinned public SDK fork carries common package code; this repo owns
+  the complete musl image configuration.
 - **No business logic in this repo** — verification surfaces and prototypes only; product
   logic stays in its own repos.
 - One radio, one protocol at a time — Zigbee NCP **or** Thread RCP by firmware switching.

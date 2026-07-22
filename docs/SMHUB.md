@@ -343,6 +343,11 @@ crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/
   `GCC: (Buildroot 2025.11-30-gedba1321d1-dirty) 15.2.0`; package changelog는 `22.22.0-2`를
   “Rebuild for Buildroot 2026.02”로 기록한다. 이는 산출물 provenance이지 빌드 host 방식(native/cross)의 증거는 아니다.
 
+**우리 Duo S 결정(2026-07-22)**: 위 결과는 Node 22.22.0·ABI 127·V8/의존성·Z2M 버전을
+고르는 근거다. 그러나 SMHub의 glibc, `/opt`, opkg, OpenRC는 상용 배포 모델이며 우리 이미지의
+필수 계약이 아니다. Duo S N0는 SDK-native musl + Buildroot `/usr` + BusyBox init + 전체 rootfs
+검증을 사용하고, 이미 증명한 x86 host pure-cross 방식으로 Node를 빌드한다.
+
 - beta5 공장 시드 **실제 설치** = nodejs/python3/zigbee2mqtt/esphome-bin/smhub-broker/smhub-services/smhub-ui.
   matterbridge·OTBR·zwavejsui는 opkg **카탈로그에만**(미설치).
 - **재현 공백 #2 (matter.js)**: matterbridge 미설치 → `@matter/*` 정확 버전 없음. npm 또는 라이브 설치 후 확정.

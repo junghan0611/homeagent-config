@@ -39,11 +39,11 @@
 
 | Item | Value |
 |------|-------|
-| Public SDK | <https://github.com/milkv-duo/duo-buildroot-sdk-v2> (`develop`: linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos) |
+| Public SDK | <https://github.com/junghan0611/duo-buildroot-sdk-v2> `feat/riscv64-nodejs-pure-cross` @ `087547cf8` (upstream `ad920f839`; linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos) |
 | Docs | <https://milkv.io/docs/duo/getting-started/buildroot-sdk> |
 | SMHUB product reference | mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — diff target (see `runtime/README.md`) |
 | First proof | **done (2026-07-14)** — own RISC-V C906 image (`riscv64-musl`), booted on silicon, eth0 DHCP + Wi-Fi (aic8800) |
-| Second proof | minimal packages for MQTT / radio / Zigbee2MQTT / matter.js |
+| Second proof | **current** — native-musl Node 22.22.0 → MQTT / Zigbee2MQTT |
 | Device facts | Duo S live boot: `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, eMMC 7.3G (p4 rootfs 768M) — see `captures/` |
 
 Policy:
@@ -124,7 +124,7 @@ OPi5 policy: keep the mainline 6.14 SSH/GPU/HDMI evidence. Do not revive vendor 
 |-----------|-------|
 | matterjs-server | 0.3.5 in origin lane |
 | @matter/main | 0.16.9-alpha in origin lane |
-| Target Node.js | Node 20+ family; exact Buildroot package TBD |
+| Target Node.js | **22.22.0**, riscv64-musl, Buildroot image-baked; pure-cross package support pinned in SDK fork |
 | DevShell Node.js | Node 22, local development only |
 | Go | hub surface / bridge |
 | Flutter / Lit | client/origin lane, not BSP center |

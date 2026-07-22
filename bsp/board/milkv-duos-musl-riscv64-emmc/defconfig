@@ -3,9 +3,10 @@
 #   build/boards/cv181x/sg2000_milkv_duos_musl_riscv64_emmc/<...>_defconfig
 # before building. Diff vs stock = our hub customizations (kept minimal + commented).
 #
-# WHY RISC-V (not the arm64 lane): the SMHub ships SG2000 booting its RISC-V C906B
-# core (riscv64 kernel, musl userspace). The dev board must match the product ISA or
-# nothing we build here transfers. SG2000 can boot A53 *or* C906 — on Duo S this is a
+# WHY RISC-V (not the arm64 lane): the SMHub proves SG2000 can ship its RISC-V C906B
+# core, while our Duo S product image keeps the SDK-native musl userspace. The dev
+# board must match the product ISA even though the reference hub uses glibc. SG2000
+# can boot A53 *or* C906 — on Duo S this is a
 # PHYSICAL SWITCH on the board; it must be set to RISC-V for this image to boot.
 # Boot-log first char is the ground truth: 'C' = RISC-V core, 'B' = ARM core.
 #

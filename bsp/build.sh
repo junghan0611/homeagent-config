@@ -69,12 +69,26 @@ exec docker run --rm --privileged \
       echo "[bsp] applied defconfig -> ${HITS[0]}"
     fi
 
-    # Apply our committed patches idempotently.
+    # Inject the Buildroot userspace config as well as the outer SDK board config.
+    # Package proofs and complete images must resolve the same target package set.
+    if [ -f "/bsp/buildroot/${BOARD}_defconfig" ]; then
+      cp "/bsp/buildroot/${BOARD}_defconfig" "buildroot/configs/${BOARD}_defconfig"
+      echo "[bsp] installed Buildroot config: ${BOARD}_defconfig"
+    fi
+
+    # Apply our committed patches idempotently and fail closed. Continuing after a
+    # rejected Node/V8 patch could produce a plausible image without our contract.
     for p in /bsp/patches/*.patch; do
       [ -f "$p" ] || continue
-      if git apply --reverse --check "$p" 2>/dev/null; then echo "[bsp] patch already applied: $(basename "$p")";
-      elif git apply --check "$p" 2>/dev/null; then git apply "$p"; echo "[bsp] applied patch: $(basename "$p")";
-      else echo "[bsp] WARN: patch does not apply: $(basename "$p")" >&2; fi
+      if git apply --reverse --check "$p" 2>/dev/null; then
+        echo "[bsp] patch already applied: $(basename "$p")"
+      elif git apply --check "$p" 2>/dev/null; then
+        git apply "$p"
+        echo "[bsp] applied patch: $(basename "$p")"
+      else
+        echo "[bsp] ERROR: patch does not apply: $(basename "$p")" >&2
+        exit 1
+      fi
     done
 
     ./build.sh "$BOARD"

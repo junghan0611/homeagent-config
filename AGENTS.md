@@ -30,8 +30,9 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 | 런타임 아키텍처 (Zig `homeagentd` + C906L 메일박스) | `runtime/README.md` |
 | 라이브 좌표 / 계정 / 키 | `PRIVATE.md` (공개 파일엔 금지) |
 
-작업 규칙: SDK는 `~/repos/3rd/milkv/duo-buildroot-sdk-v2`(pin `ad920f839`) — 기본은 `bsp/`에서
-defconfig+overlay+patch로 작업하고, defconfig/overlay/patch로 표현 불가할 때만 포크한다.
+작업 규칙: SDK는 `~/repos/3rd/milkv/duo-buildroot-sdk-v2` — `junghan0611/duo-buildroot-sdk-v2`
+`feat/riscv64-nodejs-pure-cross`의 pin `087547cf8`을 쓴다(upstream base `ad920f839`). 제품 설정은
+계속 `bsp/`의 defconfig+overlay로 소유하고, SDK 공통 Buildroot 수정만 포크 브랜치에서 관리한다.
 
 ---
 

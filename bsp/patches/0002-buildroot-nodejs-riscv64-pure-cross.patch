@@ -135,7 +135,7 @@ index 8f934202b..f6c536446 100644
  else ifeq ($(BR2_mips),y)
  NODEJS_SRC_CPU = mips
  else ifeq ($(BR2_mipsel),y)
-@@ -188,13 +189,79 @@ define NODEJS_SRC_INSTALL_V8_QEMU_WRAPPER
+@@ -188,13 +189,87 @@ define NODEJS_SRC_INSTALL_V8_QEMU_WRAPPER
  	$(SED) "s%@QEMU_USERMODE_ARGS@%$(call qstrip,$(BR2_PACKAGE_HOST_QEMU_USER_MODE_ARGS))%g" \
  		$(@D)/out/Release/v8-qemu-wrapper
  endef
@@ -206,6 +206,14 @@ index 8f934202b..f6c536446 100644
 +	host-zlib
 +ifeq ($(BR2_PACKAGE_OPENSSL),y)
 +NODEJS_SRC_DEPENDENCIES += host-libopenssl
++endif
++ifeq ($(BR2_PACKAGE_ICU),y)
++NODEJS_SRC_DEPENDENCIES += host-icu
++endif
++# A runtime-only riscv64 image must not inherit Node's default Corepack install
++# when Buildroot's target NPM option is off.
++ifneq ($(BR2_PACKAGE_NODEJS_NPM),y)
++NODEJS_SRC_CONF_OPTS += --without-corepack
 +endif
 +else
 +NODEJS_SRC_GENERATOR = --ninja

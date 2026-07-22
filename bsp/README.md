@@ -9,17 +9,18 @@ the RPi5 image. The Zig runtime and applications sit *on top* of this image.
 | Piece | Where | Tracked? |
 |-------|-------|----------|
 | Build environment (host tools) | `flake.nix` → `packages.buildroot` (FHS) | ✅ committed |
-| Upstream SDK (~5.6G in-tree monorepo) | `bsp/sdk/` cloned by `setup.sh`, pinned | ❌ gitignored |
-| Our board config (the reproducible SSOT) | `bsp/board/<board>/defconfig` — `build.sh` injects onto the SDK before build | ✅ committed |
+| SDK fork (~5.6G in-tree monorepo) | `bsp/sdk/` cloned by `setup.sh`, pinned to `087547cf8` | ❌ gitignored |
+| Our board + Buildroot configs (reproducible SSOT) | `bsp/board/`, `bsp/buildroot/` — `build.sh` injects both | ✅ committed |
 | Further customizations (rootfs overlay, patches) | `bsp/board/`, `bsp/patches/` *(as added)* | ✅ committed |
 
-`build.sh` copies our committed `bsp/board/<board>/defconfig` over the SDK's stock
-defconfig at build time — so the upstream clone stays pristine and our changes are
-the only tracked config. First hub customization: dropped the camera image sensors
-and MIPI panel (CVITEK vision middleware is dead weight for a hub).
+`build.sh` injects our committed outer board config and Buildroot userspace config before
+building. Common SDK changes live on `junghan0611/duo-buildroot-sdk-v2` branch
+`feat/riscv64-nodejs-pure-cross`; the local patch remains an auditable, fail-closed mirror.
+First hub customization: dropped the camera image sensors and MIPI panel (CVITEK vision
+middleware is dead weight for a hub).
 
-The upstream `milkv-duo/duo-buildroot-sdk-v2` is a single tree carrying the whole
-boot chain (fsbl/opensbi/u-boot/linux_5.10/buildroot/freertos) plus CVITEK libs.
+The fork is based on `milkv-duo/duo-buildroot-sdk-v2` and carries the whole boot chain
+(fsbl/opensbi/u-boot/linux_5.10/buildroot/freertos) plus CVITEK libs.
 It builds **in-tree** and git-clones a prebuilt toolchain (~840MB) on first build,
 so it must be a **writable, pinned working clone** — not vendored, not frozen in nix.
 
@@ -34,7 +35,8 @@ hub like SMHub runs a different OS entirely (mainline ~6.18 kernel, standard
 remoteproc/rpmsg + open-amp, RAUC A/B), while this SDK is linux 5.10 with CVITEK's own
 `rtos_cmdqu` core-to-core path. Those images are incompatible by construction. Keep the lanes
 separate. What actually transfers is the **axis**, not the image: SG2000 SoC, riscv64 ISA,
-musl userspace, boot-chain knowledge, cross toolchain — i.e. a lab where `homeagentd`
+boot-chain knowledge and cross toolchain. SMHub uses glibc; our image deliberately keeps the
+SDK-native musl userspace — a lab where Node/Z2M and `homeagentd`
 (`riscv64-linux-musl`) can be built, run and measured on real RISC-V silicon we own.
 
 There is also no MG24 radio on this board, so Zigbee/EZSP work does not happen here.
@@ -99,5 +101,6 @@ board switched to RISC-V looks exactly like a brick).
 
 ## Pin
 
-`setup.sh` pins `develop` @ `ad920f839`. See [`../runtime/README.md`](../runtime/README.md)
-for the L0–L4 architecture.
+`setup.sh` pins `junghan0611/duo-buildroot-sdk-v2` branch
+`feat/riscv64-nodejs-pure-cross` @ `087547cf8` (upstream base `ad920f839`). See
+[`../runtime/README.md`](../runtime/README.md) for the L0–L4 architecture.

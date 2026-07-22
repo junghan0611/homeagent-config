@@ -2,13 +2,13 @@
 # bsp/build-package.sh — build ONE Buildroot package for a board, in the vendor
 # container. Buildroot-only: no kernel, no u-boot, no image, no device.
 #
-# This is the N0 service-image lane's workhorse. `bsp/build.sh` builds a whole
-# bootable image through the SDK's own build.sh; this one stops at the Buildroot
-# layer, which is where userspace packages (Node, Mosquitto, Z2M) are proven first.
+# This is the N0 package-proof workhorse. `bsp/build.sh` builds a whole bootable
+# image through the SDK's own build.sh; this one stops at the Buildroot layer,
+# proving Node and later Z2M against the same native-musl board configuration.
 #
 # Usage:
-#   ./bsp/build-package.sh                                  # defaults: glibc riscv64 board, nodejs
-#   ./bsp/build-package.sh milkv-duos-glibc-riscv64-emmc nodejs
+#   ./bsp/build-package.sh                                  # native musl riscv64, nodejs
+#   ./bsp/build-package.sh milkv-duos-musl-riscv64-emmc nodejs
 #   G1_CLEAN=1 ./bsp/build-package.sh                       # dirclean the package first
 #
 #   HOMEAGENT_BSP_SDK=~/repos/3rd/milkv/duo-buildroot-sdk-v2 ./bsp/build-package.sh
@@ -25,7 +25,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
 SDK_DIR="${HOMEAGENT_BSP_SDK:-$REPO_DIR/bsp/sdk}"
-BOARD="${1:-milkv-duos-glibc-riscv64-emmc}"
+BOARD="${1:-milkv-duos-musl-riscv64-emmc}"
 PKG="${2:-nodejs}"
 DOCKER_IMAGE="${HOMEAGENT_BSP_IMAGE:-milkvtech/milkv-duo:latest}"
 

@@ -1,0 +1,68 @@
+#!/bin/sh
+# Start Zigbee2MQTT after the local broker (S50mosquitto) is up.
+#
+# Z2M is installed by Buildroot as an npm module, so the entry point is the bin
+# symlink npm creates from package.json's "bin": /usr/bin/zigbee2mqtt -> cli.js
+# in /usr/lib/node_modules/zigbee2mqtt. There is no /opt tree here.
+#
+# It exits immediately when no coordinator is attached, which on this board is the
+# normal state: the USB port is in gadget mode by default and carries the NCM
+# network instead. Rather than let init log a failure every boot, we check for a
+# serial device first and no-op without one. `homeagent-usb-mode host` + reboot is
+# what makes a dongle visible; see that script.
+DAEMON=/usr/bin/zigbee2mqtt
+PIDFILE=/var/run/zigbee2mqtt.pid
+DATA=/var/lib/zigbee2mqtt
+LOG=/var/log/zigbee2mqtt.log
+
+# ZBDongle-E enumerates as CDC-ACM (ttyACM*), ZBDongle-P through cp210x (ttyUSB*).
+find_adapter() {
+  for d in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyUSB0 /dev/ttyUSB1; do
+    [ -c "$d" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
+start() {
+  [ -x "$DAEMON" ] || { echo "zigbee2mqtt: not installed, skipping."; exit 0; }
+
+  ADAPTER=$(find_adapter) || {
+    echo "zigbee2mqtt: no /dev/ttyACM* or /dev/ttyUSB* -- no coordinator, skipping."
+    logger -t zigbee2mqtt "no serial adapter present; not starting"
+    exit 0
+  }
+
+  printf "Starting zigbee2mqtt (adapter %s): " "$ADAPTER"
+  mkdir -p "$DATA"
+  # ZIGBEE2MQTT_DATA is how Z2M finds configuration.yaml, its device database and
+  # the network key. /var is real ext4 here, so state survives a reboot -- but NOT
+  # a reflash. Back up $DATA before flashing or every device has to be re-paired.
+  ZIGBEE2MQTT_DATA="$DATA" start-stop-daemon -S -q -b -m -p "$PIDFILE" \
+    --startas /bin/sh -- -c "exec $DAEMON >>$LOG 2>&1"
+  [ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+stop() {
+  printf "Stopping zigbee2mqtt: "
+  start-stop-daemon -K -q -p "$PIDFILE"
+  [ $? = 0 ] && echo "OK" || echo "FAIL"
+  rm -f "$PIDFILE"
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  restart|reload) stop; sleep 2; start ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "running (pid $(cat "$PIDFILE"))"
+    else
+      echo "not running"
+    fi
+    find_adapter >/dev/null && echo "adapter: $(find_adapter)" || echo "adapter: none"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

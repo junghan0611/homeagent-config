@@ -1,0 +1,47 @@
+#!/bin/sh
+# Switch the single USB port between gadget and host mode.
+#
+# SG2000 has one USB controller in dual-role (CONFIG_USB_DWC2_DUAL_ROLE=y) behind a
+# GPIO mux, so the Type-C gadget and the Type-A host port are mutually exclusive.
+# /mnt/system/usb.sh is a symlink that S99user sources at boot to pick a side; the
+# vendor scripts it points at drive the mux GPIOs and write /proc/cviusb/otg_role.
+#
+# WHAT YOU GIVE UP IN HOST MODE: usb0 and with it 192.168.42.1, the USB recovery
+# path. eth0 and wlan0 stay up, so SSH survives -- but if the network config ever
+# breaks while in host mode, the only way back is the serial console or a reflash
+# via the physical recovery button. Switch back with `homeagent-usb-mode gadget`.
+#
+# Reboot is required. The mux is read at boot by S99user; flipping the symlink
+# alone changes nothing until then.
+SYS=/mnt/system
+LINK=$SYS/usb.sh
+
+usage() {
+  echo "Usage: homeagent-usb-mode {host|gadget|status}"
+  echo "  host   - Type-A port powers a device (Zigbee dongle). Loses 192.168.42.1."
+  echo "  gadget - Type-C provides the usb0 NCM network at 192.168.42.1. Default."
+  echo "  status - show the current and pending mode"
+  exit 1
+}
+
+case "$1" in
+  host)
+    ln -sf usb-host.sh "$LINK"
+    echo "USB mode set to HOST (pending reboot)."
+    echo "After reboot: usb0/192.168.42.1 is GONE. Reach the board on eth0/wlan0."
+    ip -4 -o addr show 2>/dev/null | grep -vE " lo |usb0" | awk '{print "  " $2 " " $4}'
+    ;;
+  gadget|ncm)
+    ln -sf usb-ncm.sh "$LINK"
+    echo "USB mode set to GADGET/NCM (pending reboot). 192.168.42.1 returns."
+    ;;
+  status)
+    echo "symlink : $(readlink "$LINK" 2>/dev/null || echo '(missing)')  [takes effect at next boot]"
+    echo "running : $(cat /proc/cviusb/otg_role 2>/dev/null || echo '(unknown)')"
+    printf "serial  : "
+    ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | tr '\n' ' ' || true
+    ls /dev/ttyACM* /dev/ttyUSB* >/dev/null 2>&1 || printf "(none)"
+    echo
+    ;;
+  *) usage ;;
+esac

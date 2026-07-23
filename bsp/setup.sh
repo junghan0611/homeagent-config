@@ -11,11 +11,33 @@ set -euo pipefail
 
 BSP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-# HomeAgent fork: upstream ad920f839 plus the measured riscv64 pure-cross Node
-# support. The immutable commit is the build input; the branch names its lane.
+# HomeAgent fork of the Milk-V SDK. The immutable commit is the build input; the
+# branch only names its lane. Two lanes, because SG2000 boots either core off one die:
+#
+#   arm64   — development lane (2026-07-23~). Bootlin GCC 13, Node 22, Zigbee2MQTT,
+#             USB host serial in the kernel.
+#   riscv64 — product lane, parked pending upstream issue #74.
+#
+# What is NOT in the fork: our board defconfig, Buildroot config and rootfs overlay.
+# Those live in bsp/ and bsp/build.sh injects them at build time, so this repo stays
+# the single source of truth for product configuration and the fork carries only what
+# a patch cannot express (kernel config, Buildroot package fixes, tool permissions).
 SDK_URL="${SDK_URL:-https://github.com/junghan0611/duo-buildroot-sdk-v2.git}"
-SDK_BRANCH="${SDK_BRANCH:-feat/riscv64-nodejs-pure-cross}"
-SDK_COMMIT="${SDK_COMMIT:-087547cf8}"   # pure-cross Node.js 22.22.0 for riscv64
+LANE="${HOMEAGENT_BSP_LANE:-arm64}"
+case "$LANE" in
+  arm64)
+    SDK_BRANCH="${SDK_BRANCH:-feat/arm64-hub-baseline}"
+    SDK_COMMIT="${SDK_COMMIT:-3a50ffe28}"   # + kernel USB serial, npm cross-arch fix
+    ;;
+  riscv64)
+    SDK_BRANCH="${SDK_BRANCH:-feat/riscv64-nodejs-pure-cross}"
+    SDK_COMMIT="${SDK_COMMIT:-087547cf8}"   # pure-cross Node.js 22.22.0 for riscv64
+    ;;
+  *)
+    echo "[bsp] ERROR: unknown lane '$LANE' (want arm64 or riscv64)." >&2
+    exit 1
+    ;;
+esac
 SDK_DIR="${HOMEAGENT_BSP_SDK:-$BSP_DIR/sdk}"
 
 if [ -d "$SDK_DIR/.git" ]; then
@@ -31,8 +53,13 @@ if [ -d "$SDK_DIR/.git" ]; then
   exit 0
 fi
 
+echo "[bsp] lane   : $LANE"
 echo "[bsp] cloning $SDK_URL ($SDK_BRANCH) → $SDK_DIR"
 git clone --branch "$SDK_BRANCH" "$SDK_URL" "$SDK_DIR"
 git -C "$SDK_DIR" checkout "$SDK_COMMIT"
 echo "[bsp] pinned at $(git -C "$SDK_DIR" rev-parse --short HEAD)"
-echo "[bsp] next: ./bsp/build.sh milkv-duos-musl-riscv64-sd   (RISC-V = product ISA; arm64 boards are historical)"
+if [ "$LANE" = arm64 ]; then
+  echo "[bsp] next: ./bsp/build.sh milkv-duos-glibc-arm64-emmc   (dev lane; board switch must be ARM)"
+else
+  echo "[bsp] next: ./bsp/build.sh milkv-duos-musl-riscv64-emmc  (product lane, parked; switch must be RV)"
+fi

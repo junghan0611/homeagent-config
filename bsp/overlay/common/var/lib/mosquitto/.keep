@@ -1,0 +1,4 @@
+# mosquitto's persistence_location (/etc/mosquitto/mosquitto.conf) must exist before
+# the broker starts -- S50mosquitto does not create it and mosquitto exits if it is
+# missing. Buildroot's overlay rsync only copies directories that contain something,
+# so this placeholder is what actually creates the directory in the image.

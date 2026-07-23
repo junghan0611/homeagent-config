@@ -67,11 +67,17 @@ Operational steps live in `../bsp/README.md`; these are the traps that cost time
   wrong); on NixOS it's a glibc x86_64 binary → run it inside the vendor container with
   `/dev/bus/usb` passthrough (`bsp/flash-emmc.sh`).
 - **Two flash traps** — (1) `usb_dl -c` wants `181x`, not the vendor doc's `cv181x`; (2) the
-  kernel `cdc_acm` grabs the ROM's download interface → libusb can't claim it → `modprobe -r
-  cdc_acm` first. Both are baked into `flash-emmc.sh`.
+  kernel `cdc_acm` grabs the ROM's download interface → libusb can't claim it. `modprobe -r
+  cdc_acm` alone does **not** hold: it binds ~186 ms after enumeration and the kernel autoloads
+  it again on the next one. Only disabling USB driver autoprobe for the duration works
+  (restored from an `EXIT` trap). Both are baked into `flash-emmc.sh` — see `bsp/README.md`.
+- **The ROM enumerates once per replug**, then goes quiet ~1 s later — upstream docs claim it
+  retries on a timeout. `usb_dl` has to be waiting *before* the cable goes in.
 - **USB hub / dock kills enumeration** (`error -110`) → **connect the Type-C directly to the host.**
-- **ISA guard** — `flash-emmc.sh` refuses a non-riscv64 image (the historical arm64 zips share
-  `out/`, and flashing one against an `RV`-switched board looks exactly like a brick).
+- **ISA guard** — `flash-emmc.sh` supports both lanes: it resolves the image's ISA from its name
+  (`glibc-arm64` / `musl-riscv64`), refuses what it cannot classify, and prints the switch
+  position that image needs. Flashing an image against the wrong switch position looks exactly
+  like a brick, so the contract is printed rather than assumed.
 
 ## Node.js pure cross-compile — proven on riscv64 (2026-07-21)
 

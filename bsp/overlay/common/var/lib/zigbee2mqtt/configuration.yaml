@@ -1,0 +1,31 @@
+# Zigbee2MQTT 2.10.1 -- HomeAgent hub defaults.
+#
+# Z2M rewrites this file at runtime (it persists pairing state, the network key and
+# migrated schema versions here), so treat it as a SEED, not as the source of truth
+# once a board has been paired. It ships in the image so a fresh flash comes up
+# without hand-editing; back up /var/lib/zigbee2mqtt before reflashing or every
+# device has to be re-paired.
+
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://127.0.0.1:1883
+
+# serial.port is deliberately absent. The two SONOFF coordinators land on different
+# device nodes (ZBDongle-E -> /dev/ttyACM0 via CDC-ACM, ZBDongle-P -> /dev/ttyUSB0
+# via cp210x) and Z2M auto-discovers when no port is given. Pin it here once the
+# board's actual dongle is known -- auto-discovery is convenient, not deterministic.
+# serial:
+#   port: /dev/ttyACM0
+#   adapter: ember     # ZBDongle-E (EFR32MG21). ZBDongle-P (CC2652P) uses zstack.
+
+frontend:
+  enabled: true
+  port: 8080
+
+advanced:
+  log_level: info
+  log_output:
+    - console
+
+homeassistant:
+  enabled: false

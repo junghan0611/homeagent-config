@@ -164,3 +164,27 @@ BR2_PACKAGE_HOST_GENIMAGE=y
 # point of the Bootlin swap.
 BR2_PACKAGE_NODEJS=y
 BR2_PACKAGE_ICU=y
+
+# 4) ZIGBEE2MQTT — the hub's actual job, installed the Buildroot way rather than as a
+#    hand-staged /opt tree. package/nodejs/nodejs.mk already wires npm for cross builds
+#    (NODEJS_BIN_ENV: npm_config_arch/target_arch=arm64, build_from_source=true,
+#    npm_config_nodedir=$(STAGING_DIR)/usr, npm_config_prefix=$(TARGET_DIR)/usr), and
+#    nodejs-src.mk runs `npm install -g <list>` from INSTALL_TARGET_CMDS. So
+#    @serialport/bindings-cpp is compiled against our aarch64 sysroot with node-gyp
+#    instead of resolving an x86_64 prebuild, and the tree lands in
+#    /usr/lib/node_modules/zigbee2mqtt — the "bake Node/ICU/Z2M into rootfs /usr"
+#    decision from 2026-07-22, not SMHub's /opt + opkg shape.
+#
+#    PINNED, not floating. Buildroot's help text says "for repeatable builds, download
+#    and save tgz files"; an unpinned name would resolve to whatever npm serves that day
+#    and the image would stop being reproducible. 2.10.1 is the SMHub reference product's
+#    version (opkg zigbee2mqtt 2.10.1-2 → zigbee-herdsman 10.0.7, converters 26.46.0,
+#    frontend 0.9.21) and its engines field is "^20.15.0 || ^22.2.0 || ^24", satisfied by
+#    the Node 22.22.0 above — which is also the exact Node SMHub ships.
+BR2_PACKAGE_NODEJS_MODULES_ADDITIONAL="zigbee2mqtt@2.10.1"
+
+# 5) MQTT BROKER — Z2M is a bridge, not a broker; it needs one to publish to. Local
+#    mosquitto keeps the hub self-contained (no external broker to configure at first
+#    boot). Buildroot ships an S50mosquitto init script, which orders ahead of the
+#    S70zigbee2mqtt in bsp/overlay/common.
+BR2_PACKAGE_MOSQUITTO=y

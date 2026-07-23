@@ -53,6 +53,17 @@ default, which would leave Z2M in a connect/deny loop against its own broker. Bo
 `127.0.0.1` on purpose: an unauthenticated broker on the LAN is a control path into every
 paired Zigbee device.
 
+### `common/mnt/system/usb-host.sh`
+
+Overrides the SDK's copy, which **never switches the role**. Its last line is
+`echo host > /proc/cviusb/otg_role >> /tmp/usb.log 2>&1` — two redirections, so stdout
+ends up on the log and the proc file is opened but never written. Measured 2026-07-23:
+running the vendor script left `otg_role` reading `device`; writing the same value by
+hand switched it instantly and a coordinator enumerated within a second. Since S99user
+sources this at boot, the bug means a board configured for host mode still comes up as
+a gadget. Also rewritten in POSIX shell — the original used bash's `function name()`,
+which BusyBox ash does not accept.
+
 ### `common/usr/bin/homeagent-usb-mode`
 
 Flips `/mnt/system/usb.sh` between the Type-C gadget and the Type-A host port. SG2000 has

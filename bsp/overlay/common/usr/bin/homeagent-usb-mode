@@ -11,10 +11,15 @@
 # breaks while in host mode, the only way back is the serial console or a reflash
 # via the physical recovery button. Switch back with `homeagent-usb-mode gadget`.
 #
-# Reboot is required. The mux is read at boot by S99user; flipping the symlink
-# alone changes nothing until then.
+# Two things happen here, and they are separate: the symlink decides what the NEXT
+# boot does, and /proc/cviusb/otg_role switches the controller NOW. Writing the proc
+# file was measured to take effect immediately (a coordinator on the Type-A port
+# enumerated within a second, no reboot), so `host` does both. Going back to gadget
+# only flips the symlink -- rebuilding the usb0 NCM interface is what S99user does at
+# boot, and half-tearing it down at runtime is a good way to lose the network.
 SYS=/mnt/system
 LINK=$SYS/usb.sh
+ROLE=/proc/cviusb/otg_role
 
 usage() {
   echo "Usage: homeagent-usb-mode {host|gadget|status}"
@@ -26,14 +31,22 @@ usage() {
 
 case "$1" in
   host)
-    ln -sf usb-host.sh "$LINK"
-    echo "USB mode set to HOST (pending reboot)."
-    echo "After reboot: usb0/192.168.42.1 is GONE. Reach the board on eth0/wlan0."
+    echo "Reachable addresses once usb0 goes away:"
     ip -4 -o addr show 2>/dev/null | grep -vE " lo |usb0" | awk '{print "  " $2 " " $4}'
+    ln -sf usb-host.sh "$LINK"
+    sh "$SYS/usb-host.sh"
+    sleep 2
+    echo "USB mode: HOST, now and at next boot. usb0/192.168.42.1 is gone."
+    echo "  otg_role : $(cat "$ROLE" 2>/dev/null)"
+    printf "  serial   : "
+    ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ' || true
+    ls /dev/ttyUSB* /dev/ttyACM* >/dev/null 2>&1 || printf "(none yet -- is a dongle plugged in?)"
+    echo
     ;;
   gadget|ncm)
     ln -sf usb-ncm.sh "$LINK"
-    echo "USB mode set to GADGET/NCM (pending reboot). 192.168.42.1 returns."
+    echo "USB mode set to GADGET/NCM at next boot. Reboot to get 192.168.42.1 back."
+    echo "  (not switched at runtime on purpose: bringing usb0 back up is S99user's job)"
     ;;
   status)
     echo "symlink : $(readlink "$LINK" 2>/dev/null || echo '(missing)')  [takes effect at next boot]"

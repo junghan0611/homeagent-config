@@ -32,6 +32,16 @@
 #    This script disables USB driver autoprobe for the duration and restores it on exit.
 #    Symptom if it gets loose: "[INFO] found usb device vid=0x3346 pid=0x1000" -> "[ERR]".
 #
+# 5b. THREE different failures look alike, and they have nothing to do with each other:
+#      -110 "device descriptor read/64"  -> the cable is behind a hub/dock (step 4).
+#      plain [ERR] after "found usb device" -> cdc_acm got the interface first (step 5).
+#      LIBUSB_ERROR_INVALID_PARAM        -> the device is UNCONFIGURED: it enumerated while
+#         autoprobe was off, so bConfigurationValue is empty and it has no interfaces for
+#         libusb to claim. Check with:
+#           cat /sys/bus/usb/devices/1-*/bConfigurationValue
+#         The script now sets the configuration before each attempt, so this should not
+#         recur — but if you are driving usb_dl by hand, set it yourself first.
+#
 # 6. Success looks like "[INFO] USB download complete" after ~800 MB of
 #    "updated size: N/809230635". The board then reboots by itself and comes back as
 #    3346:100c "Cvitek NCM" (100c = running system; 1000 = still in download mode).
@@ -208,12 +218,38 @@ echo "  │ Keep the cable DIRECT to the host; a hub/dock gives 'descriptor read
 echo "  └────────────────────────────────────────────────────────────────────────────"
 echo
 
+# Turning autoprobe off has a second effect that took a while to find. A device that
+# enumerates AFTER autoprobe was disabled is left UNCONFIGURED: bConfigurationValue is empty
+# and no interfaces exist at all. libusb then has nothing to claim and usb_dl dies with
+#   [INFO] Error claiming interface: LIBUSB_ERROR_INVALID_PARAM
+#   [ERR] usb_dl: usbi_mutex_lock: Assertion `pthread_mutex_lock(mutex) == 0' failed
+# which is a THIRD failure mode, distinct from the hub's -110 and from cdc_acm's plain [ERR].
+# Because this script disables autoprobe before asking for the replug, every replug lands in
+# exactly that state -- the 2026-07-23 flash succeeded only because the board happened to be
+# plugged in (and configured) before the script ran.
+#
+# Fix: set the configuration ourselves right before each attempt. Autoprobe stays 0, so the
+# interfaces that appear get no driver bound, which is what we wanted from it in the first
+# place. Verified: config=[] ifaces=[] -> config=[1] ifaces=[2] with driver "none".
+ensure_configured() {
+  for d in /sys/bus/usb/devices/*/; do
+    [ -f "$d/idVendor" ] || continue
+    [ "$(cat "$d/idVendor" 2>/dev/null)" = "3346" ] || continue
+    [ "$(cat "$d/idProduct" 2>/dev/null)" = "1000" ] || continue
+    [ -n "$(cat "$d/bConfigurationValue" 2>/dev/null)" ] && continue
+    echo "[flash] $(basename "$d") enumerated unconfigured — setting configuration 1."
+    echo 1 | sudo tee "$d/bConfigurationValue" >/dev/null 2>&1 || true
+    sleep 1
+  done
+}
+
 # usb_dl gives up after ~90s. The ROM only offers one ~1s window per replug, so retry a few
 # times to give the operator room to pull and reinsert the cable.
 ATTEMPTS="${HOMEAGENT_BSP_ATTEMPTS:-6}"
 rc=1
 for n in $(seq 1 "$ATTEMPTS"); do
   echo "[flash] usb_dl attempt $n/$ATTEMPTS — replug now if you have not yet."
+  ensure_configured
   # Root in-container: host /dev/bus/usb nodes are root-owned. usb_dl only reads our stage.
   # NOT exec'd: the EXIT trap above has to run to restore USB autoprobe.
   out=$(docker run --rm --privileged \

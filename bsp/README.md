@@ -106,13 +106,24 @@ rm -rf <sdk>/buildroot/output/<board> <sdk>/install/soc_sg2000_<board_underscore
 
 ## Building on a remote host (gpu1i)
 
-A full clean build is ~1h30m and pins 16 cores, which is not something to run on a laptop
-you want to close. `gpu1i` (16 cores, 61G RAM, NixOS, docker) is the build host; its home
-directory differs from the laptop's, so use `~` rather than absolute paths in anything you
-script against it. Nothing about the host is special — the point of `setup.sh` + `build.sh`
-is that any
-machine with docker reproduces the same image, and gpu1i is where that was first
-demonstrated (2026-07-23) from an empty tree.
+A full clean build pins every core for the duration, which is not something to run on a
+laptop you want to close. `gpu1i` (16 cores, 61G RAM, NixOS, docker) is the build host; its
+home directory differs from the laptop's, so use `~` rather than absolute paths in anything
+you script against it. Nothing about the host is special — the point of `setup.sh` +
+`build.sh` is that any machine with docker reproduces the same image, and gpu1i is where
+that was first demonstrated (2026-07-23) from an empty tree.
+
+**It is worth the round trip.** Measured 2026-07-23, same commit, same clean-build path:
+
+| host | total | V8 alone | note |
+|---|---|---|---|
+| laptop (17 jobs) | **1h29m** | 1h16m | warm `buildroot/dl` cache |
+| gpu1i (16 cores) | **40m** | 28m37s | cold cache, downloads included |
+
+Same core count, less than half the wall clock — V8 is the whole story, and it is bound by
+single-core throughput more than by job count. A cold `buildroot/dl` did not close the gap.
+Budget ~40m on gpu1i, and expect the first ~10m to be download and configure noise before
+`nodejs-src ... Building` appears.
 
 **Standing it up from scratch** — four commands, ~20 min mostly clone and pull:
 
@@ -138,8 +149,9 @@ ssh gpu1i 'tmux ls'                             # session z2m alive?
 ssh gpu1i 'uptime'                              # load ~16 while building
 ```
 
-V8 alone is ~1h16m of that 1h30m and emits almost nothing through brmake. Sixteen live
-`cc1plus` processes is the honest signal that it is working.
+V8 is ~70% of the wall clock (28m of gpu1i's 40m) and emits almost nothing through brmake.
+Sixteen live `cc1plus` processes is the honest signal that it is working; `cc1plus` dropping
+to 0 while the log still says `nodejs-src` means V8 finished and `npm install -g` is next.
 
 **When it fails.** `EXIT=` will be non-zero and the tail names the package. Two rules:
 

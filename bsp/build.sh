@@ -11,12 +11,15 @@
 #
 # Usage:
 #   ./bsp/setup.sh                                # clone+pin SDK (or set HOMEAGENT_BSP_SDK)
-#   ./bsp/build.sh milkv-duos-musl-riscv64-sd     # RISC-V C906, microSD  (default, product ISA)
-#   ./bsp/build.sh milkv-duos-musl-riscv64-emmc   # RISC-V C906, eMMC     (usb_dl recovery flash)
-#   ./bsp/build.sh milkv-duos-glibc-arm64-emmc    # ARM A53, eMMC         (historical, NOT the product)
-# Our runtime targets riscv64 + musl; the arm64 boards exist only because SG2000 can boot
-# either core. Build RISC-V unless you know why you want ARM. (This is a dev-board image —
-# it is not, and cannot become, a hub-product image. See bsp/README.md.)
+#   ./bsp/build.sh milkv-duos-glibc-arm64-emmc    # ARM A53,    eMMC — current DEV lane
+#   ./bsp/build.sh milkv-duos-musl-riscv64-sd     # RISC-V C906, microSD (script default)
+#   ./bsp/build.sh milkv-duos-musl-riscv64-emmc   # RISC-V C906, eMMC    (product lane, parked)
+# Two lanes, one die: SG2000 carries an A53 and a C906 and a physical slide switch picks one.
+#   arm64/glibc  — development lane since 2026-07-23. BR2_aarch64 is a first-class arch for
+#                  Buildroot's nodejs package, so Node 22 builds with no downstream patches.
+#   riscv64/musl — still the product ISA, parked while Node support sits with upstream.
+# The image ISA and the board switch must agree or nothing boots. See bsp/README.md.
+# (This is a dev-board image — it is not, and cannot become, a hub-product image.)
 # Output: <sdk>/out/<board>_<date>.{img,zip}   (sd -> .img dd-able; emmc -> .zip for usb_dl)
 set -euo pipefail
 

@@ -1,0 +1,166 @@
+# HomeAgent hub Buildroot config — Milk-V Duo S / SG2000, ARM A53 boot, eMMC.
+# Committed SSOT: bsp/build.sh copies this over buildroot/configs/<board>_defconfig
+# before building. Diff vs the stock SDK config is exactly the three blocks below.
+#
+# 1) TOOLCHAIN — the reason this file exists.
+#    Stock is Linaro GCC 7.3.1 / glibc 2.25 / kernel headers 4.10, from 2018. Buildroot's
+#    nodejs package requires BR2_TOOLCHAIN_GCC_AT_LEAST_10 (Node 22 BUILDING.md: "Linux |
+#    GCC >= 10.1"), so BR2_PACKAGE_NODEJS cannot even be selected against it, and official
+#    Node arm64 binaries need glibc >= 2.28 so a prebuilt drop-in is out too. Note the
+#    vendor shipped the riscv lanes a 2022 GCC 10.2 and left arm on 2018 — this is an arm
+#    lane accident, not a Node problem.
+#    Bootlin's prebuilt aarch64 glibc toolchain (GCC 13, headers 4.19, auto-downloaded by
+#    Buildroot) clears the gate with room for Node 24 later (GCC >= 12.2). It is a
+#    defconfig swap: no toolchain fork, no source patch.
+#    WHY GCC 13, and why that is not "less safe" than 12:
+#      BR2_TOOLCHAIN_GCC_AT_LEAST_* are FLOORS on a cascading ladder, not feature flags --
+#      toolchain/Config.in has _13 select _12 select _11 select _10. Selecting 13 therefore
+#      sets 12 as well, and every `depends on BR2_TOOLCHAIN_GCC_AT_LEAST_12` in the tree is
+#      satisfied. Grepping the tree finds many references to _12 and none to _13 simply
+#      because some arch/package demands *at least* 12 (riscv ISA, one ARM CPU) while
+#      nothing yet demands 13+. Fewer hits means more headroom, not less support.
+#      Confirmed in the generated .config: _10 _11 _12 _13 are all =y, GCC_AT_LEAST="13".
+#      There is also no GCC 12 option for aarch64 to fall back to. The whole menu is:
+#        Bootlin glibc stable        GCC 13, headers 4.19  <- chosen
+#        Bootlin glibc bleeding-edge GCC 14, headers 5.15  <- rejected, see below
+#        Arm AArch64 14.2.rel1       GCC 14, headers 4.20  <- fine, switch here if 14 is ever needed
+#      Going below 13 would mean building our own toolchain, which is a new maintenance
+#      burden rather than a defconfig swap.
+#    WHY NOT the bleeding-edge (GCC 14) Bootlin toolchain: it declares kernel headers 5.15
+#      and this board runs a 5.10 kernel. Userspace built against newer headers can reference
+#      syscalls/ioctls/structs the running kernel does not have. Buildroot does NOT enforce
+#      this -- check_kernel_headers_version only verifies the toolchain is self-consistent --
+#      so it would fail at runtime, not at build time. Arm's 14.2 (headers 4.20) is the safe
+#      way to GCC 14 if we ever want it.
+#    GOTCHA: BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE is nested under the parent
+#    BR2_TOOLCHAIN_EXTERNAL_BOOTLIN. Setting only the child is silently ignored and Buildroot
+#    falls back to the aarch64 default (BR2_TOOLCHAIN_EXTERNAL_ARM_AARCH64, GCC 14) — which
+#    also builds, so nothing fails and the config just quietly means something else. Both
+#    lines are required. Verify after any edit:
+#      make -C buildroot O=<out> milkv-duos-glibc-arm64-emmc_defconfig
+#      grep -E '^BR2_TOOLCHAIN_GCC_AT_LEAST=|BOOTLIN_AARCH64_GLIBC_STABLE=' <out>/.config
+#    Kernel/u-boot are unaffected — envsetup_milkv.sh sets CROSS_COMPILE_64 from
+#    host-tools independently of Buildroot's target toolchain.
+#
+# 2) ROOTFS OVERLAY — adds bsp/overlay/common on top of the SDK's board overlay, so
+#    things like the wlan0 autostart script are baked in instead of hand-applied after
+#    every flash. /bsp is where bsp/build.sh mounts this repo's bsp/ inside the container.
+#
+# 3) PACKAGES — Node.js 22.22.0 (Buildroot's pinned version; satisfies Zigbee2MQTT
+#    2.10.1's "node": "^20.15.0 || ^22.2.0 || ^24") plus system ICU so Intl works.
+#    BR2_PACKAGE_NODEJS_NPM stays off, which makes Buildroot pass --without-npm.
+#    Corepack is still installed on arm: our patch 0002 scopes --without-corepack to the
+#    riscv branch. Harmless without npm; worth widening when patch 0002 is next touched.
+
+BR2_aarch64=y
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
+BR2_OPTIMIZE_S=y
+BR2_PER_PACKAGE_DIRECTORIES=y
+BR2_TARGET_GENERIC_HOSTNAME="milkv-duo"
+BR2_TARGET_GENERIC_ISSUE="Welcome to Milk-V DuoS ARM64 eMMC"
+BR2_TARGET_GENERIC_ROOT_PASSWD="milkv"
+BR2_ROOTFS_OVERLAY="board/milkv/milkv-duos-glibc-arm64-emmc/overlay /bsp/overlay/common"
+BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
+BR2_PACKAGE_ALSA_UTILS=y
+BR2_PACKAGE_ALSA_UTILS_AMIXER=y
+BR2_PACKAGE_ALSA_UTILS_APLAY=y
+BR2_PACKAGE_ALSA_UTILS_ARECORDMIDI=y
+BR2_PACKAGE_GZIP=y
+BR2_PACKAGE_P7ZIP=y
+BR2_PACKAGE_UNRAR=y
+BR2_PACKAGE_UNZIP=y
+BR2_PACKAGE_ZIP=y
+BR2_PACKAGE_ZSTD=y
+BR2_PACKAGE_FIO=y
+BR2_PACKAGE_GDB=y
+BR2_PACKAGE_GDB_SERVER=y
+BR2_PACKAGE_GDB_DEBUGGER=y
+BR2_PACKAGE_LSOF=y
+BR2_PACKAGE_PV=y
+BR2_PACKAGE_SPIDEV_TEST=y
+BR2_PACKAGE_STRACE=y
+BR2_PACKAGE_STRESS_NG=y
+BR2_PACKAGE_TREE=y
+BR2_PACKAGE_E2FSPROGS=y
+BR2_PACKAGE_E2FSPROGS_RESIZE2FS=y
+BR2_PACKAGE_EVTEST=y
+BR2_PACKAGE_I2C_TOOLS=y
+BR2_PACKAGE_PARTED=y
+BR2_PACKAGE_SPI_TOOLS=y
+BR2_PACKAGE_PYTHON3=y
+BR2_PACKAGE_PYTHON3_PY_PYC=y
+BR2_PACKAGE_PYTHON3_BZIP2=y
+BR2_PACKAGE_PYTHON3_READLINE=y
+BR2_PACKAGE_PYTHON3_SQLITE=y
+BR2_PACKAGE_PYTHON3_XZ=y
+BR2_PACKAGE_PYTHON_PIP=y
+BR2_PACKAGE_PYTHON_REQUESTS=y
+BR2_PACKAGE_CA_CERTIFICATES=y
+BR2_PACKAGE_LIBOPENSSL_BIN=y
+BR2_PACKAGE_LIBOPENSSL_ENGINES=y
+BR2_PACKAGE_C_PERIPHERY=y
+BR2_PACKAGE_LIBUSB=y
+BR2_PACKAGE_LIBUSB_EXAMPLES=y
+BR2_PACKAGE_JSON_C=y
+BR2_PACKAGE_LIBCURL=y
+BR2_PACKAGE_LIBCURL_CURL=y
+BR2_PACKAGE_LIBCURL_VERBOSE=y
+BR2_PACKAGE_LIBCURL_WEBSOCKETS_SUPPORT=y
+BR2_PACKAGE_BLUEZ_TOOLS=y
+BR2_PACKAGE_BLUEZ5_UTILS=y
+BR2_PACKAGE_BLUEZ5_UTILS_OBEX=y
+BR2_PACKAGE_BLUEZ5_UTILS_CLIENT=y
+BR2_PACKAGE_BLUEZ5_UTILS_MONITOR=y
+BR2_PACKAGE_BLUEZ5_UTILS_TOOLS=y
+BR2_PACKAGE_BLUEZ5_UTILS_DEPRECATED=y
+BR2_PACKAGE_BLUEZ5_UTILS_EXPERIMENTAL=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_AUDIO=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_HEALTH=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_HID=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_MIDI=y
+BR2_PACKAGE_BLUEZ5_UTILS_PLUGINS_NFC=y
+BR2_PACKAGE_DHCPCD=y
+BR2_PACKAGE_DNSMASQ=y
+BR2_PACKAGE_DROPBEAR=y
+BR2_PACKAGE_ETHTOOL=y
+BR2_PACKAGE_GESFTPSERVER=y
+BR2_PACKAGE_IPERF3=y
+BR2_PACKAGE_IW=y
+BR2_PACKAGE_NETCAT=y
+BR2_PACKAGE_NTP=y
+BR2_PACKAGE_NTP_NTPDATE=y
+BR2_PACKAGE_NTP_NTPTIME=y
+BR2_PACKAGE_WGET=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPS=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPA3=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_WPA_CLIENT_SO=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+BR2_PACKAGE_FILE=y
+BR2_PACKAGE_CVI_PINMUX=y
+BR2_PACKAGE_CVI_PINMUX_SG200X=y
+BR2_PACKAGE_DUO_PINMUX=y
+BR2_PACKAGE_DUO_PINMUX_DUOS=y
+BR2_PACKAGE_DUO_WIRINGX=y
+BR2_PACKAGE_ANDROID_TOOLS=y
+BR2_PACKAGE_ANDROID_TOOLS_ADB=y
+BR2_PACKAGE_ANDROID_TOOLS_ADBD=y
+BR2_PACKAGE_COREUTILS=y
+BR2_PACKAGE_HTOP=y
+BR2_PACKAGE_KMOD=y
+BR2_PACKAGE_TAR=y
+BR2_PACKAGE_UTIL_LINUX_BINARIES=y
+BR2_PACKAGE_UTIL_LINUX_RFKILL=y
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+BR2_TARGET_ROOTFS_EXT2_SIZE="786432K"
+BR2_TARGET_ROOTFS_TAR_XZ=y
+BR2_PACKAGE_HOST_GENIMAGE=y
+
+# HomeAgent Node/Z2M foundation. See the TOOLCHAIN note at the top: this pair is the whole
+# point of the Bootlin swap.
+BR2_PACKAGE_NODEJS=y
+BR2_PACKAGE_ICU=y

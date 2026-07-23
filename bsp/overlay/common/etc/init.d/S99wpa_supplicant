@@ -1,0 +1,70 @@
+#!/bin/sh
+# Associate wlan0, then let the already-running dhcpcd lease an address on it.
+#
+# Two things make this less obvious than it looks:
+#   1. Buildroot declares only `lo` in /etc/network/interfaces, so the ifupdown
+#      wpasupplicant hook never fires for wlan0 and nothing else starts it.
+#   2. The aic8800 WiFi driver is insmod'ed by /mnt/system/duo-init.sh, which
+#      S99user launches IN THE BACKGROUND. So wlan0 does not exist yet when the
+#      init sequence reaches us, and an immediate wpa_supplicant just fails.
+# Hence: run after S99user, and still wait for the interface to appear.
+DAEMON=/usr/sbin/wpa_supplicant
+CONF=/etc/wpa_supplicant.conf
+PIDFILE=/var/run/wpa_supplicant.wlan0.pid
+IFACE=wlan0
+WAIT_SECONDS=60
+
+start_when_ready() {
+  i=0
+  while [ ! -e "/sys/class/net/$IFACE" ]; do
+    i=$((i + 1))
+    if [ "$i" -ge "$WAIT_SECONDS" ]; then
+      logger -t wpa_supplicant "$IFACE never appeared after ${WAIT_SECONDS}s; giving up"
+      return 1
+    fi
+    sleep 1
+  done
+  $DAEMON -B -i "$IFACE" -c "$CONF" -P "$PIDFILE" -D nl80211,wext >/dev/null 2>&1 || {
+    logger -t wpa_supplicant "failed to start on $IFACE"
+    return 1
+  }
+  # dhcpcd is already running and watching all interfaces, but it gave up on
+  # wlan0 long before it was associated. Nudge it so we get a lease promptly.
+  sleep 3
+  dhcpcd -n "$IFACE" >/dev/null 2>&1
+  logger -t wpa_supplicant "associated on $IFACE"
+}
+
+case "$1" in
+  start)
+    [ -f "$CONF" ] || exit 0
+    # stock Buildroot template has a literal SSID placeholder -- nothing to join
+    if grep -q 'ssid="SSID"' "$CONF"; then
+      echo "wpa_supplicant: /etc/wpa_supplicant.conf is the stock template, skipping."
+      exit 0
+    fi
+    echo "Starting wpa_supplicant on $IFACE: backgrounded, waits for the driver"
+    start_when_ready &
+    ;;
+  stop)
+    printf "Stopping wpa_supplicant: "
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")" 2>/dev/null
+      rm -f "$PIDFILE"
+    fi
+    killall wpa_supplicant 2>/dev/null
+    echo "OK"
+    ;;
+  restart|reload)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  status)
+    wpa_cli -i "$IFACE" status 2>/dev/null | grep -E 'wpa_state|ssid' || echo "not running"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

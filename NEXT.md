@@ -4,11 +4,12 @@
 - **지금 상태 (2026-07-23 20:45~)**: Zigbee2MQTT 2.10.1 + mosquitto 2.0.20을 넣은 클린 빌드가 **gpu1i(gpu-01)의 tmux 세션 `z2m`에서 진행 중**이다. 노트북 빌드는 리소스 때문에 껐다. **아직 flash도 실기 검증도 안 했다.**
 - **Next**: (1) 빌드 완료 확인 → (2) 이미지를 노트북으로 가져와 flash → (3) `homeagent-usb-mode host` → (4) `/dev/ttyUSB0` 확인 → (5) Z2M 기동 + 페어링.
   ```bash
-  ssh gpu1i 'grep EXIT= ~/z2m-build.log'                           # rc 확인 (0이어야 함)
-  ssh gpu1i 'ls -lh ~/repos/gh/homeagent-config/bsp/sdk/out/*.zip'
-  scp gpu1i:~/repos/gh/homeagent-config/bsp/sdk/out/milkv-duos-glibc-arm64-emmc_*.zip <노트북 out/>
-  ./bsp/flash-emmc.sh arm64                                        # 보드 스위치 ARM
+  ssh gpu1i 'grep EXIT= ~/z2m-build.log'   # 있으면 끝난 것, 0이면 성공
+  ssh gpu1i 'pgrep -c cc1plus'             # 없으면: ~16 = V8 컴파일 중 (brmake라 로그는 조용하다)
   ```
+  **빌드 호스트 운용 절차 전체(맨바닥 세팅 / 진행 판단 / 실패 시 재시작 / 이미지 회수)는
+  `bsp/README.md` "Building on a remote host (gpu1i)"가 SSOT다.** 실패했을 때 output 트리에
+  손으로 이어붙이지 말 것 — 지우고 다시 세우는 게 규칙이고 이유도 거기 적혀 있다.
 - **flash 후 합격선**: `node -v` = v22.22.0 / `zigbee2mqtt --version` 실행 / `/usr/lib/node_modules/zigbee2mqtt` 존재 / `mosquitto -h` / **동글 꽂고 `/dev/ttyUSB0` 생성** / `/etc/init.d/S70zigbee2mqtt start` 후 Z2M이 어댑터를 잡고 `:8080` 프론트엔드가 뜬다.
 - **Blocker: 없다.** 어제의 blocker 둘은 오늘 다 풀렸다 (아래 RECENT).
 - **Read**: `bsp/overlay/README.md` (overlay 4종 계약); `VERSION.md` "Verified stack — arm64 dev lane"; `bsp/flash-emmc.sh` 상단 PROCEDURE 블록.

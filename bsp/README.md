@@ -104,6 +104,76 @@ riscv lane lost a `host-python3` with `_bz2`/`_ssl`/`_hashlib` missing:
 rm -rf <sdk>/buildroot/output/<board> <sdk>/install/soc_sg2000_<board_underscored>
 ```
 
+## Building on a remote host (gpu1i)
+
+A full clean build is ~1h30m and pins 16 cores, which is not something to run on a laptop
+you want to close. `gpu1i` (16 cores, 61G RAM, NixOS, docker) is the build host; its home
+directory differs from the laptop's, so use `~` rather than absolute paths in anything you
+script against it. Nothing about the host is special — the point of `setup.sh` + `build.sh`
+is that any
+machine with docker reproduces the same image, and gpu1i is where that was first
+demonstrated (2026-07-23) from an empty tree.
+
+**Standing it up from scratch** — four commands, ~20 min mostly clone and pull:
+
+```bash
+ssh gpu1i 'cd ~/repos/gh/homeagent-config && git pull --rebase origin main'
+ssh gpu1i 'docker pull milkvtech/milkv-duo:latest'
+ssh gpu1i 'cd ~/repos/gh/homeagent-config && ./bsp/setup.sh'     # clones bsp/sdk, pins it
+ssh gpu1i 'cd ~/repos/gh/homeagent-config && tmux new-session -d -s z2m \
+  "cd ~/repos/gh/homeagent-config && ./bsp/build.sh milkv-duos-glibc-arm64-emmc \
+   > ~/z2m-build.log 2>&1; echo EXIT=\$? >> ~/z2m-build.log"'
+```
+
+tmux is what makes it survive the SSH session; `~/z2m-build.log` is the whole record.
+
+**Checking on it.** The SDK pipes through `utils/brmake`, which compresses output, so a
+quiet log does not mean a stalled build. Judge by process count, not by log volume:
+
+```bash
+ssh gpu1i 'grep EXIT= ~/z2m-build.log'          # present = finished; 0 = success
+ssh gpu1i 'tail -3 ~/z2m-build.log'             # current package
+ssh gpu1i 'pgrep -c cc1plus'                    # ~16 during V8; 0 means not compiling
+ssh gpu1i 'tmux ls'                             # session z2m alive?
+ssh gpu1i 'uptime'                              # load ~16 while building
+```
+
+V8 alone is ~1h16m of that 1h30m and emits almost nothing through brmake. Sixteen live
+`cc1plus` processes is the honest signal that it is working.
+
+**When it fails.** `EXIT=` will be non-zero and the tail names the package. Two rules:
+
+- Do not try to resume by hand into the output tree. Buildroot does not rebuild on a
+  defconfig change, and `<pkg>-reinstall` does not re-sync per-package host trees — that
+  is exactly how an earlier attempt ended up with `host/bin/npm: No such file or directory`
+  while `host-nodejs-bin` sat built one directory over. Delete and rebuild:
+
+  ```bash
+  ssh gpu1i 'cd ~/repos/gh/homeagent-config/bsp/sdk && rm -rf \
+    buildroot/output/milkv-duos-glibc-arm64-emmc \
+    install/soc_sg2000_milkv_duos_glibc_arm64_emmc \
+    linux_5.10/build/sg2000_milkv_duos_glibc_arm64_emmc'
+  ```
+
+- If the fix is in this repo (defconfig, overlay, patch), commit and push it here first,
+  then `git pull --rebase` on gpu1i. `build.sh` injects from the checkout, so an
+  uncommitted laptop fix is invisible to the build host.
+
+**Collecting the result.** The board is on the laptop, so flashing happens there:
+
+```bash
+ssh gpu1i 'ls -lh ~/repos/gh/homeagent-config/bsp/sdk/out/*.zip'
+scp gpu1i:'~/repos/gh/homeagent-config/bsp/sdk/out/milkv-duos-glibc-arm64-emmc_*.zip' \
+    ~/repos/3rd/milkv/duo-buildroot-sdk-v2/out/
+./bsp/flash-emmc.sh arm64
+```
+
+Note the two SDK locations are unrelated checkouts of the same pin: gpu1i uses the default
+`bsp/sdk`, the laptop uses `~/repos/3rd/milkv/duo-buildroot-sdk-v2` via `HOMEAGENT_BSP_SDK`.
+Neither needs to be copied to the other — `host-tools` (6.8G of vendor toolchain) is
+committed in the SDK repo, so the pin carries it. Only `buildroot/dl` differs, and that is
+just a download cache.
+
 ## Flashing eMMC from Linux
 
 ```bash

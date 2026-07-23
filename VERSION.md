@@ -39,12 +39,41 @@
 
 | Item | Value |
 |------|-------|
-| Public SDK | <https://github.com/junghan0611/duo-buildroot-sdk-v2> `feat/riscv64-nodejs-pure-cross` @ `087547cf8` (upstream `ad920f839`; linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos) |
+| Public SDK | <https://github.com/junghan0611/duo-buildroot-sdk-v2> — `feat/arm64-hub-baseline` (dev lane) / `feat/riscv64-nodejs-pure-cross` (product lane), both @ `087547cf8` (upstream `ad920f839`; linux 5.10 / u-boot 2021.10 / opensbi / fsbl / freertos; Buildroot 2025.02) |
 | Docs | <https://milkv.io/docs/duo/getting-started/buildroot-sdk> |
 | SMHUB product reference | mainline kernel 6.18 / OpenSBI 1.8 / U-Boot 2026.04 / Buildroot 2025.11 — diff target (see `runtime/README.md`) |
 | First proof | **done (2026-07-14)** — own RISC-V C906 image (`riscv64-musl`), booted on silicon, eth0 DHCP + Wi-Fi (aic8800) |
-| Second proof | **current** — native-musl Node 22.22.0 → MQTT / Zigbee2MQTT |
-| Device facts | Duo S live boot: `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, eMMC 7.3G (p4 rootfs 768M) — see `captures/` |
+| Second proof | **done (2026-07-23)** — Node 22.22.0 in the image, on the **arm64 dev lane** (see below) |
+| Third proof | **next** — Zigbee2MQTT on the board over the USB dongle; blocked on kernel USB-serial, see NEXT.md |
+| Device facts | Duo S live boot riscv64: `Linux milkv-duo 5.10.4 riscv64`, `isa: rv64imafdvcsu`, eMMC 7.3G (p4 rootfs 768M) — see `captures/` |
+
+### Verified stack — arm64 dev lane (2026-07-23)
+
+Everything in this table was observed, not inferred. Evidence:
+`captures/duos-arm64-firstboot-20260723T170600+0900/`, build log, and the resolved `.config`.
+
+| Item | Value |
+|------|-------|
+| Board / core | Milk-V Duo S, SG2000 — **ARM Cortex-A53** (`CPU implementer 0x41`, `part 0xd03`, ARMv8) |
+| Core select | physical slide switch (`ARM`/`RV`) — **not an eFuse**, reversible |
+| Buildroot config | `bsp/buildroot/milkv-duos-glibc-arm64-emmc_defconfig` |
+| Toolchain | Bootlin `aarch64--glibc--stable-2024.05-1` — **GCC 13.3.0**, kernel headers 4.19, glibc |
+| (replaced) | SDK stock was Linaro **GCC 7.3.1 / glibc 2.25 / headers 4.10** (2018) — below Buildroot's `BR2_TOOLCHAIN_GCC_AT_LEAST_10` gate |
+| Kernel | 5.10.4 aarch64 SMP PREEMPT (built by the SDK's own Linaro toolchain, independent of the above) |
+| Node.js | **22.22.0** — ABI/modules **127**, V8 **12.4.254.21-node.33**, ICU **73.2** (system ICU, shared) |
+| Node links | `libuv libcares libnghttp2 libcrypto libssl libicu{i18n,uc,data} libstdc++ libatomic libz` — all shared, none bundled |
+| Node glibc floor | `GLIBC_2.38` — this binary is bound to this rootfs, it will not run on the older glibc 2.25 images |
+| npm / corepack | npm **absent** (`--without-npm`); corepack **present** (1.2 MB) — our patch 0002 scopes `--without-corepack` to the riscv branch only |
+| Build host | vendor docker `milkvtech/milkv-duo:latest`, Ubuntu 22.04, host GCC 11.4.0; `host-qemu 9.2.0` built and used for V8 `mksnapshot` |
+| Build cost | 1 h 29 min clean (V8 alone ~1 h 16 min, 17 parallel `cc1plus`) |
+| Image | `milkv-duos-glibc-arm64-emmc_2026-0723-1817.zip` — 90 MB (57 MB without Node); rootfs 235 MB used of a 768 MB partition |
+| Live network | eth0 DHCP + **wlan0 (aic8800) associated, persists across reboot**; usb0 NCM gadget `192.168.42.1` |
+| Known gaps | `CONFIG_USB_SERIAL` **not set** → no CP210x → no `/dev/ttyUSB*` for the Zigbee dongle; no mosquitto in the image |
+
+Why arm64 became the dev lane: `BR2_PACKAGE_NODEJS_ARCH_SUPPORTS` lists
+`arm/aarch64/i386/x86_64` and **not riscv64**, so aarch64 takes Buildroot's stock qemu-user
+path with zero source patches, while riscv64 needs a downstream patch series. The riscv lane
+stays the product ISA and is parked, not abandoned — see `NEXT.md`.
 
 Policy:
 

@@ -71,5 +71,5 @@ npm run test
 
 ## 흡수된 원문
 
-- `MQTT-HA.md` — MQTT/HA/Zigbee 전략 원문. 이 문서로 압축 흡수.
-- `ZIGBEE2MQTT_UPSTREAM_GUIDE.md` — upstream 기여 절차 원문. 이 문서로 압축 흡수.
+MQTT/HA/Zigbee 전략과 upstream 기여 절차 원문은 이 문서로 압축 흡수했고,
+빈 스텁 문서는 2026-07-24에 제거했다(git 히스토리에 보존).

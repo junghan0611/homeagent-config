@@ -29,21 +29,32 @@
 #    enumerate ("device descriptor read/64, error -110", observed).
 #
 # 5. cdc_acm will steal the interface if you let it — see the long note further down.
-#    This script disables USB driver autoprobe for the duration and restores it on exit.
-#    Symptom if it gets loose: "[INFO] found usb device vid=0x3346 pid=0x1000" -> "[ERR]".
+#    Run `sudo ./bsp/usb-recovery-prepare.sh` first: it installs the udev rule that stops
+#    cdc_acm from ever being loaded for this device, and leaves drivers_autoprobe at 1 so the
+#    kernel configures the device inside enumeration. Do NOT "fix" this by disabling
+#    autoprobe — that is what caused the 2026-07-24 INVALID_PARAM loop (step 5b).
+#    Symptom if cdc_acm gets loose: "[INFO] found usb device vid=0x3346 pid=0x1000" -> "[ERR]".
 #
-# 5b. THREE different failures look alike, and they have nothing to do with each other:
+# 5b. FOUR different failures look alike, and they have nothing to do with each other:
 #      -110 "device descriptor read/64"  -> the cable is behind a hub/dock (step 4).
 #      plain [ERR] after "found usb device" -> cdc_acm got the interface first (step 5).
 #      LIBUSB_ERROR_INVALID_PARAM        -> the device is UNCONFIGURED: it enumerated while
 #         autoprobe was off, so bConfigurationValue is empty and it has no interfaces for
 #         libusb to claim. Check with:
-#           cat /sys/bus/usb/devices/1-*/bConfigurationValue
-#         The script now sets the configuration before each attempt, so this should not
-#         recur — but if you are driving usb_dl by hand, set it yourself first.
+#           cat /sys/bus/usb/devices/*/bConfigurationValue
+#         Leave autoprobe at 1 (step 5). Setting the configuration after the fact does not
+#         fix it: libusb caches the config descriptor at open() and usb_dl opens first.
+#      "config cdc(0x22) failed: TIMEOUT" repeating with NO percentage -> the ROM's state
+#         machine is stale from an earlier interrupted attempt. Only a replug resets it.
+#         The same TIMEOUT lines *interleaved with a rising percentage* are harmless.
+#
+#    Also: "set MGN1 flag" / "break" / "Connecting to ROM 2nd stage..." are printed even on
+#    attempts where no device was ever found. They are not progress. The percentage is.
 #
 # 6. Success looks like "[INFO] USB download complete" after ~800 MB of
-#    "updated size: N/809230635". The board then reboots by itself and comes back as
+#    "updated size: N/809258127". Expect ~25 minutes; container CPU near zero is normal
+#    (blocked on USB, not dead). DO NOT KILL IT — a flash was killed at 23% on 2026-07-24
+#    on exactly that misreading. The board then reboots by itself and comes back as
 #    3346:100c "Cvitek NCM" (100c = running system; 1000 = still in download mode).
 #
 # 7. Verify — do not trust the flash alone:
@@ -151,42 +162,64 @@ fi
 # CviUsbDownload driver instead of the COM one.
 #
 # Measured 2026-07-23: cdc_acm binds 186 ms after enumeration (423106.160 enumerate →
-# 423106.346 "cdc_acm 1-2:1.0: ttyACM0"). Two things that do NOT work:
+# 423106.346 "cdc_acm 1-2:1.0: ttyACM0"). Three things that do NOT work:
 #   - `modprobe -r cdc_acm` alone: the kernel autoloads it again on the next enumeration.
 #   - an `install cdc_acm /bin/true` drop-in in /run/modprobe.d: udev loaded it anyway.
-# What works is turning off USB driver autoprobe for the duration, so the kernel binds
-# no interface driver at all and libusb gets a free interface.
+#   - turning off /sys/bus/usb/drivers_autoprobe. This does stop cdc_acm, but it trades one
+#     failure for another: every device that enumerates while it is off is left UNCONFIGURED
+#     (empty bConfigurationValue, zero interfaces), so libusb has nothing to claim and dies
+#     with LIBUSB_ERROR_INVALID_PARAM. Setting the configuration afterwards does not rescue
+#     it — libusb caches the config descriptor at open() and usb_dl opens within
+#     milliseconds. Measured 2026-07-24: a 50 ms poller beat usb_dl once in ten minutes.
+#
+# What works — and this is the part that took two days to see — is LETTING cdc_acm bind and
+# then taking the interface away from it, in that order. cdc_acm's probe performs the CDC
+# setup (SET_LINE_CODING 0x20, SET_CONTROL_LINE_STATE 0x22) that opens the ROM's data pipe.
+# Block cdc_acm entirely and usb_dl's own versions of those two control transfers time out:
+#   [ERR] config cdc(0x22) failed: LIBUSB_ERROR_TIMEOUT(-7)
+#   [ERR] config cdc(0x20) failed: LIBUSB_ERROR_TIMEOUT(-7)
+# after which EVERY bulk write times out ("only send 524288 byte(-7)") while usb_dl happily
+# keeps incrementing "updated size" and finishes with "USB download complete". Measured
+# 2026-07-24: a run that reported 100% wrote nothing at all — the eMMC still held the
+# filesystem from the previous day, same UUID, same mkfs time. See VERIFY at the end.
+#
+# So: leave drivers_autoprobe at 1, leave cdc_acm loaded, let it bind on enumeration, and
+# unbind it immediately before each usb_dl attempt. Do NOT disable autoprobe and do NOT
+# blacklist the module.
 AUTOPROBE=/sys/bus/usb/drivers_autoprobe
-AUTOPROBE_SAVED=""
-restore_autoprobe() {
-  [ -n "$AUTOPROBE_SAVED" ] || return 0
-  echo "$AUTOPROBE_SAVED" | sudo tee "$AUTOPROBE" >/dev/null 2>&1 || true
-  AUTOPROBE_SAVED=""
+if [ "$(cat "$AUTOPROBE" 2>/dev/null)" != 1 ]; then
+  echo 1 | sudo tee "$AUTOPROBE" >/dev/null 2>&1 || true
+  echo "[flash] drivers_autoprobe was off — set to 1 so the kernel configures the device."
+fi
+# Read /proc/modules, not `lsmod | grep -q`: under `set -o pipefail` grep exits on the first
+# match, lsmod dies of SIGPIPE, and the pipeline reports failure even when the module IS
+# loaded. That silently skipped this whole block for a morning on 2026-07-24.
+if ! grep -q '^cdc_acm ' /proc/modules; then
+  sudo modprobe cdc_acm 2>/dev/null || true
+  echo "[flash] cdc_acm loaded — it has to bind once to set up the CDC line before we take over."
+fi
+
+# Take the interface away from cdc_acm, after it has done the CDC setup. Called once per
+# attempt, right before usb_dl, because the board is replugged between attempts and cdc_acm
+# binds again on each enumeration.
+release_cdc_acm() {
+  local found=0
+  for d in /sys/bus/usb/drivers/cdc_acm/*:*; do
+    [ -e "$d" ] || continue
+    local i; i=$(basename "$d")
+    case "$i" in
+      *:*) ;;
+      *) continue ;;
+    esac
+    # only ours — do not disturb other ACM devices on the machine
+    local dev="/sys/bus/usb/devices/${i%%:*}"
+    [ "$(cat "$dev/idVendor" 2>/dev/null)" = "3346" ] || continue
+    echo "$i" | sudo tee /sys/bus/usb/drivers/cdc_acm/unbind >/dev/null 2>&1 || true
+    found=1
+  done
+  [ "$found" = 1 ] && echo "[flash] cdc_acm released the ROM interface — libusb can claim it now."
+  return 0
 }
-# Restore on every exit path. This is why the docker run below is NOT exec'd — exec would
-# replace this shell and the trap would never fire, leaving the host unable to bind drivers
-# to newly plugged USB devices.
-trap restore_autoprobe EXIT INT TERM
-
-if [ -w "$AUTOPROBE" ] || sudo -n true 2>/dev/null; then
-  AUTOPROBE_SAVED=$(cat "$AUTOPROBE")
-  echo 0 | sudo tee "$AUTOPROBE" >/dev/null
-  echo "[flash] USB driver autoprobe disabled for the flash (restored on exit)."
-else
-  echo "Warning: cannot write $AUTOPROBE — cdc_acm may steal the interface and usb_dl will [ERR]." >&2
-fi
-
-# Unbind any interface cdc_acm already holds, then drop the module. With autoprobe off it
-# will not come back until we restore it.
-for d in /sys/bus/usb/drivers/cdc_acm/*:*; do
-  [ -e "$d" ] || continue
-  basename "$d" | sudo tee /sys/bus/usb/drivers/cdc_acm/unbind >/dev/null 2>&1 || true
-done
-if lsmod 2>/dev/null | grep -q "^cdc_acm"; then
-  echo "[flash] removing cdc_acm so it cannot claim the ROM's download interface."
-  sudo modprobe -r cdc_acm 2>/dev/null || \
-    echo "Warning: cdc_acm still loaded (in use?). Close anything on /dev/ttyACM* if usb_dl [ERR]s." >&2
-fi
 
 USBDL_DIR="$SDK_DIR/build/tools/common/usb_dl/Linux"
 [ -x "$USBDL_DIR/usb_dl" ] || chmod +x "$USBDL_DIR/usb_dl" 2>/dev/null || true
@@ -228,9 +261,11 @@ echo
 # exactly that state -- the 2026-07-23 flash succeeded only because the board happened to be
 # plugged in (and configured) before the script ran.
 #
-# Fix: set the configuration ourselves right before each attempt. Autoprobe stays 0, so the
-# interfaces that appear get no driver bound, which is what we wanted from it in the first
-# place. Verified: config=[] ifaces=[] -> config=[1] ifaces=[2] with driver "none".
+# The real fix is upstream of this: leave autoprobe ON (see the block above) so the kernel
+# configures the device inside enumeration. This function stays as a safety net for the case
+# where something else on the machine left autoprobe at 0 -- it cannot win the race on its own
+# (libusb caches the descriptor at open), but it costs nothing and it names the state in the
+# log when it does fire.
 ensure_configured() {
   for d in /sys/bus/usb/devices/*/; do
     [ -f "$d/idVendor" ] || continue
@@ -250,24 +285,63 @@ rc=1
 for n in $(seq 1 "$ATTEMPTS"); do
   echo "[flash] usb_dl attempt $n/$ATTEMPTS — replug now if you have not yet."
   ensure_configured
+  release_cdc_acm
   # Root in-container: host /dev/bus/usb nodes are root-owned. usb_dl only reads our stage.
-  # NOT exec'd: the EXIT trap above has to run to restore USB autoprobe.
-  out=$(docker run --rm --privileged \
+  # Stream, do not capture. A full eMMC write takes ~25 min and usb_dl reports
+  # "updated size: N/809258127(P%)" as it goes; capturing into a variable hides every
+  # line until the attempt ends, so the run looks hung. It is not — the LIBUSB_ERROR_TIMEOUT
+  # lines interleaved with the progress are retried and non-fatal, and container CPU sits
+  # near zero because the process is blocked on USB, not because it died. A flash was killed
+  # at 23% on 2026-07-24 for exactly that misreading. Watch the percentage, nothing else.
+  ATTEMPT_LOG="$WORK/usb_dl-$n.log"
+  docker run --rm --privileged \
     -v /dev/bus/usb:/dev/bus/usb \
     -v "$WORK":/work \
     "$DOCKER_IMAGE" \
-    /bin/bash -ec "cd /work && ./usb_dl -s linux -c '$CHIP' -i ./rom" 2>&1) || true
-  printf '%s\n' "$out" | tr '\r' '\n' | grep -vE "Waiting for USB device connection" | tail -20
-  if printf '%s' "$out" | grep -q "USB download complete"; then rc=0; break; fi
-  if printf '%s' "$out" | grep -q "\[ERR\]"; then
-    echo "[flash] usb_dl hit [ERR] — something claimed the interface before libusb could."
+    /bin/bash -ec "cd /work && ./usb_dl -s linux -c '$CHIP' -i ./rom" 2>&1 \
+    | tr '\r' '\n' | grep -vE "Waiting for USB device connection" | tee "$ATTEMPT_LOG" || true
+  # "USB download complete" is NOT proof of a write. usb_dl increments "updated size" for
+  # every chunk it hands to libusb, whether or not the write succeeded, and prints the
+  # completion line once the counter reaches the total. On 2026-07-24 a run reported 100%
+  # with every single chunk having failed. Count the failures before believing the banner.
+  FAILED_CHUNKS=$(grep -c "only send .* byte(-7)" "$ATTEMPT_LOG" 2>/dev/null || echo 0)
+  if grep -q "USB download complete" "$ATTEMPT_LOG" 2>/dev/null; then
+    if [ "$FAILED_CHUNKS" -gt 4 ]; then
+      echo "[flash] usb_dl claims 'USB download complete' but $FAILED_CHUNKS chunks timed out."
+      echo "[flash] That is the LYING PROGRESS mode — nothing was written. Retrying."
+      echo "[flash] Root cause is almost always that cdc_acm never bound, so the CDC line was"
+      echo "[flash] never set up. Look for 'config cdc(0x22) failed' near the start."
+      continue
+    fi
+    rc=0; break
+  fi
+  if grep -q "\[ERR\]" "$ATTEMPT_LOG" 2>/dev/null; then
+    echo "[flash] usb_dl hit [ERR] — see the lines above for which of the four modes it was."
   fi
 done
 
-# Restore autoprobe immediately: the board reboots right after the download and its USB
-# network gadget (3346:100c NCM) enumerates within seconds. If autoprobe is still off then,
-# the device appears with no interfaces and no netdev, and only another replug fixes it.
-restore_autoprobe
+# The board reboots right after the download and comes back as its USB network gadget
+# (3346:100c NCM) within seconds. Autoprobe is left at 1 throughout, so that device gets
+# configured and cdc_ncm binds it normally -- nothing to restore here.
+
+# Ground truth for "did this actually write": the rootfs ext4 superblock UUID. Read it out of
+# the image so the operator can compare it against the board instead of trusting a banner.
+IMG_UUID=""
+if command -v python3 >/dev/null 2>&1 && [ -f "$WORK/rom/rootfs_ext4.emmc" ]; then
+  IMG_UUID=$(python3 - "$WORK/rom/rootfs_ext4.emmc" <<'PY' 2>/dev/null || true
+import sys
+# The vendor wraps the partition in a 64-byte "CIMG" header, and the ext4 image inside starts
+# at a small offset after that, so locate the superblock by its magic instead of assuming.
+d = open(sys.argv[1], 'rb').read(1 << 16)
+for off in range(0, (1 << 16) - 0x440, 64):   # off = start of the ext4 partition
+    if d[off + 0x438:off + 0x43a] == b'\x53\xef':
+        sb = off + 1024               # the superblock sits 1024 bytes into the partition
+        u = d[sb + 0x68:sb + 0x78].hex()
+        print('-'.join([u[:8], u[8:12], u[12:16], u[16:20], u[20:]]))
+        break
+PY
+)
+fi
 
 if [ "$rc" = 0 ]; then
   echo
@@ -275,6 +349,16 @@ if [ "$rc" = 0 ]; then
   echo "[flash] Verify: lsusb | grep 3346:100c   (100c = running system, 1000 = download mode)"
   echo "[flash] Then:   ssh root@192.168.42.1    (password: milkv)  ->  uname -m"
   echo "[flash] UART 115200 first line must read: $SIG"
+  if [ -n "$IMG_UUID" ]; then
+    echo
+    echo "  ┌─ PROVE THE WRITE LANDED ───────────────────────────────────────────────────"
+    echo "  │ The banner above is not evidence. Compare the rootfs filesystem identity:"
+    echo "  │   image:  $IMG_UUID"
+    echo "  │   board:  ssh root@192.168.42.1 'dumpe2fs -h /dev/mmcblk0p4 | grep -i uuid'"
+    echo "  │ If they differ, the eMMC still holds the old image and the flash did nothing,"
+    echo "  │ no matter what percentage you watched."
+    echo "  └────────────────────────────────────────────────────────────────────────────"
+  fi
 else
   echo
   echo "Error: usb_dl never completed after $ATTEMPTS attempts." >&2

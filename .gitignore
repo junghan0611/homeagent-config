@@ -90,9 +90,10 @@ logs/
 .agent-shell/
 yocto/sources/meta-hailo
 
-.claude
+# .claude 는 통째 무시하되 repo-scoped 스킬(.claude/skills/)만 추적 — pi도 .pi/settings.json으로 이 디렉토리를 읽음
+/.claude/*
+!/.claude/skills/
 go/homeagent
-.claude/
 ui/node_modules
 ui/dist
 dist/

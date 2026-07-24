@@ -15,7 +15,10 @@ PIDFILE=/var/run/zigbee2mqtt.pid
 DATA=/var/lib/zigbee2mqtt
 LOG=/var/log/zigbee2mqtt.log
 
-# ZBDongle-E enumerates as CDC-ACM (ttyACM*), ZBDongle-P through cp210x (ttyUSB*).
+# Our ZBDongle-E is a CP2102N, so it comes up through cp210x as ttyUSB* (verified
+# 2026-07-24), NOT as CDC-ACM. We still probe ttyACM* first in case a CDC-ACM
+# coordinator is ever used, but the pinned port in configuration.yaml is what actually
+# selects the radio -- this only decides whether to start at all.
 find_adapter() {
   for d in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyUSB0 /dev/ttyUSB1; do
     [ -c "$d" ] && { echo "$d"; return 0; }

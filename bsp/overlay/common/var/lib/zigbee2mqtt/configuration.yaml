@@ -10,13 +10,18 @@ mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://127.0.0.1:1883
 
-# serial.port is deliberately absent. The two SONOFF coordinators land on different
-# device nodes (ZBDongle-E -> /dev/ttyACM0 via CDC-ACM, ZBDongle-P -> /dev/ttyUSB0
-# via cp210x) and Z2M auto-discovers when no port is given. Pin it here once the
-# board's actual dongle is known -- auto-discovery is convenient, not deterministic.
-# serial:
-#   port: /dev/ttyACM0
-#   adapter: ember     # ZBDongle-E (EFR32MG21). ZBDongle-P (CC2652P) uses zstack.
+# serial.port MUST be pinned. Z2M's auto-discovery (no port given) shells out to
+# `udevadm`, which does not exist on this Buildroot image (it uses busybox mdev), so
+# discovery dies with "spawn udevadm ENOENT" and Z2M exits before touching the radio.
+# Verified 2026-07-24 on the arm64 hub: unpinned = every start fails.
+#
+# Our dongle is the SONOFF ZBDongle-E: a CP2102N (idVendor 10c4), NOT a CDC-ACM part,
+# so it enumerates through cp210x as /dev/ttyUSB0 -- ttyUSB, not ttyACM. It speaks
+# EmberZNet (7.4.2 GA measured), so the adapter is `ember`. A ZBDongle-P (CC2652P)
+# would instead be zstack on its own ttyUSB node; swap both lines if that is the coordinator.
+serial:
+  port: /dev/ttyUSB0
+  adapter: ember
 
 frontend:
   enabled: true

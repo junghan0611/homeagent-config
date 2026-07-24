@@ -4,6 +4,39 @@
 
 - Nothing yet.
 
+## v2026.7.24 — Duo S arm64 hub: Node 22 + Zigbee2MQTT, reproducible flash-and-go
+
+The headline: a Milk-V Duo S comes up as a working Zigbee hub from a single flash. Flash the
+arm64 image, switch USB to host, plug the dongle — Zigbee2MQTT starts on the seeded config
+with no hand-editing. Proven on a second, fresh board (sticker 91) end to end.
+
+### Board / BSP — arm64 development lane
+
+- **Moved the dev lane from RISC-V to arm64/glibc** (A53) for iteration speed, with a Bootlin GCC 13.3.0 toolchain in place of the stock Linaro GCC 7.3.1. RISC-V C906 + SDK-native musl remains the product ISA (parked, not dropped). The two share one die and a physical slide switch picks the boot core, so no board bring-up is needed to move between them.
+- **Node.js 22.22.0 in the image** (ABI 127, ICU 73.2, V8 12.4), qemu-user verified. The V8 link that stalled for hours on riscv64 passed cleanly on arm.
+- **Zigbee2MQTT 2.10.1 + a local mosquitto broker**, integrated the Buildroot-native way (`BR2_PACKAGE_NODEJS_MODULES_ADDITIONAL`) rather than staging a tree on the host — native addons build as AArch64. Fixed an upstream Buildroot bug where `nodejs.mk` referenced an undefined `NODEJS_CPU`, letting `npm_config_arch` go empty and risking x86_64 prebuilds in an aarch64 rootfs (fork `0913c339a`, worth reporting upstream).
+- **USB switched to host mode for real.** The vendor `usb-host.sh` never actually flipped the controller (a double redirection meant the proc write was dropped); overlaid a corrected `homeagent-usb-mode` that drives the mux and writes `otg_role` at runtime — a dongle enumerates within a second, no reboot.
+- **WiFi survives a reboot**: `S99wpa_supplicant` associates `wlan0` after the aic8800 driver comes up late in the background.
+
+### Flashing — made reliable, and made honest
+
+- **cdc_acm is let bind, then unbound — not blocked.** Its probe performs the CDC line setup (`SET_LINE_CODING`/`SET_CONTROL_LINE_STATE`) that opens the ROM's data pipe; blocking it (via `drivers_autoprobe=0` or a MODALIAS udev rule) makes every 512 KiB bulk write time out while usb_dl still reports 100%.
+- **"USB download complete" is no longer trusted.** usb_dl counts chunks it hands to libusb whether or not they wrote, so a fully failed run still prints success — measured on 2026-07-24, a "100%" run left the eMMC byte-identical to the day before. `flash-emmc.sh` now counts timed-out chunks to detect the lying-progress mode and prints the image rootfs UUID to compare against the board.
+- Fixed a `set -o pipefail` trap where `lsmod | grep -q` reported failure even with the module loaded (grep exits first, lsmod dies of SIGPIPE), silently skipping the cdc_acm handling; reads `/proc/modules` instead.
+- Added `bsp/usb-recovery-prepare.sh` (idempotent host prep, NixOS read-only `/etc` fallback), the `duo-s-flash` skill capturing the sequence and the four look-alike failure strings, and `bsp/BOARDS.md` as a board inventory keyed on rootfs UUID.
+
+### Zigbee2MQTT — flash-and-go
+
+- **Pinned `serial.port`/`adapter` in the seed config.** The image has no `udevadm` (busybox mdev), so Z2M's serial auto-discovery dies with `spawn udevadm ENOENT` and exits before touching the radio. Our ZBDongle-E is a CP2102N → `/dev/ttyUSB0` via cp210x (not ttyACM), adapter `ember`. Verified end to end: EmberZNet 7.4.2, MQTT connected, frontend on :8080, on a fresh board with zero post-flash edits.
+
+### Build
+
+- **Incremental rebuilds in ~2-3 min.** Overlay/config-only changes do not need a clean build — Buildroot rsyncs the overlay in `target-finalize` every `make` and repacks the image, leaving V8/Node untouched. Measured 2026-07-24: a seed change rebuilt in 2m37s with `cc1plus` never spawning, versus 40m for a clean build. Documented in `bsp/README.md`.
+
+### riscv64 pure-cross Node — parked, method preserved
+
+- Promoted the proven pure-cross Node.js build method (no QEMU, SDK-native musl) to SSOT in `docs/BUILDROOT.md`, with the native-musl runtime contract. The lane is parked behind an upstream question (milkv-duo/duo-buildroot-sdk-v2#74), not abandoned; the arm64 lane exists to keep momentum while it waits.
+
 ## v2026.7.15 — Duo S RISC-V boot + SMHub live SSOT + repo-wide ARM→RISC-V realignment
 
 ### Board / BSP (Milk-V Duo S)

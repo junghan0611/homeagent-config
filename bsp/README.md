@@ -186,6 +186,39 @@ Neither needs to be copied to the other — `host-tools` (6.8G of vendor toolcha
 committed in the SDK repo, so the pin carries it. Only `buildroot/dl` differs, and that is
 just a download cache.
 
+### Rebuilding after an overlay/config change — incremental, ~2-3 min
+
+Once a full build exists on gpu1i, most of our changes touch only `bsp/overlay/` (rootfs
+files) — a seed config, an init script — not the package set. Those do **not** need a clean
+build. Buildroot rsyncs the overlay in `target-finalize`, which runs on every `make`, and
+the eMMC image is repacked from there. The expensive packages (V8, Node) already have their
+`.stamp_built` and are not touched.
+
+So the loop is just: push here, pull on gpu1i, rerun `build.sh` against the SAME `bsp/sdk`
+output tree (do NOT delete it — that is what makes it incremental):
+
+```bash
+# laptop: commit + push the overlay/config change first (build.sh injects from the checkout)
+ssh gpu1i 'cd ~/repos/gh/homeagent-config && git pull --rebase origin main'
+ssh gpu1i 'cd ~/repos/gh/homeagent-config && tmux new-session -d -s z2m \
+  "cd ~/repos/gh/homeagent-config && ./bsp/build.sh milkv-duos-glibc-arm64-emmc \
+   > ~/z2m-build.log 2>&1; echo EXIT=\$? >> ~/z2m-build.log"'
+```
+
+Measured 2026-07-24, a seed `configuration.yaml` change: **2m37s**, `EXIT=0`, `cc1plus`
+stayed at 0 the whole time (V8 never recompiled). Confirm the change actually landed rather
+than trusting the timing — grep the produced image:
+
+```bash
+ssh gpu1i 'F=$(ls -t ~/repos/gh/homeagent-config/bsp/sdk/out/*.zip | head -1); \
+  cd /tmp && unzip -qo "$F" rootfs_ext4.emmc && \
+  LC_ALL=C grep -a -o "adapter: ember" rootfs_ext4.emmc | head -1'
+```
+
+Clean build is only needed when the package set or a defconfig changes (Buildroot does not
+rebuild a package on a defconfig edit — see "When it fails" above). For overlay-only work,
+never delete the output tree.
+
 ## Flashing eMMC from Linux
 
 ```bash

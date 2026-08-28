@@ -139,6 +139,15 @@ BR2_PACKAGE_WPA_SUPPLICANT_WPA3=y
 BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
 BR2_PACKAGE_WPA_SUPPLICANT_WPA_CLIENT_SO=y
 BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+# 6) HOSTAPD — SoftAP for WiFi provisioning (sks-hub-gecko, 2026-08-28).
+#    Firmware writes /etc/hostapd.conf at runtime: open network (wpa=0),
+#    driver=nl80211, ctrl_interface=/var/run/hostapd. The image ships the
+#    binary only (/usr/sbin/hostapd + /usr/bin/hostapd_cli). Do not set
+#    BR2_PACKAGE_HOSTAPD_WPA3 — the phone-app copy is "no password"; a
+#    WPA2-only AP is an app-string change, not an image choice. nl80211
+#    (default y) pulls libnl. No init script: firmware owns AP start/stop.
+#    wpa_supplicant stays STA-only; CONFIG_AP is not a substitute here.
+BR2_PACKAGE_HOSTAPD=y
 BR2_PACKAGE_FILE=y
 BR2_PACKAGE_CVI_PINMUX=y
 BR2_PACKAGE_CVI_PINMUX_SG200X=y

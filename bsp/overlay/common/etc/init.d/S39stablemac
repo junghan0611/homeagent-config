@@ -1,0 +1,8 @@
+#!/bin/sh
+# eth0 gets its stable MAC before S40network / S41dhcpcd ask for a lease.
+# Number is the contract: S39 < S40network < S41dhcpcd. Do not rename.
+case "$1" in
+	start|"") [ -e /sys/class/net/eth0 ] && /usr/bin/stable-mac eth0 eth ;;
+	stop) ;;
+esac
+exit 0

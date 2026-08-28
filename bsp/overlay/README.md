@@ -20,6 +20,44 @@ separate partition, so anything under it can be overridden from here.
 
 ## Contents
 
+### `common/usr/bin/stable-mac` + `S39stablemac` + `S99v_stablemac`
+
+This board has **no fused MAC**. eth0 (bm-dwmac) and wlan0 (aic8800, no efuse, no
+`aic_userconfig` MAC section) both randomize every boot — three boots, three
+values, measured on the gecko bench (`GECKO_PORT.md §7.15`). The MAC is product
+identity: SoftAP SSID, the phone-app AES key/IV, and the server-issued hub id
+all derive from `wlan0`. A reflash that drops these scripts breaks that chain.
+
+`stable-mac` hashes the **eMMC CID** (`/sys/block/mmcblk0/device/cid`) into an LAA
+address (`02:` eth0, `06:` wlan0). Same chip → same MAC across reflash; different
+board → different MAC. This is the #8 identity slice for Duo S, not a file in
+rootfs. Scripts came from `sks-hub-gecko/board/duo-s/`; this overlay is the
+durable home.
+
+**Init order is half the contract** (measured):
+
+| script | sorts | why |
+|---|---|---|
+| `S39stablemac` | before `S40network` / `S41dhcpcd` | eth0 MAC before the lease |
+| `S99v_stablemac` | `S99user` < this < `S99wpa_supplicant` | wlan0 appears late; set MAC before wpa associates. Foreground wait on purpose. |
+
+Do not rename them. A random MAC lease first is the failure mode.
+
+### `common/usr/bin/homeagent-serial-by-id` + `common/etc/mdev.conf` + `S99serial-by-id`
+
+The image has busybox mdev, not udev, so `/dev/serial/by-id/` never existed.
+sks-hub-gecko's resolver **opens that directory, demands exactly one entry, and
+realpath's it** — without the links, peripheral init fails every boot. We do
+**not** add eudev (Z2M already works around missing `udevadm`; a second device
+manager is a bigger change than this contract needs).
+
+`homeagent-serial-by-id` walks sysfs (manufacturer/product/serial/interface/port)
+and writes udev-shaped `usb-…-if00-port0` symlinks. mdev.conf runs it on ttyUSB/
+ttyACM add and remove. S99serial-by-id is the boot safety net: `mdev -s` runs
+before USB host mode, so it backgrounds a wait like `S99wpa_supplicant` and
+scans when a node appears. Name is cosmetic — the resolver only cares that the
+count is 1.
+
 ### `common/etc/init.d/S99wpa_supplicant`
 
 Associates `wlan0` at boot so WiFi survives a reboot. Two non-obvious reasons this is needed:

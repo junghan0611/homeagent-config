@@ -1,0 +1,56 @@
+#!/bin/sh
+# Give an interface a MAC that is stable across reboots.
+#
+# Durable home of sks-hub-gecko/board/duo-s/stable-mac (measured 2026-08-27,
+# GECKO_PORT.md §7.15). Issue #8 slice: identity seed is the eMMC CID, not a
+# file in rootfs — same board survives reflash, different board gets its own.
+#
+# Why this exists: neither MAC on this board is fixed in hardware.
+#   - eth0  : bm-dwmac finds no fused address and logs a fresh random one each boot
+#   - wlan0 : the aic8800 module has no efuse MAC and aic_userconfig_*.txt has no
+#             MAC section, so the driver invents one (observed 88:00:33:77:36:f9 ->
+#             88:00:33:77:d3:2b across a single reboot)
+# A random MAC means a new DHCP lease every boot, so the board's IP moves and no
+# router-side reservation can hold it. That is unacceptable for a hub: the MAC is
+# part of the product's identity (SoftAP SSID, app AES key/IV, server issuance).
+#
+# Seed: the eMMC CID. It is burned into the eMMC chip, so it is unique per board
+# and survives reflashing the rootfs — unlike anything we could store in a file.
+# Same board -> same MAC, forever; different board -> different MAC, automatically.
+#
+# The address is locally administered (first byte 0x02 / 0x06: LAA bit set,
+# unicast). We do not squat on AICSemi's OUI. If a vendor OUI is registered,
+# change PREFIX_* below and nothing else.
+#
+# usage: stable-mac <iface> <eth|wlan>
+set -e
+
+IFACE="$1"
+KIND="$2"
+[ -n "$IFACE" ] && [ -n "$KIND" ] || { echo "usage: stable-mac <iface> <eth|wlan>" >&2; exit 2; }
+
+CID_FILE=/sys/block/mmcblk0/device/cid
+[ -r "$CID_FILE" ] || { logger -t stable-mac "$CID_FILE unreadable; leaving $IFACE alone"; exit 0; }
+
+case "$KIND" in
+	eth)  FIRST=02 ;;
+	wlan) FIRST=06 ;;
+	*)    echo "kind must be eth or wlan" >&2; exit 2 ;;
+esac
+
+# 5 bytes from the CID digest -> the low 5 octets. FIRST distinguishes the two
+# interfaces, which must not share an address.
+SUFFIX=$(sha256sum "$CID_FILE" | cut -c1-10 | sed 's/\(..\)\(..\)\(..\)\(..\)\(..\)/\1:\2:\3:\4:\5/')
+MAC="$FIRST:$SUFFIX"
+
+CUR=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null || echo "")
+[ "$CUR" = "$MAC" ] && exit 0
+
+# The link must be down to take a new address.
+ip link set dev "$IFACE" down 2>/dev/null || true
+if ip link set dev "$IFACE" address "$MAC" 2>/dev/null; then
+	logger -t stable-mac "$IFACE $CUR -> $MAC"
+else
+	logger -t stable-mac "$IFACE: could not set $MAC (kept $CUR)"
+fi
+ip link set dev "$IFACE" up 2>/dev/null || true

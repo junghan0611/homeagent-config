@@ -1,13 +1,22 @@
-# NOW — 다음 축: 제품화 수준의 Duo S 구성 준비
+# RAIL — 현재 좌표
 
-- **Stem**: Duo S를 Zigbee/Matter 허브로 세우는 재현 이미지. **flash-and-go 재현성은 v2026.7.24로 닫혔다**(아래 RECENT + "flash-and-go 재현"). 다음 단계는 **"개발 보드가 도는 이미지" → "제품이 될 수 있는 이미지"**.
-- **왜 이 축인가 (2026-07-24 GLG)**: 선행 세대 허브는 제품이 되기까지 **ssh push 십수 단계 + 제조사에 패키지 이관**이었다 — 재현 가능한 지점이 없고 최종 산출물 통제권도 넘어간다. Buildroot 레인을 재현성으로 조이는 이유가 이것이다: **부팅부터 패키징까지 전 영역을 우리가 소유한다.** 허브 앱은 별도 레인에서 오더라도, **그것이 들어앉을 자리는 이 repo가 제품 수준으로 준비**한다(필요한 구성이 대략 비슷하다).
-- **다음 한 걸음**: **[#8](https://github.com/junghan0611/homeagent-config/issues/8)의 "남은 축" 1번 — 기기 아이덴티티를 어디서 넣을지 결정**(첫 부팅 생성+지속면 저장 / 제조 단계 주입 / SoC 고유값 파생). flash-and-go는 *전 보드가 같은 이미지*라는 뜻이므로, 이 결정이 공장초기화·OTA·프로비저닝 설계를 전부 좌우한다.
-- **병행(다른 레인)**: 회사 레인(`~/repos/work/`)에서 Zigbee 허브(z2m 이용) 개발 → 완성분을 Duo S 이미지에서 검증. **이 repo는 보드 검증·풀이미지 표면**(비즈니스 로직 아님).
-- **Matter / matter.js**: **준비 완료, 착수 보류 (언제든)** — 아래 "## Matter / matter.js 올리기" 참조. 라디오는 지금 USB 동글(어쩔 수 없음), 제품화 시 온보드 MG24/MG26.
-- **Blocker: 없다.**
-- **Read**: **[#8 제품화 구성](https://github.com/junghan0611/homeagent-config/issues/8)**(대조표 + 남은 축); [#7 왜 이 작업을 하고 왜 공개하는가](https://github.com/junghan0611/homeagent-config/issues/7); `bsp/README.md`(빌드/증분); `duo-s-flash` 스킬(flash); `docs/SMHUB.md`(참조 제품 대조); `VERSION.md`.
-- **Do not touch**: `feat/riscv64-nodejs-pure-cross` 브랜치와 `captures/`의 riscv 증거. gpu1i의 `d5d9436`(SeungwooHyunGQ Hailo)은 **2026-07-24 버렸다**(gpu1i homeagent-config를 origin/main으로 reset). 원본은 SeungwooHyunGQ 쪽. gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/`은 남겨둠 — GLG 판단.
+- [x] **1. flash-and-go 재현** — v2026.7.24, 보드 91 Z2M :8080
+- [ ] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← CURRENT: 증분 빌드 → zip 검증. 플래시는 gecko 신호 후
+- [ ] **3. #8 나머지 아이덴티티** — hostname·인증서·제조 주입. gecko 지금 요청 없음
+- [ ] **4. Matter / matter.js** ← PAUSED: 준비 완료, 착수 보류
+
+현재 좌표: 1 완료 → 2 레시피 들어감, 바이트는 아직 → 3·4 보류
+
+# NOW — gecko SoftAP / stable-MAC 을 이미지 바이트로
+
+- **Stem**: Duo S 제품화 이미지. 허브 앱은 별도 레인, **들어앉을 자리는 이 repo**. ARM64 glibc 개발 레인만. RISC-V 아님.
+- **이미 들어 있는 것 (레시피, 2026-08-28)**: `BR2_PACKAGE_HOSTAPD=y` (개방망, WPA3 옵션 없음, init으로 안 올림). `/dev/serial/by-id`는 eudev 없이 mdev helper. `stable-mac`은 eMMC CID → LAA (`02:` eth0 / `06:` wlan0) — #8 MAC 조각. init 순서 계약: `S39stablemac` < `S40network`/`S41dhcpcd`, `S99user` < `S99v_stablemac` < `S99wpa_supplicant`. `S99v`의 `v`는 자리용 글자, 번호 옮기지 말 것.
+- **Next**: (1) gpu1i에서 `git pull --rebase origin main` → (2) **output 트리 지우지 말고** `./bsp/build.sh milkv-duos-glibc-arm64-emmc` (hostapd는 새 패키지라 overlay-only 2분이 아님. 클린 빌드는 하지 마라) → (3) zip에서 `/usr/sbin/hostapd` `/usr/bin/hostapd_cli` `/usr/bin/stable-mac` `/etc/init.d/S39stablemac` `/etc/init.d/S99v_stablemac` `/usr/bin/homeagent-serial-by-id` 확인 → (4) gecko garden `20260828T105408-9f5a40`에 zip 시점만 통보. **플래시하지 마라.**
+- **플래시 게이트**: 보드 `192.168.0.164` MAC `06:b3:51:d1:75:4e`는 gecko가 잡고 있다. 플래시 **직전에** 그쪽에 한 번 더 신호 → 로그 회수 + 보드 비움 → 우리 플래시 → 그쪽 `install`+`certs`. 펌웨어를 우리가 기동하지 마라 (WiFi 끊김).
+- **Verify (zip, 보드 아님)**: `F=$(ls -t <sdk>/out/*arm64*.zip | head -1)`; rootfs에서 `hostapd` 바이너리와 `stable-mac` 스크립트가 보여야 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.
+- **Blocker**: 빌드 없음. 플래시는 gecko 로그 회수 신호 대기.
+- **Read**: `bsp/overlay/README.md` (stable-mac + by-id); arm64 defconfig `# 6) HOSTAPD`; `bsp/README.md` 증분 빌드; gecko `board/duo-s/README.md` + `docs/GECKO_PORT.md` §8.
+- **Do not touch**: 보드 `.164`. RISC-V defconfig. `feat/riscv64-nodejs-pure-cross`. gecko 펌웨어. hostapd를 부팅 init으로 올리지 말 것. eudev 넣지 말 것. `S39`/`S99v` 번호 변경. gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/`.
 
 ## flash-and-go 재현 (닫힘 — 참조용)
 
@@ -63,6 +72,7 @@
 
 # RECENT
 
+- **2026-08-28 gecko 패키징 표면 (레시피만, 미빌드)**: sks-hub-gecko SoftAP가 이미지에 없어 막힘. arm64에 hostapd(개방망) + mdev `/dev/serial/by-id` + stable-mac(eMMC CID, #8 MAC 조각) 넣음. 보드 `.164` 안 만짐. 다음 = gpu1i 증분 빌드.
 - **2026-07-24 (2세션) 방향 정리 — Matter 준비 + SMHub 대조**: matter.js bump 경로 조사 완료(관문 열림 — 위 "Matter / matter.js 올리기"), **corepack은 개발 중이라 의도적 유지**로 재판정, 커널 defconfig 주석은 **이미지 불변이라 실기 검증 불필요**로 확정, SMHub Nano 단일 MG24 배타 / 벤더 매뉴얼의 "별도 칩"은 상위 모델 전제임을 교정(LEDGER). **다음 실질 축 = 제품화 수준의 Duo S 구성 준비**([#8](https://github.com/junghan0611/homeagent-config/issues/8) — 선행 세대의 ssh push/제조사 이관을 반면교사로, 이미지가 소유해야 할 것 대조표 + 남은 축 5개). 회사 레인의 z2m 허브 개발은 병행, Matter는 언제든. **문서 조이기**: 리포 문서는 토픽 이슈로 이전(#7·#8·#9), absorbed 스텁 5개 제거 → `docs/` 25→18, 루트는 표준 7개.
 - **2026-07-24 flash-and-go 완성 + v2026.7.24 태그**: 보드 91에서 flash → host전환 → 동글 = Z2M 자동 기동을 config 손 안 대고 실증. flash 신뢰성(cdc_acm bind-then-unbind, 거짓완료 UUID 대조), Z2M seed serial pin(udevadm 부재 회피), 증분 빌드 2m37s. `duo-s-flash` 스킬 + `bsp/usb-recovery-prepare.sh` + `bsp/BOARDS.md` 신설. **상세 전부 CHANGELOG v2026.7.24.**
 - 그 이전(arm64 전환, Node 22, Z2M 통합, riscv pure-cross 등)은 CHANGELOG v2026.7.24 및 v2026.7.15.

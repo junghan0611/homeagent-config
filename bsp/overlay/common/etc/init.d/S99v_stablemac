@@ -1,0 +1,18 @@
+#!/bin/sh
+# wlan0 gets its stable MAC after S99user has insmod'ed aic8800 (in the
+# background, so the interface appears late) and before S99wpa_supplicant
+# associates. The name sorts between the two: S99user < S99v_stablemac < S99wpa_supplicant.
+# Foreground wait is intentional — wpa must not associate on the random MAC.
+case "$1" in
+	start|"")
+		i=0
+		while [ ! -e /sys/class/net/wlan0 ]; do
+			i=$((i + 1))
+			[ "$i" -ge 60 ] && { logger -t stable-mac "wlan0 never appeared; giving up"; exit 0; }
+			sleep 1
+		done
+		/usr/bin/stable-mac wlan0 wlan
+		;;
+	stop) ;;
+esac
+exit 0

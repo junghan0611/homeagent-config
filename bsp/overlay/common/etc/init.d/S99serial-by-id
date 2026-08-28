@@ -1,0 +1,50 @@
+#!/bin/sh
+# Boot safety net for /dev/serial/by-id.
+#
+# mdev -s runs long before USB host mode, so the CP210x dongle does not exist
+# yet. S99user then starts duo-init in the background (usb-host.sh). We must
+# not block that — wait in the background like S99wpa_supplicant, and scan
+# when a ttyUSB/ttyACM node appears. Hotplug after that is mdev's job.
+HELPER=/usr/bin/homeagent-serial-by-id
+WAIT_SECONDS=60
+
+wait_and_scan() {
+	i=0
+	while [ "$i" -lt "$WAIT_SECONDS" ]; do
+		for d in /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyACM0 /dev/ttyACM1; do
+			if [ -c "$d" ]; then
+				"$HELPER" scan
+				logger -t serial-by-id "by-id links refreshed ($d present)"
+				return 0
+			fi
+		done
+		i=$((i + 1))
+		sleep 1
+	done
+	logger -t serial-by-id "no USB serial after ${WAIT_SECONDS}s; skipping"
+	return 0
+}
+
+case "$1" in
+	start)
+		[ -x "$HELPER" ] || exit 0
+		wait_and_scan &
+		;;
+	stop)
+		# links live on devtmpfs; nothing to stop
+		;;
+	restart|reload)
+		[ -x "$HELPER" ] && "$HELPER" scan
+		;;
+	status)
+		if [ -d /dev/serial/by-id ]; then
+			ls -l /dev/serial/by-id
+		else
+			echo "no /dev/serial/by-id"
+		fi
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status}"
+		exit 1
+		;;
+esac

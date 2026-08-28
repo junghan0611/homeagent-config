@@ -1,0 +1,98 @@
+#!/bin/sh
+# Build /dev/serial/by-id/usb-* links without udev.
+#
+# sks-hub-gecko's resolver opens that directory, demands exactly one entry,
+# and realpath's it to the tty (선택=by-id, 전달=canonical target). This image
+# has busybox mdev, not eudev, so the links never appeared on their own.
+# Name shape matches udev so logs stay familiar; the resolver does not care
+# about the name, only the count.
+#
+# Called by mdev ($MDEV, $ACTION) or: homeagent-serial-by-id scan
+BYID=/dev/serial/by-id
+
+sanitize() {
+	printf '%s' "$1" | tr ' \t/' '___' | tr -cd 'A-Za-z0-9._-'
+}
+
+sysfs_str() {
+	# $1 = file; strip CR/LF. missing file → empty
+	[ -f "$1" ] || return 0
+	tr -d '\r\n' < "$1"
+}
+
+remove_for() {
+	dev=$1
+	[ -d "$BYID" ] || return 0
+	for l in "$BYID"/usb-*; do
+		[ -L "$l" ] || continue
+		t=$(readlink -f "$l" 2>/dev/null) || continue
+		[ "$t" = "/dev/$dev" ] && rm -f "$l"
+	done
+}
+
+add_for() {
+	dev=$1
+	[ -c "/dev/$dev" ] || return 0
+	sys=/sys/class/tty/$dev/device
+	[ -e "$sys" ] || return 0
+
+	d=$(readlink -f "$sys")
+	iface=""
+	usb=""
+	while [ -n "$d" ] && [ "$d" != "/" ]; do
+		if [ -z "$iface" ] && [ -f "$d/bInterfaceNumber" ]; then
+			iface=$d
+		fi
+		if [ -f "$d/idVendor" ]; then
+			usb=$d
+			break
+		fi
+		d=$(dirname "$d")
+	done
+	[ -n "$usb" ] || return 0
+
+	manu=$(sysfs_str "$usb/manufacturer")
+	prod=$(sysfs_str "$usb/product")
+	ser=$(sysfs_str "$usb/serial")
+	vid=$(sysfs_str "$usb/idVendor")
+	pid=$(sysfs_str "$usb/idProduct")
+	ifnum=$(sysfs_str "$iface/bInterfaceNumber")
+	port=$(sysfs_str "$sys/port_number")
+
+	id=$(sanitize "$manu")
+	p=$(sanitize "$prod")
+	[ -n "$p" ] && { [ -n "$id" ] && id="${id}_$p" || id=$p; }
+	s=$(sanitize "$ser")
+	[ -n "$s" ] && { [ -n "$id" ] && id="${id}_$s" || id=$s; }
+	[ -n "$id" ] || id="${vid}_${pid}"
+	[ -n "$id" ] || return 0
+
+	[ -n "$ifnum" ] || ifnum=00
+	name="usb-${id}-if${ifnum}"
+	[ -n "$port" ] && name="${name}-port${port}"
+
+	mkdir -p "$BYID"
+	remove_for "$dev"
+	ln -sf "../../$dev" "$BYID/$name"
+}
+
+scan() {
+	for n in /dev/ttyUSB* /dev/ttyACM*; do
+		[ -c "$n" ] || continue
+		add_for "${n#/dev/}"
+	done
+}
+
+cmd=$1
+if [ "$cmd" = "scan" ]; then
+	scan
+	exit 0
+fi
+
+# mdev helper. $MDEV is ttyUSB0 / ttyACM0; $ACTION is add|remove.
+dev=${MDEV:-$cmd}
+[ -n "$dev" ] || exit 0
+case ${ACTION:-add} in
+	remove) remove_for "$dev" ;;
+	*) add_for "$dev" ;;
+esac

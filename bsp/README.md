@@ -126,7 +126,11 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 clean build; on gpu1i, 28m37s of 40m (table below). Everything the BSP has to prove —
 hostapd, the eMMC-CID stable MAC, `/dev/serial/by-id` — sits *below* Node and does not
 need it. `minimal` buys that proof for minutes instead of an hour, which is what makes it
-practical to build on a laptop when the remote host is unreachable. It is also the closer
+practical to build on a laptop when the remote host is unreachable. Measured clean:
+**9m02s on gpu1i, 14m32s on the laptop** (2026-08-30, both hosts, identical artifacts to
+within 600 bytes). Quote those and not a faster number you find in a log — a `minimal`
+rebuild onto a tree that already has the host tooling finishes in about four minutes, and
+that figure has been mistaken for a clean build at least once. It is also the closer
 match to what `sks-hub-gecko` flashes: their board runs their firmware, not our Z2M.
 
 **How it is wired.** `bsp/buildroot/<board>_defconfig` *is* the `full` profile. A
@@ -134,9 +138,22 @@ non-`full` profile appends `bsp/buildroot/profiles/<board>_<profile>.fragment` t
 inside the container. kconfig keeps the **last** value it reads for a symbol, so the
 fragment overrides the base rather than conflicting with it — one base config, so both
 profiles can never drift apart on toolchain or BSP. An unknown profile is refused before
-the container starts; a fragment that fails to take is caught after the build by grepping
-the resolved `.config`, because the dangerous failure is the silent one (build succeeds,
-image looks right, package set is not what was asked for).
+the container starts, because the dangerous failure is the silent one: the build succeeds,
+the image looks right, and the package set is not what was asked for.
+
+**Three checks stand between a profile and a wrong image**, because a profile can miss in
+two different places and only one of them is `.config`:
+
+| when | what it checks | on failure |
+|---|---|---|
+| before the container | the requested profile has a fragment for this board | refuse |
+| before the build | `target/` does not already hold a *previous* profile's rootfs | refuse, and name the tree to delete |
+| after the build | both the resolved `.config` **and** `target/` are free of Node/Z2M/mosquitto | move the artifact to `out/quarantine/` |
+
+The middle one exists because `.config` is what the build was *asked for* and `target/` is
+what it *produced* — see the profile-switch note under "Rebuilding" below for the day they
+disagreed. The last one moves rather than deletes the image: `flash-emmc.sh` picks the
+newest glob match, so an unverified image left in `out/` is one command from a board.
 
 **Packages and rootfs files move together.** `bsp/overlay` is split `common/` + `z2m/`
 and the fragment drops the `z2m` overlay in the same edit that drops the packages. An
@@ -161,17 +178,23 @@ you script against it. Nothing about the host is special — the point of `setup
 `build.sh` is that any machine with docker reproduces the same image, and gpu1i is where
 that was first demonstrated (2026-07-23) from an empty tree.
 
-**It is worth the round trip.** Measured 2026-07-23, same commit, same clean-build path:
+**It is worth the round trip — for `full`.** Clean builds, same commit, same path:
 
-| host | total | V8 alone | note |
-|---|---|---|---|
-| laptop (17 jobs) | **1h29m** | 1h16m | warm `buildroot/dl` cache |
-| gpu1i (16 cores) | **40m** | 28m37s | cold cache, downloads included |
+| profile | host | total | V8 alone | measured |
+|---|---|---|---|---|
+| `full` | laptop (17 jobs) | **1h29m** | 1h16m | 2026-07-23, warm `buildroot/dl` |
+| `full` | gpu1i (16 cores) | **40m** | 28m37s | 2026-07-23, cold cache |
+| `minimal` | laptop (16 cores) | **14m32s** | — | 2026-08-30 |
+| `minimal` | gpu1i (16 cores) | **9m02s** | — | 2026-08-30 |
 
-Same core count, less than half the wall clock — V8 is the whole story, and it is bound by
-single-core throughput more than by job count. A cold `buildroot/dl` did not close the gap.
-Budget ~40m on gpu1i, and expect the first ~10m to be download and configure noise before
-`nodejs-src ... Building` appears.
+For `full`, same core count buys less than half the wall clock — V8 is the whole story, and
+it is bound by single-core throughput more than by job count. A cold `buildroot/dl` did not
+close the gap. Budget ~40m on gpu1i, and expect the first ~10m to be download and configure
+noise before `nodejs-src ... Building` appears.
+
+For `minimal` the gap nearly closes, because what is left is the kernel and the host
+tooling. The round trip is then worth making for a different reason — the remote host frees
+the laptop — not because it is dramatically faster.
 
 **Standing it up from scratch** — four commands, ~20 min mostly clone and pull:
 
@@ -226,7 +249,15 @@ ssh gpu1i 'ls -lh ~/repos/gh/homeagent-config/bsp/sdk/out/*.zip'
 scp gpu1i:'~/repos/gh/homeagent-config/bsp/sdk/out/milkv-duos-glibc-arm64-emmc_*.zip' \
     ~/repos/3rd/milkv/duo-buildroot-sdk-v2/out/
 ./bsp/flash-emmc.sh arm64
+
+# minimal is a different name on both ends, on purpose
+scp gpu1i:'~/repos/gh/homeagent-config/bsp/sdk/out/milkv-duos-glibc-arm64-emmc-minimal_*.zip*' \
+    ~/repos/3rd/milkv/duo-buildroot-sdk-v2/out/
+./bsp/flash-emmc.sh arm64-minimal
 ```
+
+Copy the `.manifest.txt` alongside the zip (the glob above does). An image that travels
+between hosts without its manifest is exactly the image nobody can identify later.
 
 Note the two SDK locations are unrelated checkouts of the same pin: gpu1i uses the default
 `bsp/sdk`, the laptop uses `~/repos/3rd/milkv/duo-buildroot-sdk-v2` via `HOMEAGENT_BSP_SDK`.
@@ -244,6 +275,18 @@ the eMMC image is repacked from there. The expensive packages (V8, Node) already
 
 So the loop is just: push here, pull on gpu1i, rerun `build.sh` against the SAME `bsp/sdk`
 output tree (do NOT delete it — that is what makes it incremental):
+
+> **One exception: changing `HOMEAGENT_BSP_PROFILE` is not an incremental rebuild.**
+> `output/<board>/target/` is a cumulative tree. Turning a package off stops Buildroot
+> installing it; it does not remove what an earlier build already put there. Rebuilding a
+> `full` tree as `minimal` therefore produces a minimal `.config` wrapped around a full
+> rootfs — and the manifest still reads `minimal`, because every receipt is derived from
+> `.config`. Measured 2026-08-30 on gpu1i: a 104M `-minimal_` zip carrying `node` (49.5M),
+> `node_modules` (92M) and Zigbee2MQTT, from a run that printed
+> `profile verified in .config: BR2_PACKAGE_NODEJS is off`. `build.sh` now refuses this
+> before building and names the remedy — `rm -rf <sdk>/buildroot/output/<board>` — and
+> asserts on `target/` afterwards, quarantining the artifact if it slips through. Only
+> this direction is unsafe; building `full` into a minimal tree just installs Node back.
 
 ```bash
 # laptop: commit + push the overlay/config change first (build.sh injects from the checkout)

@@ -21,6 +21,10 @@
 #                       auto-pick cannot mistake it for a hub image.
 # Both profiles write out/<artifact>.manifest.txt recording the repo commit, the SDK
 # pin, and the resolved package set — an image on disk can always say what it is.
+# SWITCHING profile is not an incremental rebuild: Buildroot's output/target/ is
+# cumulative, so a `full` tree rebuilt as `minimal` keeps the full rootfs while every
+# .config-derived receipt reads `minimal`. This script refuses that up front and tells
+# you to clear buildroot/output/<board> first (measured 2026-08-30; see bsp/README.md).
 #
 # Usage:
 #   ./bsp/setup.sh                                # clone+pin SDK (or set HOMEAGENT_BSP_SDK)
@@ -104,6 +108,7 @@ exec docker run --rm --privileged \
   -e "PROFILE=$PROFILE" \
   -e "REPO_COMMIT=$REPO_COMMIT" \
   -e "IMAGE_DIGEST=$IMAGE_DIGEST" \
+  -e "SDK_DIR_HOST=$SDK_DIR" \
   "$DOCKER_IMAGE" \
   /bin/bash -ec '
     cd /home/work
@@ -166,6 +171,34 @@ exec docker run --rm --privileged \
       fi
     done
 
+    # A profile SWITCH is not an incremental rebuild. Buildroot output/target/ is a
+    # cumulative tree: turning a package off stops it being installed, it does not
+    # remove what an earlier build already put there. So a `full` tree rebuilt as
+    # `minimal` yields a minimal .config wrapped around a full rootfs — and every
+    # receipt below still reads true, because they are all derived from .config.
+    # Measured 2026-08-30 on gpu1i: a 104M "minimal" image carrying node (49.5M),
+    # node_modules (92M) and Zigbee2MQTT, produced by a run whose guard printed
+    # "BR2_PACKAGE_NODEJS is off". Only this direction is unsafe — building `full`
+    # into a minimal tree just installs Node back. Refuse BEFORE the build, so the
+    # nine minutes and the dangerous artifact never happen.
+    TGT="buildroot/output/${BOARD}/target"
+    FULL_MARKERS="usr/bin/node usr/lib/node_modules usr/sbin/mosquitto etc/mosquitto var/lib/zigbee2mqtt etc/init.d/S70zigbee2mqtt etc/init.d/S50mosquitto"
+    if [ "$PROFILE" != "full" ]; then
+      STALE=""
+      for p in $FULL_MARKERS; do
+        [ -e "$TGT/$p" ] && STALE="$STALE $p"
+      done
+      if [ -n "$STALE" ]; then
+        echo "[bsp] ERROR: profile ${PROFILE} was requested, but buildroot/output/${BOARD}/target/ already holds a full rootfs:" >&2
+        for p in $STALE; do echo "[bsp]          target/$p" >&2; done
+        echo "[bsp]        Buildroot does not remove those on a profile switch, so this build" >&2
+        echo "[bsp]        would emit a ${PROFILE}-named image with them still inside." >&2
+        echo "[bsp]        Clear the tree, then rebuild:" >&2
+        echo "[bsp]          rm -rf ${SDK_DIR_HOST}/buildroot/output/${BOARD}" >&2
+        exit 1
+      fi
+    fi
+
     # Marker for "which artifacts did THIS run produce". out/ accumulates every previous
     # build and both lanes, so a plain `ls -t` would happily rename someone elses image.
     MARK=$(mktemp)
@@ -181,6 +214,27 @@ exec docker run --rm --privileged \
         exit 1
       fi
       echo "[bsp] profile verified in .config: BR2_PACKAGE_NODEJS is off"
+    fi
+
+    # .config is what the build was ASKED for; target/ is what it actually produced.
+    # The pre-build check above stops the known way they diverge, but the thing that
+    # gets flashed is the rootfs, so assert on the rootfs too. On failure the artifact
+    # is quarantined rather than left in out/: flash-emmc.sh picks the NEWEST match by
+    # glob, so an unverified image sitting there is one command away from a board.
+    if [ "$PROFILE" != "full" ] && [ -d "$TGT" ]; then
+      LEFT=""
+      for p in $FULL_MARKERS; do
+        [ -e "$TGT/$p" ] && LEFT="$LEFT $p"
+      done
+      if [ -n "$LEFT" ]; then
+        mkdir -p out/quarantine
+        find out -maxdepth 1 \( -name "*.zip" -o -name "*.img" \) -newer "$MARK" -exec mv {} out/quarantine/ \; 2>/dev/null || true
+        echo "[bsp] ERROR: profile ${PROFILE} took in .config but NOT in the rootfs:" >&2
+        for p in $LEFT; do echo "[bsp]          target/$p" >&2; done
+        echo "[bsp]        the image this run produced was moved to out/quarantine/ — do not flash it." >&2
+        exit 1
+      fi
+      echo "[bsp] profile verified in target/: no Node/Z2M/mosquitto in the rootfs"
     fi
 
     # Name the artifact after the profile so it cannot be mistaken for a hub image.

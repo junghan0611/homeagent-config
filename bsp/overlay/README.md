@@ -21,6 +21,13 @@ fragment that edits both (`bsp/buildroot/profiles/<board>_minimal.fragment`). Pu
 file in `common/` only if a Node-less image would still want it; otherwise it belongs in
 `z2m/`.
 
+That guarantee covers the *config*, not the tree it is built into. Dropping `z2m/` from
+`BR2_ROOTFS_OVERLAY` stops those files being copied in; it does not remove ones a previous
+`full` build already copied, because Buildroot's `output/<board>/target/` is cumulative.
+Measured 2026-08-30: a `minimal` build on a warm `full` tree shipped `S70zigbee2mqtt` and
+`etc/mosquitto/` anyway. `bsp/build.sh` now refuses that before building — see
+`bsp/README.md`, "Rebuilding after an overlay/config change".
+
 `common/` is also meant for both ISA lanes. Per-board subdirectories can be added later if
 the lanes ever need to differ.
 

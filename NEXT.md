@@ -17,7 +17,9 @@
 - **닫은 갈래 둘 (이미지 쪽 작업 아님으로 확정)**:
   - **예제 `/etc/hostapd.conf`는 남긴다.** post-build script 제안했다가 그쪽 근거로 철회. 상세는 arm64 defconfig `# 6) HOSTAPD`.
   - **`CONFIG_CFG80211_WEXT`는 계속 off.** [측정] 이 이미지의 커널 `.config`에 `# CONFIG_CFG80211_WEXT is not set` — `/proc/net/wireless`가 안 생기고, 그쪽 `wifi.zig:462`가 RSSI를 매번 0으로 덮는다. 커널 defconfig가 우리 소유라 한 줄로 켤 수 있고 4분이면 되지만, **켜지 않기로 합의**했다(WEXT deprecated · 그쪽이 이미 `iw`의 `signal:`을 파싱 중 · `§8.3` 표 판정이 원래 `iw` · 그쪽 측정으로 `.network` shadow 발행이 이벤트 구동 4곳뿐이라 spawn 비용이 근거가 못 됨). 그쪽이 `wifi.zig` 한 줄로 닫는다.
-- **플래시 게이트**: 보드 `192.168.0.164` MAC `06:b3:51:d1:75:4e`는 gecko가 잡고 있다. 플래시 **직전에** 그쪽에 한 번 더 신호 → 로그 회수 + 보드 비움 → 우리 플래시 → 그쪽 `install`+`certs`. 펌웨어를 우리가 기동하지 마라 (WiFi 끊김).
+- **플래시는 gecko가 몬다 (2026-08-30 인계 완료).** 우리가 굽지 않는다. 근거: [측정] `.164`는 LAN으로 살아 있지만 이 랩탑 USB엔 아무 보드도 없다(`lsusb` CVITEK 없음, `ttyACM*`/`ttyUSB*` 없음). 플래시는 스위치(ARM)·recovery 버튼·Type-C 직결 재연결·`sudo usb-recovery-prepare.sh`가 필요해 **어차피 GLG 손**이고, 그렇다면 플래시 후 사슬(MAC 게이트 → `install` → `certs` → resolver → AP)을 쥔 쪽이 스크립트를 모는 게 맞다 — 실패가 이미지 문제인지 그쪽 단계인지 같은 자리에서 갈린다. gecko는 **자기 세션에서 GLG 승인을 직접 받고** 시작한다(전언으로 갈음 안 함).
+- **넘긴 것**: 절대 경로(`HOMEAGENT_BSP_SDK=/home/junghan/repos/3rd/milkv/duo-buildroot-sdk-v2` — SDK 트리는 gitignore라 `git pull`로 안 온다), `./bsp/flash-emmc.sh arm64-minimal`, 함정 둘(cdc_acm은 붙였다 뗀다 / `100%`는 증거가 아니라 UUID로 대조), 롤백(`arm64` → 7월 full 104M, 단 Z2M 선점 문제 동반).
+- **판정 경계 (gecko와 합의)**: `wlan0` MAC ≠ `06:b3:51:d1:75:4e` · `/dev/serial/by-id` 후보 ≠ 1개 · `hostapd` 부재/AP-ENABLED 미확인 → **이미지 축, 우리에게 돌아온다**(재빌드 4분). 그 밖(`install`/`certs`/REG/AWS) → gecko가 가져간다.
 - **Verify (zip, 보드 아님) — 방법이 바뀌었다**: zip 안 `rootfs_ext4.emmc`는 **raw ext4가 아니라 CIMG**다(LEDGER 참조). 파일 단위 확인은 `<sdk>/buildroot/output/<board>/target/`에서 하고, 산출물 확인은 `LC_ALL=C grep -a -c <이름> rootfs_ext4.emmc`로 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.
 - **Blocker**: 없음. full 이미지는 gpu1i 대기(급하지 않음), 플래시는 gecko 로그 회수 신호 대기.
 - **Read**: `bsp/README.md` "Profiles — one board, two package sets"; `bsp/overlay/README.md` "Two overlays, split by profile"; arm64 defconfig `# 6) HOSTAPD` + `PROFILES`; gecko `board/duo-s/README.md` + `docs/GECKO_PORT.md` §8.

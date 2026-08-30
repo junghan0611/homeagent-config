@@ -26,6 +26,15 @@
   gpu1i는 기본 `bsp/sdk`를 쓰므로 `HOMEAGENT_BSP_SDK` 불필요(랩탑만 `~/repos/3rd/milkv/`를 쓴다).
   **output 트리를 지우지 마라** — 거긴 V8이 이미 스탬프돼 있다.
 
+- **이건 그냥 빌드가 아니라 호스트 간 재현 대조다.** [측정 2026-08-30] `git diff --quiet 594f20c HEAD -- bsp/buildroot/ bsp/overlay/` = **동일**. 즉 gpu1i가 지금 HEAD에서 굽는 입력은 랩탑이 `milkv-duos-glibc-arm64-emmc-minimal_2026-0830-1137.zip`을 만든 입력과 **바이트 같다**(그 뒤 `a930401`은 `flash-emmc.sh`·README·NEXT만 만졌다). 그래서 두 산출물을 이렇게 대조한다:
+
+  | 같아야 하는 것 | 달라도 되는 것 |
+  |---|---|
+  | 매니페스트의 `resolved package set` · `BR2_ROOTFS_OVERLAY` | 파일명의 날짜 |
+  | `target/`의 6개 표면 파일 + Node/Z2M/mosquitto 0건 | `repo commit:` (`4db4a25-dirty` → `6096ef9`) |
+  | `container:` 다이제스트 (gpu1i가 같은 이미지면) | `sha256:` — 빌드 타임스탬프가 박혀 bit-identical은 기대하지 않는다 |
+
+  랩탑 쪽 대조 기준: 57M, `# BR2_PACKAGE_NODEJS is not set`, init 순서 `S39stablemac … S40network S41dhcpcd … S99serial-by-id S99user S99v_stablemac S99wpa_supplicant`.
 - **Verify**: `grep EXIT= ~/bsp-build.log`가 0이고, 산출물이 `out/milkv-duos-glibc-arm64-emmc-minimal_<date>.zip` + `.manifest.txt`로 나오면 된다. 매니페스트에 `# BR2_PACKAGE_NODEJS is not set`과 `profile: minimal`이 찍힌다. 파일 확인은 `bsp/sdk/buildroot/output/milkv-duos-glibc-arm64-emmc/target/`에서 — **zip 안은 CIMG라 `debugfs`가 못 읽는다**(LEDGER).
 - **Blocker**: 없음. [측정 2026-08-30 14:24] gpu1i 살아 있다(16코어·61G·586G 여유·load 0.00), SDK 핀 `3a50ffe28` 일치, repo는 `cb1ea73`에서 7커밋 뒤.
 - **왜 gpu1i인가**: [측정] 거기 arm64 트리에 `nodejs`·`nodejs-src`·`host-nodejs`·`icu`가 **전부 `.stamp_built`(2026-07-23)**. 랩탑은 그 트리를 2026-08-30에 지웠고 타깃 V8은 애초에 빌드된 적도 없다. 같은 일이 랩탑에선 클린 15분, gpu1i에선 증분 몇 분이다.

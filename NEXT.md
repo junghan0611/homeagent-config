@@ -1,23 +1,43 @@
 # RAIL — 현재 좌표
 
 - [x] **1. flash-and-go 재현** — v2026.7.24, 보드 91 Z2M :8080
-- [~] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← CURRENT: **minimal 이미지로 표면 증명 완료(2026-08-30)**. 남은 것 = full(Z2M) 이미지 재빌드 + 플래시(gecko 신호 후)
+- [~] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← **이미지·인계 끝. 지금은 gecko의 `.164` 플래시 결과를 기다린다** (GLG가 2026-08-30 그쪽에 플래시 지시). 우리 손 필요 없음
 - [ ] **3. #8 나머지 아이덴티티** — hostname·인증서·제조 주입. gecko 지금 요청 없음
 - [ ] **4. Matter / matter.js** ← PAUSED: 준비 완료, 착수 보류
 
-현재 좌표: 1 완료 → 2 바이트 나옴(minimal), full은 미빌드 → 3·4 보류
+현재 좌표: 1 완료 → 2 이미지 나왔고 gecko가 굽는 중 → 3·4 보류
 
-# NOW — 표면은 증명됐다. 남은 것은 full(Z2M) 이미지와 플래시
+# 다음 세션 첫 자리 — minimal 클린 재빌드 (~15분)
+
+**지금 안 하는 이유**: GLG 판단(2026-08-30) — gecko 플래시 결과가 먼저고, 오래 걸리는 건 지금 안 한다. 그 결과를 보고 나서 이걸 한다.
+
+⚠️ **`bsp/sdk` arm64 output 트리는 지금 비어 있다.** 2026-08-30에 내가 클린 full을 시도하며 지웠고(그 빌드는 GLG 판단으로 중단, `EXIT=137`, Buildroot 도달 전), 그래서 **아래 "증분 ~2-3분"은 지금 상태에 해당하지 않는다.** 다음 arm64 빌드는 무엇이든 클린이다.
+
+```bash
+HOMEAGENT_BSP_SDK=/home/junghan/repos/3rd/milkv/duo-buildroot-sdk-v2 \
+HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
+```
+
+- **왜**: 남은 두 빈칸 중 하나 — **"빈 트리에서 minimal이 선다"는 재현 실증**이 아직 없다. 오늘 구운 건 7월 트리 위 증분이었다. 트리가 비어 있는 지금이 그 증명을 공짜로 얻는 창이다.
+- **비용**: V8이 없는 레인이라 ~15분 (랩탑 실측 표에서 `1h29m − 1h16m`). `buildroot/dl` 캐시 580M은 남아 있다.
+- **닫히면**: `setup.sh` → `build.sh` 두 줄이면 빈 기계에서 minimal이 선다는 게 measured가 된다.
+- **`full`(Z2M)은 여기서 굽지 마라.** V8이 랩탑에서 1h16m, gpu1i에서 28m37s다. minimal 프로파일을 만든 이유가 랩탑에서 V8을 안 치르는 것이었으니 **full은 gpu1i 자리다.** 나머지 한 빈칸(`full`이 overlay `common`/`z2m` 분리 이후 미빌드)도 거기서 닫는다 — `target/etc/init.d/S70zigbee2mqtt` 하나만 보면 된다.
+
+# NOW — 이미지는 나왔고 넘어갔다. 플래시는 gecko가 몬다
 
 - **Stem**: Duo S 제품화 이미지. 허브 앱은 별도 레인, **들어앉을 자리는 이 repo**. ARM64 glibc 개발 레인만. RISC-V 아님.
 - **이미 들어 있는 것 (레시피, 2026-08-28)**: `BR2_PACKAGE_HOSTAPD=y` (개방망, WPA3 옵션 없음, init으로 안 올림). `/dev/serial/by-id`는 eudev 없이 mdev helper. `stable-mac`은 eMMC CID → LAA (`02:` eth0 / `06:` wlan0) — #8 MAC 조각. init 순서 계약: `S39stablemac` < `S40network`/`S41dhcpcd`, `S99user` < `S99v_stablemac` < `S99wpa_supplicant`. `S99v`의 `v`는 자리용 글자, 번호 옮기지 말 것.
 - **닫힌 것 (2026-08-30, 랩탑)**: gpu1i가 못 닿아(점프 호스트 `s3i` kex reset) **로컬에서 minimal 프로파일로 구웠다 — 3분 55초.** `milkv-duos-glibc-arm64-emmc-minimal_2026-0830-1137.zip` (57M, sha256 `08eb904b…`). 6개 파일 전부 확인, Node/Z2M/mosquitto 0건. **init 순서 계약도 실물로 확인**: `S39stablemac … S40network S41dhcpcd … S99serial-by-id S99user S99v_stablemac S99wpa_supplicant`.
 - **gecko와 합의 완료 (2026-08-30, entwurf `20260830T131729-9833bd` 왕복 3회)**: 그쪽 `docs/GECKO_PORT.md §8.3` 의존 표를 minimal `target/`과 전수 대조 → **hostapd 포함 10/10**, 추가 요구 `awk`/`sed`/`cut`도 전부 있음(busybox `CONFIG_AWK/SED/CUT=y`, 그리고 minimal 프래그먼트는 심볼 5개만 만져서 **프로파일이 busybox를 건드릴 수 없다**). 남은 이미지 쪽 일 **0**.
-- **Next**: (1) **플래시 승인만 GLG 자리다.** 이미지·계약·검증 순서는 양쪽 다 준비됐다. (2) **`full`(Z2M) 이미지는 굽지 마라 — 해롭다.** Z2M이 `/dev/ttyUSB0`을 선점하면 gecko resolver의 by-id 후보가 1개가 아니게 되어 fail-closed 된다(그쪽 `zigbee_backend.zig:574-604`). `gq_gateway`가 Gecko EZSP로 NCP를 직접 잡고 AWS IoT MQTT 클라이언트로 TLS 직결하므로 Z2M도 mosquitto도 쓸 자리가 없다. (3) **플래시하지 마라.**
+- **우리 쪽 할 일은 없다. 대기다.** 플래시 승인은 GLG가 gecko에 줬고(2026-08-30), 이미지·계약·검증 순서는 양쪽 다 준비됐다. 결과가 오면 위 "판정 경계"로 받는다.
+- **`.164`에 `full`(Z2M) 이미지를 굽지 마라 — 해롭다.** Z2M이 `/dev/ttyUSB0`을 선점하면 gecko resolver의 by-id 후보가 1개가 아니게 되어 fail-closed 된다(그쪽 `zigbee_backend.zig:574-604`). `gq_gateway`가 Gecko EZSP로 NCP를 직접 잡고 AWS IoT MQTT 클라이언트로 TLS 직결하므로 Z2M도 mosquitto도 쓸 자리가 없다. 롤백으로 7월 full을 굽는 경우에도 이 문제가 같이 돌아온다는 걸 알고 굽는다.
 - **닫은 갈래 둘 (이미지 쪽 작업 아님으로 확정)**:
   - **예제 `/etc/hostapd.conf`는 남긴다.** post-build script 제안했다가 그쪽 근거로 철회. 상세는 arm64 defconfig `# 6) HOSTAPD`.
-  - **`CONFIG_CFG80211_WEXT`는 계속 off.** [측정] 이 이미지의 커널 `.config`에 `# CONFIG_CFG80211_WEXT is not set` — `/proc/net/wireless`가 안 생기고, 그쪽 `wifi.zig:462`가 RSSI를 매번 0으로 덮는다. 커널 defconfig가 우리 소유라 한 줄로 켤 수 있고 4분이면 되지만, **켜지 않기로 합의**했다(WEXT deprecated · 그쪽이 이미 `iw`의 `signal:`을 파싱 중 · `§8.3` 표 판정이 원래 `iw` · 그쪽 측정으로 `.network` shadow 발행이 이벤트 구동 4곳뿐이라 spawn 비용이 근거가 못 됨). 그쪽이 `wifi.zig` 한 줄로 닫는다.
-- **플래시는 gecko가 몬다 (2026-08-30 인계 완료).** 우리가 굽지 않는다. 근거: [측정] `.164`는 LAN으로 살아 있지만 이 랩탑 USB엔 아무 보드도 없다(`lsusb` CVITEK 없음, `ttyACM*`/`ttyUSB*` 없음). 플래시는 스위치(ARM)·recovery 버튼·Type-C 직결 재연결·`sudo usb-recovery-prepare.sh`가 필요해 **어차피 GLG 손**이고, 그렇다면 플래시 후 사슬(MAC 게이트 → `install` → `certs` → resolver → AP)을 쥔 쪽이 스크립트를 모는 게 맞다 — 실패가 이미지 문제인지 그쪽 단계인지 같은 자리에서 갈린다. gecko는 **자기 세션에서 GLG 승인을 직접 받고** 시작한다(전언으로 갈음 안 함).
+  - **`CONFIG_CFG80211_WEXT`는 계속 off.** [측정] 이 이미지의 커널 `.config`에 `# CONFIG_CFG80211_WEXT is not set` — `/proc/net/wireless`가 안 생기고, 그쪽 `wifi.zig:462`가 RSSI를 매번 0으로 덮는다. 커널 defconfig가 우리 소유라 한 줄로 켤 수 있고 4분이면 되지만, **켜지 않기로 합의**했다(WEXT deprecated · 그쪽이 이미 `iw`의 `signal:`을 파싱 중 · `§8.3` 표 판정이 원래 `iw` · spawn 빈도가 문제 되는 규모가 아님). 그쪽이 `wifi.zig`에서 닫았다 — `getRssiLive`(`iw`)로 교체 + 호출처 4곳 정리, aarch64 제품 빌드 통과, 실기만 플래시 뒤로 남음.
+    - **빈도 근거는 한 번 정정됐다 (gecko 자진 정정 2026-08-30).** 처음 넘어온 근거는 "`.network` shadow 발행 4곳, **주기 발행 0**"이었는데, RSSI 소비처가 그 shadow만이 아니었다 — `aws.zig:658` `publishKeepaliveImpl`의 `networkRssi`가 `core/timeout.zig:176` `KEEPALIVE_INTERVAL_MS` **15분 주기**로 읽는다(하루 96회). **결론은 안 바뀌지만 "주기 발행 0"은 우리 쪽에도 그대로 적혀 있었으므로 정확히 옮긴다**: `.network` 발행은 이벤트 구동이고, RSSI는 15분 주기로도 읽히며, 어느 쪽이든 `iw` spawn이 부담이 되는 규모가 아니다.
+    - 그리고 그 자리에 함정이 있었다: 고치기 전 `aws.zig:656-658`은 **`ctx.mutex`를 쥔 채** RSSI를 읽었고 주석이 "파일 read라 안전"을 근거로 달고 있었다. 거기 그대로 `iw`를 넣었으면 mutex를 쥔 채 fork/exec — AP 경로가 100ms 루프를 굶긴 것과 같은 계열이 됐을 것이다. 그쪽이 읽기를 lock 앞으로 뺐다.
+- **플래시는 gecko가 몬다 — GLG가 그쪽에 지시했다 (2026-08-30).** 우리는 대기다. **폴백**: 그쪽에서 안 되면 GLG가 여기로 돌린다. 그때 필요한 건 `out/`의 zip뿐이고 **그건 무사하다** — 빈 output 트리는 플래시를 막지 않는다(`flash-emmc.sh`는 zip만 읽는다). 즉 위의 재빌드는 폴백의 선행조건이 아니다.
+- **인계 근거 (왜 우리가 안 굽나).** 근거: [측정] `.164`는 LAN으로 살아 있지만 이 랩탑 USB엔 아무 보드도 없다(`lsusb` CVITEK 없음, `ttyACM*`/`ttyUSB*` 없음). 플래시는 스위치(ARM)·recovery 버튼·Type-C 직결 재연결·`sudo usb-recovery-prepare.sh`가 필요해 **어차피 GLG 손**이고, 그렇다면 플래시 후 사슬(MAC 게이트 → `install` → `certs` → resolver → AP)을 쥔 쪽이 스크립트를 모는 게 맞다 — 실패가 이미지 문제인지 그쪽 단계인지 같은 자리에서 갈린다. gecko는 **자기 세션에서 GLG 승인을 직접 받고** 시작한다(전언으로 갈음 안 함).
 - **넘긴 것**: 절대 경로(`HOMEAGENT_BSP_SDK=/home/junghan/repos/3rd/milkv/duo-buildroot-sdk-v2` — SDK 트리는 gitignore라 `git pull`로 안 온다), `./bsp/flash-emmc.sh arm64-minimal`, 함정 둘(cdc_acm은 붙였다 뗀다 / `100%`는 증거가 아니라 UUID로 대조), 롤백(`arm64` → 7월 full 104M, 단 Z2M 선점 문제 동반).
 - **판정 경계 (gecko와 합의)**: `wlan0` MAC ≠ `06:b3:51:d1:75:4e` · `/dev/serial/by-id` 후보 ≠ 1개 · `hostapd` 부재/AP-ENABLED 미확인 → **이미지 축, 우리에게 돌아온다**(재빌드 4분). 그 밖(`install`/`certs`/REG/AWS) → gecko가 가져간다.
 - **Verify (zip, 보드 아님) — 방법이 바뀌었다**: zip 안 `rootfs_ext4.emmc`는 **raw ext4가 아니라 CIMG**다(LEDGER 참조). 파일 단위 확인은 `<sdk>/buildroot/output/<board>/target/`에서 하고, 산출물 확인은 `LC_ALL=C grep -a -c <이름> rootfs_ext4.emmc`로 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.

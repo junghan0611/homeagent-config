@@ -28,12 +28,27 @@
 # 4. Type-C DIRECT to the host. Behind a hub or dock the ROM's download device fails to
 #    enumerate ("device descriptor read/64, error -110", observed).
 #
-# 5. cdc_acm will steal the interface if you let it — see the long note further down.
-#    Run `sudo ./bsp/usb-recovery-prepare.sh` first: it installs the udev rule that stops
-#    cdc_acm from ever being loaded for this device, and leaves drivers_autoprobe at 1 so the
-#    kernel configures the device inside enumeration. Do NOT "fix" this by disabling
-#    autoprobe — that is what caused the 2026-07-24 INVALID_PARAM loop (step 5b).
-#    Symptom if cdc_acm gets loose: "[INFO] found usb device vid=0x3346 pid=0x1000" -> "[ERR]".
+# 5. cdc_acm is NOT blocked — it is bound and then taken away. Run
+#    `sudo ./bsp/usb-recovery-prepare.sh` first. Read what it actually does, because the
+#    intuitive version of this step is wrong in both directions and cost two days:
+#      - it `modprobe cdc_acm` ON PURPOSE. cdc_acm's probe is what performs the CDC setup
+#        (SET_LINE_CODING 0x20, SET_CONTROL_LINE_STATE 0x22) that opens the ROM's data pipe.
+#      - it DELETES any rule that blocks cdc_acm, and says so ("removed … — blocking
+#        cdc_acm breaks the CDC setup"). Seeing that line is correct, not a warning.
+#      - the rule it installs is only a bConfigurationValue safety net, nothing to do with
+#        cdc_acm; with autoprobe at 1 it never fires.
+#      - it leaves drivers_autoprobe at 1 so the kernel configures the device inside
+#        enumeration. Do NOT "fix" anything by disabling autoprobe — that is what caused
+#        the 2026-07-24 INVALID_PARAM loop (step 5b).
+#    THEN flash-emmc.sh unbinds cdc_acm per attempt, immediately before usb_dl. Bind first,
+#    unbind second. Block it instead and every bulk write times out while usb_dl still
+#    reports 100% — see the note at usb-recovery-prepare.sh:7-27 and step 7 below.
+#    Symptom if cdc_acm is still bound at usb_dl time: "found usb device vid=0x3346
+#    pid=0x1000" -> "[ERR]".
+#    (Corrected 2026-08-30: this step used to claim the script "installs the udev rule that
+#    stops cdc_acm from ever being loaded". It does the opposite, and the rule it describes
+#    is the one the script removes. Found by sks-hub-gecko reading both files against each
+#    other before flashing.)
 #
 # 5b. FOUR different failures look alike, and they have nothing to do with each other:
 #      -110 "device descriptor read/64"  -> the cable is behind a hub/dock (step 4).
@@ -57,13 +72,19 @@
 #    on exactly that misreading. The board then reboots by itself and comes back as
 #    3346:100c "Cvitek NCM" (100c = running system; 1000 = still in download mode).
 #
-# 7. Verify — do not trust the flash alone:
+# 7. Verify — the decisive check is the rootfs UUID, and the others are not substitutes.
+#    A run that printed 100% and "USB download complete" once left the eMMC byte-identical
+#    to the day before, so a booting board proves only that SOME image is on it:
+#      ssh root@192.168.42.1 'dumpe2fs -h /dev/mmcblk0p4 | grep -i uuid'
+#    Compare it to the image UUID this script prints at the end (PROVE THE WRITE LANDED).
+#    Differ = the flash did nothing, whatever percentage you watched.
+#    Then the cheaper identity checks, which tell you WHICH image, not THAT it was written:
 #      lsusb | grep 3346:100c
 #      ssh root@192.168.42.1        # password: milkv, over the USB network gadget
 #      uname -m                     # aarch64 | riscv64
 #      cat /etc/issue               # "Welcome to Milk-V DuoS ARM64 eMMC"
-#    Ground truth is the debug UART (115200) first line — see the ISA table below.
-#    Wired Ethernet also comes up via DHCP if a cable is in (eth0).
+#    For the ISA specifically, ground truth is the debug UART (115200) first line — see the
+#    ISA table below. Wired Ethernet also comes up via DHCP if a cable is in (eth0).
 #
 # 8. Rollback is always available: both lanes' zips live in <sdk>/out/. Flip the switch,
 #    rerun this script with the other lane. Nothing about the switch is one-way.

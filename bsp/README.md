@@ -259,8 +259,10 @@ than trusting the timing — grep the produced image:
 
 > **The zip's `rootfs_ext4.emmc` is not a raw ext4 image** — it is CVITEK `CIMG`: a 64-byte
 > file header followed by chunks that each carry their own 64-byte header (48 of them in a
-> 768M rootfs). Format SSOT: `build/tools/common/image_tool/raw2cimg.py`. That is why the
-> checks here are raw string greps and not `debugfs`. **Its failure mode is the dangerous
+> 768M rootfs). Format SSOT: `build/tools/common/image_tool/raw2cimg.py`. `flash-emmc.sh:356`
+> already knew this and finds the superblock by its magic rather than assuming an offset;
+> what is written down here is the part that was not. That is why the checks here are raw
+> string greps and not `debugfs`. **Its failure mode is the dangerous
 > part**: `debugfs -R "stat <path>"` returns quietly empty for *every* path, so a probe
 > reports the files you want as `MISSING` and the packages you removed as `absent` in the
 > same breath — both answers are void, and half of them look like the answer you wanted.

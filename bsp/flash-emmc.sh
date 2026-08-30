@@ -85,9 +85,14 @@
 #
 # Usage:
 #   ./bsp/flash-emmc.sh                    # newest image of the default lane ($HOMEAGENT_BSP_LANE)
-#   ./bsp/flash-emmc.sh arm64              # newest arm64 eMMC image in <sdk>/out/
+#   ./bsp/flash-emmc.sh arm64              # newest arm64 HUB eMMC image in <sdk>/out/
+#   ./bsp/flash-emmc.sh arm64-minimal      # newest arm64 minimal (no Node/Z2M) image
 #   ./bsp/flash-emmc.sh riscv64            # newest riscv64 eMMC image in <sdk>/out/
 #   ./bsp/flash-emmc.sh path/to/image.zip  # explicit image
+#
+# Profiles are separate selectors on purpose. `arm64` globs `<board>_*.zip` and a minimal
+# image is named `<board>-minimal_*.zip`, so the hub selector can never silently pick up
+# an image with no Zigbee2MQTT in it. Asking for the minimal profile has to be deliberate.
 #
 # ⚠️ Connect the board's Type-C DIRECTLY to the host. Behind a USB hub or dock the ROM's
 #    download device fails to enumerate ("device descriptor read/64, error -110").
@@ -107,23 +112,29 @@ LANE="${HOMEAGENT_BSP_LANE:-arm64}"
 # Board name fragment per lane, matching the SDK's target names.
 lane_glob() {
   case "$1" in
-    arm64)   echo "milkv-duos-glibc-arm64-emmc" ;;
-    riscv64) echo "milkv-duos-musl-riscv64-emmc" ;;
+    arm64)         echo "milkv-duos-glibc-arm64-emmc" ;;
+    arm64-minimal) echo "milkv-duos-glibc-arm64-emmc-minimal" ;;
+    riscv64)       echo "milkv-duos-musl-riscv64-emmc" ;;
     *) return 1 ;;
   esac
 }
 
 case "${1:-}" in
-  arm64|riscv64) LANE="$1"; IMG="" ;;
-  "")            IMG="" ;;
-  *)             IMG="$1" ;;
+  arm64|arm64-minimal|riscv64) LANE="$1"; IMG="" ;;
+  "")                          IMG="" ;;
+  *)                           IMG="$1" ;;
 esac
 
 if [ -z "$IMG" ]; then
-  GLOB=$(lane_glob "$LANE") || { echo "Error: unknown lane '$LANE' (want arm64 or riscv64)." >&2; exit 1; }
+  GLOB=$(lane_glob "$LANE") || { echo "Error: unknown lane '$LANE' (want arm64, arm64-minimal or riscv64)." >&2; exit 1; }
   IMG=$(ls -t "$SDK_DIR"/out/"$GLOB"_*.zip 2>/dev/null | head -1 || true)
-  [ -n "$IMG" ] || { echo "Error: no $LANE eMMC image in $SDK_DIR/out — build one first:" >&2
-                     echo "  ./bsp/build.sh $GLOB" >&2; exit 1; }
+  [ -n "$IMG" ] || {
+    echo "Error: no $LANE eMMC image in $SDK_DIR/out — build one first:" >&2
+    case "$LANE" in
+      *-minimal) echo "  HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh ${GLOB%-minimal}" >&2 ;;
+      *)         echo "  ./bsp/build.sh $GLOB" >&2 ;;
+    esac
+    exit 1; }
 fi
 [ -f "$IMG" ] || { echo "Error: image not found: $IMG" >&2; exit 1; }
 
@@ -137,8 +148,21 @@ case "$(basename "$IMG")" in
      exit 1 ;;
 esac
 
+# Resolve the profile from the name too, and say it out loud. A minimal image boots and
+# looks healthy; what is missing (Zigbee2MQTT, the broker) only shows up when someone
+# expects the hub to work. Announce it whether it was chosen by lane or by explicit path.
+case "$(basename "$IMG")" in
+  *-minimal_*) IMG_PROFILE=minimal ;;
+  *)           IMG_PROFILE=full ;;
+esac
+if [ "$IMG_PROFILE" = minimal ]; then
+  echo "[flash] profile: MINIMAL — BSP surface only. No Node.js, no Zigbee2MQTT, no mosquitto."
+  echo "[flash]          For a hub image use: ./bsp/flash-emmc.sh ${IMG_ISA}"
+fi
+
+# The lane argument may carry a profile suffix; ISA comparison is about the ISA alone.
 # Only reachable when an explicit image path was given (a lane argument sets LANE itself).
-if [ "$IMG_ISA" != "$LANE" ]; then
+if [ "$IMG_ISA" != "${LANE%-minimal}" ]; then
   echo "[flash] note: image ISA is $IMG_ISA but the default lane is $LANE — going with the image."
 fi
 

@@ -4,13 +4,30 @@ Files here land in the target rootfs via Buildroot's `BR2_ROOTFS_OVERLAY`. They 
 reproducible counterpart to editing a running board over SSH: anything you fix by hand on the
 board disappears the next time you flash, so it belongs here instead.
 
-`common/` is meant for both ISA lanes. Per-board subdirectories can be added later if the
-lanes ever need to differ.
+## Two overlays, split by profile
+
+`BR2_ROOTFS_OVERLAY` takes a **list** of directories, and we use that to make the package
+profile and the rootfs files move together:
+
+| Directory | Ships in | Holds |
+|---|---|---|
+| `common/` | **both profiles** | the BSP surface — stable MAC, serial by-id, wpa_supplicant, USB mode |
+| `z2m/` | `full` only | the hub application — Z2M init + seed config, mosquitto config |
+
+The split is by *profile*, not by topic. An init script whose binary is not in the rootfs
+is a boot-time error, so `S70zigbee2mqtt` has to leave the image at the same moment
+`BR2_PACKAGE_NODEJS` does — and the one place that can guarantee "same moment" is a single
+fragment that edits both (`bsp/buildroot/profiles/<board>_minimal.fragment`). Put a new
+file in `common/` only if a Node-less image would still want it; otherwise it belongs in
+`z2m/`.
+
+`common/` is also meant for both ISA lanes. Per-board subdirectories can be added later if
+the lanes ever need to differ.
 
 **Wired in since 2026-07-23 (arm64 lane).** `bsp/buildroot/milkv-duos-glibc-arm64-emmc_defconfig`
-sets `BR2_ROOTFS_OVERLAY="board/milkv/<board>/overlay /bsp/overlay/common"`, and `/bsp` is
-where `bsp/build.sh` mounts this repo inside the build container. Ours comes second, so it
-wins any collision with the SDK's own overlay. The riscv64 lane is not wired yet.
+sets `BR2_ROOTFS_OVERLAY="board/milkv/<board>/overlay /bsp/overlay/common /bsp/overlay/z2m"`,
+and `/bsp` is where `bsp/build.sh` mounts this repo inside the build container. Ours come
+after the SDK's, so they win any collision with it. The riscv64 lane is not wired yet.
 
 One thing that is easy to misread: the SDK's `board/milkv/<board>/overlay` does not exist
 in a clean tree. `build/Makefile:646` creates it from `tmp-rootfs` mid-build and
@@ -72,7 +89,7 @@ So it runs after `S99user` *and* still waits up to 60s for the interface to appe
 nudges `dhcpcd` for a lease. It no-ops when `/etc/wpa_supplicant.conf` is still the stock
 Buildroot template, so an image without credentials boots clean.
 
-### `common/etc/init.d/S70zigbee2mqtt`
+### `z2m/etc/init.d/S70zigbee2mqtt`
 
 Starts Zigbee2MQTT after `S50mosquitto`. Z2M is installed by Buildroot as an npm module
 (`BR2_PACKAGE_NODEJS_MODULES_ADDITIONAL="zigbee2mqtt@2.10.1"`), so the entry point is
@@ -84,7 +101,7 @@ check init would log a Z2M failure on every boot. State (device database, networ
 the runtime-rewritten `configuration.yaml`) lives in `/var/lib/zigbee2mqtt` — real ext4,
 so it survives a reboot but **not a reflash**. Back it up or re-pair every device.
 
-### `common/etc/mosquitto/mosquitto.conf`
+### `z2m/etc/mosquitto/mosquitto.conf`
 
 Replaces the stock config Buildroot installs. mosquitto 2.0 denies anonymous clients by
 default, which would leave Z2M in a connect/deny loop against its own broker. Bound to
@@ -109,7 +126,7 @@ one dual-role controller behind a GPIO mux, so the Zigbee dongle and `192.168.42
 mutually exclusive. `host` costs you the USB recovery path — `eth0`/`wlan0` keep SSH
 alive, but a reflash then needs the recovery button. Takes effect on reboot.
 
-### `common/var/lib/zigbee2mqtt/configuration.yaml`
+### `z2m/var/lib/zigbee2mqtt/configuration.yaml`
 
 Seed config only; Z2M rewrites it at runtime. `serial.port` is deliberately unset because
 the two SONOFF dongles land on different nodes (`-E` → `/dev/ttyACM0`, `-P` →

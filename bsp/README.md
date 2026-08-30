@@ -104,6 +104,54 @@ riscv lane lost a `host-python3` with `_bz2`/`_ssl`/`_hashlib` missing:
 rm -rf <sdk>/buildroot/output/<board> <sdk>/install/soc_sg2000_<board_underscored>
 ```
 
+## Profiles — one board, two package sets
+
+`HOMEAGENT_BSP_PROFILE` selects what goes *on top of* the BSP. The board, toolchain,
+kernel, and `bsp/overlay/common` are identical in both; only the application layer moves.
+
+| Profile | Packages | Overlays | Artifact | Selector |
+|---|---|---|---|---|
+| `full` (default) | Node 22 + Zigbee2MQTT + mosquitto | `common` + `z2m` | `<board>_<date>.zip` | `flash-emmc.sh arm64` |
+| `minimal` | neither (also no ICU) | `common` only | `<board>-minimal_<date>.zip` | `flash-emmc.sh arm64-minimal` |
+
+```bash
+# the hub image — unchanged, and still what an unset environment produces
+./bsp/build.sh milkv-duos-glibc-arm64-emmc
+
+# same board and BSP, no Node/Z2M
+HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
+```
+
+**Why it exists: V8 is the whole cost of this image.** On the laptop, 1h16m of a 1h29m
+clean build; on gpu1i, 28m37s of 40m (table below). Everything the BSP has to prove —
+hostapd, the eMMC-CID stable MAC, `/dev/serial/by-id` — sits *below* Node and does not
+need it. `minimal` buys that proof for minutes instead of an hour, which is what makes it
+practical to build on a laptop when the remote host is unreachable. It is also the closer
+match to what `sks-hub-gecko` flashes: their board runs their firmware, not our Z2M.
+
+**How it is wired.** `bsp/buildroot/<board>_defconfig` *is* the `full` profile. A
+non-`full` profile appends `bsp/buildroot/profiles/<board>_<profile>.fragment` to it
+inside the container. kconfig keeps the **last** value it reads for a symbol, so the
+fragment overrides the base rather than conflicting with it — one base config, so both
+profiles can never drift apart on toolchain or BSP. An unknown profile is refused before
+the container starts; a fragment that fails to take is caught after the build by grepping
+the resolved `.config`, because the dangerous failure is the silent one (build succeeds,
+image looks right, package set is not what was asked for).
+
+**Packages and rootfs files move together.** `bsp/overlay` is split `common/` + `z2m/`
+and the fragment drops the `z2m` overlay in the same edit that drops the packages. An
+init script for a binary that is not in the image is a boot error, not a leftover.
+
+**The names are a safety rail.** `flash-emmc.sh arm64` globs `<board>_*.zip`, which does
+not match `<board>-minimal_*.zip`, so the hub selector can never silently pick up an image
+with no Zigbee2MQTT in it. `flash-emmc.sh` also prints a `profile: MINIMAL` banner
+whenever the resolved image is one, including when it was given by explicit path.
+
+**Every artifact gets a manifest.** `out/<artifact>.manifest.txt` records the repo commit
+(marked `-dirty` if `bsp/` had uncommitted changes), the SDK pin, a sha256, and the
+resolved values of the packages that define the profile. An image found in `out/` months
+from now can still say what it is.
+
 ## Building on a remote host (gpu1i)
 
 A full clean build pins every core for the duration, which is not something to run on a
@@ -208,6 +256,16 @@ ssh gpu1i 'cd ~/repos/gh/homeagent-config && tmux new-session -d -s z2m \
 Measured 2026-07-24, a seed `configuration.yaml` change: **2m37s**, `EXIT=0`, `cc1plus`
 stayed at 0 the whole time (V8 never recompiled). Confirm the change actually landed rather
 than trusting the timing — grep the produced image:
+
+> **The zip's `rootfs_ext4.emmc` is not a raw ext4 image** — it is CVITEK `CIMG`: a 64-byte
+> file header followed by chunks that each carry their own 64-byte header (48 of them in a
+> 768M rootfs). Format SSOT: `build/tools/common/image_tool/raw2cimg.py`. That is why the
+> checks here are raw string greps and not `debugfs`. **Its failure mode is the dangerous
+> part**: `debugfs -R "stat <path>"` returns quietly empty for *every* path, so a probe
+> reports the files you want as `MISSING` and the packages you removed as `absent` in the
+> same breath — both answers are void, and half of them look like the answer you wanted.
+> For file-level checks read `buildroot/output/<board>/target/` instead; it is what went
+> into the image, and it is a normal directory.
 
 ```bash
 ssh gpu1i 'F=$(ls -t ~/repos/gh/homeagent-config/bsp/sdk/out/*.zip | head -1); \

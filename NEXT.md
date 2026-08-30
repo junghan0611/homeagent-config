@@ -1,22 +1,48 @@
 # RAIL — 현재 좌표
 
 - [x] **1. flash-and-go 재현** — v2026.7.24, 보드 91 Z2M :8080
-- [ ] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← CURRENT: 증분 빌드 → zip 검증. 플래시는 gecko 신호 후
+- [~] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← CURRENT: **minimal 이미지로 표면 증명 완료(2026-08-30)**. 남은 것 = full(Z2M) 이미지 재빌드 + 플래시(gecko 신호 후)
 - [ ] **3. #8 나머지 아이덴티티** — hostname·인증서·제조 주입. gecko 지금 요청 없음
 - [ ] **4. Matter / matter.js** ← PAUSED: 준비 완료, 착수 보류
 
-현재 좌표: 1 완료 → 2 레시피 들어감, 바이트는 아직 → 3·4 보류
+현재 좌표: 1 완료 → 2 바이트 나옴(minimal), full은 미빌드 → 3·4 보류
 
-# NOW — gecko SoftAP / stable-MAC 을 이미지 바이트로
+# NOW — 표면은 증명됐다. 남은 것은 full(Z2M) 이미지와 플래시
 
 - **Stem**: Duo S 제품화 이미지. 허브 앱은 별도 레인, **들어앉을 자리는 이 repo**. ARM64 glibc 개발 레인만. RISC-V 아님.
 - **이미 들어 있는 것 (레시피, 2026-08-28)**: `BR2_PACKAGE_HOSTAPD=y` (개방망, WPA3 옵션 없음, init으로 안 올림). `/dev/serial/by-id`는 eudev 없이 mdev helper. `stable-mac`은 eMMC CID → LAA (`02:` eth0 / `06:` wlan0) — #8 MAC 조각. init 순서 계약: `S39stablemac` < `S40network`/`S41dhcpcd`, `S99user` < `S99v_stablemac` < `S99wpa_supplicant`. `S99v`의 `v`는 자리용 글자, 번호 옮기지 말 것.
-- **Next**: (1) gpu1i에서 `git pull --rebase origin main` → (2) **output 트리 지우지 말고** `./bsp/build.sh milkv-duos-glibc-arm64-emmc` (hostapd는 새 패키지라 overlay-only 2분이 아님. 클린 빌드는 하지 마라) → (3) zip에서 `/usr/sbin/hostapd` `/usr/bin/hostapd_cli` `/usr/bin/stable-mac` `/etc/init.d/S39stablemac` `/etc/init.d/S99v_stablemac` `/usr/bin/homeagent-serial-by-id` 확인 → (4) gecko garden `20260828T105408-9f5a40`에 zip 시점만 통보. **플래시하지 마라.**
+- **닫힌 것 (2026-08-30, 랩탑)**: gpu1i가 못 닿아(점프 호스트 `s3i` kex reset) **로컬에서 minimal 프로파일로 구웠다 — 3분 55초.** `milkv-duos-glibc-arm64-emmc-minimal_2026-0830-1137.zip` (57M, sha256 `08eb904b…`). 6개 파일 전부 확인, Node/Z2M/mosquitto 0건. **init 순서 계약도 실물로 확인**: `S39stablemac … S40network S41dhcpcd … S99serial-by-id S99user S99v_stablemac S99wpa_supplicant`.
+- **gecko와 합의 완료 (2026-08-30, entwurf `20260830T131729-9833bd` 왕복 3회)**: 그쪽 `docs/GECKO_PORT.md §8.3` 의존 표를 minimal `target/`과 전수 대조 → **hostapd 포함 10/10**, 추가 요구 `awk`/`sed`/`cut`도 전부 있음(busybox `CONFIG_AWK/SED/CUT=y`, 그리고 minimal 프래그먼트는 심볼 5개만 만져서 **프로파일이 busybox를 건드릴 수 없다**). 남은 이미지 쪽 일 **0**.
+- **Next**: (1) **플래시 승인만 GLG 자리다.** 이미지·계약·검증 순서는 양쪽 다 준비됐다. (2) **`full`(Z2M) 이미지는 굽지 마라 — 해롭다.** Z2M이 `/dev/ttyUSB0`을 선점하면 gecko resolver의 by-id 후보가 1개가 아니게 되어 fail-closed 된다(그쪽 `zigbee_backend.zig:574-604`). `gq_gateway`가 Gecko EZSP로 NCP를 직접 잡고 AWS IoT MQTT 클라이언트로 TLS 직결하므로 Z2M도 mosquitto도 쓸 자리가 없다. (3) **플래시하지 마라.**
+- **닫은 갈래 둘 (이미지 쪽 작업 아님으로 확정)**:
+  - **예제 `/etc/hostapd.conf`는 남긴다.** post-build script 제안했다가 그쪽 근거로 철회. 상세는 arm64 defconfig `# 6) HOSTAPD`.
+  - **`CONFIG_CFG80211_WEXT`는 계속 off.** [측정] 이 이미지의 커널 `.config`에 `# CONFIG_CFG80211_WEXT is not set` — `/proc/net/wireless`가 안 생기고, 그쪽 `wifi.zig:462`가 RSSI를 매번 0으로 덮는다. 커널 defconfig가 우리 소유라 한 줄로 켤 수 있고 4분이면 되지만, **켜지 않기로 합의**했다(WEXT deprecated · 그쪽이 이미 `iw`의 `signal:`을 파싱 중 · `§8.3` 표 판정이 원래 `iw` · 그쪽 측정으로 `.network` shadow 발행이 이벤트 구동 4곳뿐이라 spawn 비용이 근거가 못 됨). 그쪽이 `wifi.zig` 한 줄로 닫는다.
 - **플래시 게이트**: 보드 `192.168.0.164` MAC `06:b3:51:d1:75:4e`는 gecko가 잡고 있다. 플래시 **직전에** 그쪽에 한 번 더 신호 → 로그 회수 + 보드 비움 → 우리 플래시 → 그쪽 `install`+`certs`. 펌웨어를 우리가 기동하지 마라 (WiFi 끊김).
-- **Verify (zip, 보드 아님)**: `F=$(ls -t <sdk>/out/*arm64*.zip | head -1)`; rootfs에서 `hostapd` 바이너리와 `stable-mac` 스크립트가 보여야 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.
-- **Blocker**: 빌드 없음. 플래시는 gecko 로그 회수 신호 대기.
-- **Read**: `bsp/overlay/README.md` (stable-mac + by-id); arm64 defconfig `# 6) HOSTAPD`; `bsp/README.md` 증분 빌드; gecko `board/duo-s/README.md` + `docs/GECKO_PORT.md` §8.
-- **Do not touch**: 보드 `.164`. RISC-V defconfig. `feat/riscv64-nodejs-pure-cross`. gecko 펌웨어. hostapd를 부팅 init으로 올리지 말 것. eudev 넣지 말 것. `S39`/`S99v` 번호 변경. gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/`.
+- **Verify (zip, 보드 아님) — 방법이 바뀌었다**: zip 안 `rootfs_ext4.emmc`는 **raw ext4가 아니라 CIMG**다(LEDGER 참조). 파일 단위 확인은 `<sdk>/buildroot/output/<board>/target/`에서 하고, 산출물 확인은 `LC_ALL=C grep -a -c <이름> rootfs_ext4.emmc`로 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.
+- **Blocker**: 없음. full 이미지는 gpu1i 대기(급하지 않음), 플래시는 gecko 로그 회수 신호 대기.
+- **Read**: `bsp/README.md` "Profiles — one board, two package sets"; `bsp/overlay/README.md` "Two overlays, split by profile"; arm64 defconfig `# 6) HOSTAPD` + `PROFILES`; gecko `board/duo-s/README.md` + `docs/GECKO_PORT.md` §8.
+- **Do not touch**: 보드 `.164`. RISC-V defconfig. `feat/riscv64-nodejs-pure-cross`. gecko 펌웨어. hostapd를 부팅 init으로 올리지 말 것. eudev 넣지 말 것. `S39`/`S99v` 번호 변경. gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/`. **minimal 이미지를 허브 보드에 굽지 말 것** (`flash-emmc.sh arm64`는 이미 못 집게 돼 있다).
+
+## 빌드 프로파일 — full / minimal (2026-08-30 신설)
+
+`HOMEAGENT_BSP_PROFILE`로 **한 보드에서 두 패키지 셋**을 굽는다. 툴체인·커널·`bsp/overlay/common`은 동일하고 애플리케이션 층만 움직인다.
+
+| 프로파일 | 패키지 | 오버레이 | 산출물 | 플래시 |
+|---|---|---|---|---|
+| `full` (기본) | Node 22 + Z2M + mosquitto | `common` + `z2m` | `<board>_<date>.zip` | `flash-emmc.sh arm64` |
+| `minimal` | 없음 (ICU도 제외) | `common`만 | `<board>-minimal_<date>.zip` | `flash-emmc.sh arm64-minimal` |
+
+```bash
+HOMEAGENT_BSP_SDK=~/repos/3rd/milkv/duo-buildroot-sdk-v2 \
+HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
+```
+
+- **존재 이유는 V8 하나다.** 랩탑 1h29m 중 1h16m, gpu1i 40m 중 28m37s가 V8이다. 증명해야 할 표면(hostapd·stable-mac·by-id)은 전부 Node **아래**라 Node가 필요 없다. 그래서 랩탑에서 4분에 끝난다.
+- **베이스는 하나.** `<board>_defconfig`가 곧 `full`이고, `profiles/<board>_<profile>.fragment`를 뒤에 붙인다. kconfig가 **마지막 값**을 취하므로 override지 충돌이 아니다 → 두 프로파일이 툴체인·BSP에서 갈라질 수 없다.
+- **패키지와 rootfs 파일이 같이 움직인다.** 프래그먼트가 `z2m` 오버레이도 같이 뗀다. 없는 바이너리를 가리키는 init 스크립트는 부팅 에러다.
+- **이름이 안전장치다.** `flash-emmc.sh arm64`의 glob `<board>_*.zip`은 `<board>-minimal_*.zip`에 안 걸린다. 명시 경로로 줘도 `profile: MINIMAL` 배너가 뜬다.
+- **산출물마다 매니페스트**: `out/<artifact>.manifest.txt`에 repo 커밋(`-dirty` 표시)·SDK 핀·sha256·해결된 패키지 셋이 남는다.
+- **아직 검증 안 된 한 곳 — `full` 프로파일은 분리 이후 빌드된 적이 없다.** overlay 분리는 git이 순수 rename으로 인식했고(내용 변경 0줄) 합집합은 이전과 동일하지만, `BR2_ROOTFS_OVERLAY`에 `/bsp/overlay/z2m`가 더해진 상태로 실제로 구워보진 않았다. gpu1i 복귀 후 첫 full 빌드에서 `target/etc/init.d/S70zigbee2mqtt`와 `target/etc/mosquitto/mosquitto.conf`가 있는지만 보면 닫힌다.
 
 ## flash-and-go 재현 (닫힘 — 참조용)
 
@@ -72,6 +98,7 @@
 
 # RECENT
 
+- **2026-08-30 빌드 프로파일 신설 + minimal 이미지 실증 (랩탑)**: gpu1i 불통(점프 호스트 `s3i`가 kex에서 reset)이라 로컬로 돌렸다. 랩탑 트리를 재보니 **타깃 V8은 애초에 빌드된 적이 없었고**(`nodejs/.stamp_built` 없음, `target/`·`images/` 비어 있음, 159/162만 스탬프) — 그래서 Node를 빼도 지불한 것을 버리는 게 아니었다. `HOMEAGENT_BSP_PROFILE=full|minimal` 도입, `bsp/overlay`를 `common`/`z2m`으로 분리, 산출물 이름·매니페스트로 버전 관리. **minimal 빌드 3분 55초**, zip 57M(full 104M, −47M). 6개 표면 파일 확인, Node/Z2M/mosquitto 0건. 보드는 안 만졌다.
 - **2026-08-28 gecko 패키징 표면 (레시피만, 미빌드)**: sks-hub-gecko SoftAP가 이미지에 없어 막힘. arm64에 hostapd(개방망) + mdev `/dev/serial/by-id` + stable-mac(eMMC CID, #8 MAC 조각) 넣음. 보드 `.164` 안 만짐. 다음 = gpu1i 증분 빌드.
 - **2026-07-24 (2세션) 방향 정리 — Matter 준비 + SMHub 대조**: matter.js bump 경로 조사 완료(관문 열림 — 위 "Matter / matter.js 올리기"), **corepack은 개발 중이라 의도적 유지**로 재판정, 커널 defconfig 주석은 **이미지 불변이라 실기 검증 불필요**로 확정, SMHub Nano 단일 MG24 배타 / 벤더 매뉴얼의 "별도 칩"은 상위 모델 전제임을 교정(LEDGER). **다음 실질 축 = 제품화 수준의 Duo S 구성 준비**([#8](https://github.com/junghan0611/homeagent-config/issues/8) — 선행 세대의 ssh push/제조사 이관을 반면교사로, 이미지가 소유해야 할 것 대조표 + 남은 축 5개). 회사 레인의 z2m 허브 개발은 병행, Matter는 언제든. **문서 조이기**: 리포 문서는 토픽 이슈로 이전(#7·#8·#9), absorbed 스텁 5개 제거 → `docs/` 25→18, 루트는 표준 7개.
 - **2026-07-24 flash-and-go 완성 + v2026.7.24 태그**: 보드 91에서 flash → host전환 → 동글 = Z2M 자동 기동을 config 손 안 대고 실증. flash 신뢰성(cdc_acm bind-then-unbind, 거짓완료 UUID 대조), Z2M seed serial pin(udevadm 부재 회피), 증분 빌드 2m37s. `duo-s-flash` 스킬 + `bsp/usb-recovery-prepare.sh` + `bsp/BOARDS.md` 신설. **상세 전부 CHANGELOG v2026.7.24.**
@@ -79,6 +106,7 @@
 
 # LEDGER
 
+- **zip 안의 `rootfs_ext4.emmc`는 raw ext4가 아니라 CVITEK `CIMG`다 (2026-08-30 실측).** 64B 파일 헤더 + 청크당 64B 헤더(이 이미지는 48청크)라 단순 dd로 못 벗긴다. 형식 SSOT는 `build/tools/common/image_tool/raw2cimg.py`. **위험한 건 실패 모드다**: `debugfs -R "stat <path>"`가 어떤 경로에도 조용히 빈 결과를 주므로, 있어야 할 6개가 전부 `MISSING`으로 **그리고 없어야 할 Node/Z2M도 전부 `absent`로** 나온다 — 두 답이 다 무효인데 절반은 원하던 답처럼 보인다. `100%/complete는 증거가 아니다`와 같은 계열의 함정. 파일 단위 확인은 `buildroot/output/<board>/target/`에서, 산출물 확인은 `LC_ALL=C grep -a -c`로.
 - **제품 ISA/libc는 여전히 RISC-V C906 + SDK-native musl이다.** arm64는 2026-07-23부터 **개발 레인**이지만 제품 ISA로 승격된 것이 아니다.
 - **커널 config는 우리가 소유할 수 있다 (2026-07-23 정정).** 어제 NEXT는 "`linux_5.10`의 `cvitek_*` 계열이라 우리가 소유하지 않은 파일"이라 적었는데, 실제 경로는 `build/boards/cv181x/<board>/linux/cvitek_<board>_defconfig` — **보드 디렉토리 안**이다. 소유 범위를 넓힐지 고민할 문제가 아니었다.
 - **SDK의 `board/milkv/<board>/overlay`는 클린 트리에 없다.** `build/Makefile:646`이 빌드 중 `tmp-rootfs`에서 만들고 `:666`에서 지운다. `/mnt/system/*`이 거기서 온다. 그래서 SDK 빌드 스크립트를 우회해 `make -C output`만 돌리면 target-finalize에서 rsync가 실패한다.

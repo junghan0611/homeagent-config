@@ -42,9 +42,24 @@
 #    Kernel/u-boot are unaffected — envsetup_milkv.sh sets CROSS_COMPILE_64 from
 #    host-tools independently of Buildroot's target toolchain.
 #
-# 2) ROOTFS OVERLAY — adds bsp/overlay/common on top of the SDK's board overlay, so
-#    things like the wlan0 autostart script are baked in instead of hand-applied after
-#    every flash. /bsp is where bsp/build.sh mounts this repo's bsp/ inside the container.
+# 2) ROOTFS OVERLAY — adds our overlays on top of the SDK's board overlay, so things like
+#    the wlan0 autostart script are baked in instead of hand-applied after every flash.
+#    /bsp is where bsp/build.sh mounts this repo's bsp/ inside the container.
+#    The list is split by profile, not by topic:
+#      overlay/common  files BOTH profiles ship (stable MAC, serial by-id, wpa_supplicant)
+#      overlay/z2m     the hub application half (Z2M init + seed config, mosquitto)
+#    This file IS the `full` profile and carries both. The `minimal` profile drops the
+#    packages AND this second overlay together — an init script for a binary that is not
+#    in the image is a boot-time error, not a harmless leftover. See PROFILES below.
+#
+# PROFILES — one board, two package sets (HOMEAGENT_BSP_PROFILE, bsp/build.sh):
+#    full     (default)  this file as-is: Node 22 + Zigbee2MQTT + mosquitto. The hub image.
+#    minimal             this file + profiles/<board>_minimal.fragment appended, which
+#                        turns Node/ICU/Z2M/mosquitto off. Kconfig takes the LAST value
+#                        for a symbol, so the fragment overrides rather than conflicts.
+#                        Use it to prove the BSP surface (hostapd, stable MAC, serial
+#                        by-id) without paying V8 — measured 1h16m of a 1h29m laptop
+#                        build. It is NOT a hub image and must not be flashed as one.
 #
 # 3) PACKAGES — Node.js 22.22.0 (Buildroot's pinned version; satisfies Zigbee2MQTT
 #    2.10.1's "node": "^20.15.0 || ^22.2.0 || ^24") plus system ICU so Intl works.
@@ -61,7 +76,7 @@ BR2_PER_PACKAGE_DIRECTORIES=y
 BR2_TARGET_GENERIC_HOSTNAME="milkv-duo"
 BR2_TARGET_GENERIC_ISSUE="Welcome to Milk-V DuoS ARM64 eMMC"
 BR2_TARGET_GENERIC_ROOT_PASSWD="milkv"
-BR2_ROOTFS_OVERLAY="board/milkv/milkv-duos-glibc-arm64-emmc/overlay /bsp/overlay/common"
+BR2_ROOTFS_OVERLAY="board/milkv/milkv-duos-glibc-arm64-emmc/overlay /bsp/overlay/common /bsp/overlay/z2m"
 BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
 BR2_PACKAGE_ALSA_UTILS=y
 BR2_PACKAGE_ALSA_UTILS_AMIXER=y
@@ -141,8 +156,23 @@ BR2_PACKAGE_WPA_SUPPLICANT_WPA_CLIENT_SO=y
 BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 # 6) HOSTAPD — SoftAP for WiFi provisioning (sks-hub-gecko, 2026-08-28).
 #    Firmware writes /etc/hostapd.conf at runtime: open network (wpa=0),
-#    driver=nl80211, ctrl_interface=/var/run/hostapd. The image ships the
-#    binary only (/usr/sbin/hostapd + /usr/bin/hostapd_cli). Do not set
+#    driver=nl80211, ctrl_interface=/var/run/hostapd.
+#    CORRECTION (2026-08-30, measured in the built rootfs): this ships THREE
+#    files, not "the binary only" as first written here — Buildroot's hostapd
+#    package also installs its 3383-line example /etc/hostapd.conf (ssid=test,
+#    channel=1, and the same ctrl_interface=/var/run/hostapd we expect).
+#    RESOLVED — the example file STAYS. sks-hub-gecko checked their side and
+#    answered with the code (2026-08-30 exchange): `wifi.zig:72-76` writes the
+#    conf with truncate=true at every AP entry, and `wifi.zig:271-299` orders
+#    bring-up as findHostapd-or-return -> killall -> writeHostapdConf-or-return
+#    -> `hostapd -B /etc/hostapd.conf`, so the only reader is reached only after
+#    a successful write. With no S??hostapd at boot (measured, and as documented)
+#    there is no window in which a stock `ssid=test` AP can come up. Do NOT add a
+#    post-build script to delete it — that was offered and declined, because
+#    deleting it would not fix the case they do care about anyway (their own
+#    fallback reads this path and would then read the channel=6 they wrote).
+#    They also create /var/run/hostapd themselves (`wifi.zig:144`), so the image
+#    does not need to. Do not set
 #    BR2_PACKAGE_HOSTAPD_WPA3 — the phone-app copy is "no password"; a
 #    WPA2-only AP is an app-string change, not an image choice. nl80211
 #    (default y) pulls libnl. No init script: firmware owns AP start/stop.

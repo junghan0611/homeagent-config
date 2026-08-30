@@ -1,0 +1,41 @@
+# milkv-duos-glibc-arm64-emmc — `minimal` profile fragment
+#
+# Appended to the board's Buildroot defconfig by bsp/build.sh when
+# HOMEAGENT_BSP_PROFILE=minimal. It is a fragment, not a second defconfig: kconfig's
+# defconfig reader takes the LAST value it sees for a symbol, so these lines override
+# the base file instead of conflicting with it. Keeping one base means both profiles
+# resolve the same toolchain, kernel, and BSP surface — the only delta is stated here.
+#
+# WHY IT EXISTS. Node's V8 is the entire cost of this image: measured on the laptop,
+# 1h16m of a 1h29m clean build; on gpu1i, 28m37s of 40m (bsp/README.md). Everything we
+# currently need to prove — hostapd, the eMMC-CID stable MAC, /dev/serial/by-id — is
+# below Node and does not need it. This profile buys that proof for minutes instead of
+# an hour, and is also the closer match to what sks-hub-gecko flashes: their board runs
+# their firmware, not our Z2M.
+#
+# WHAT IT IS NOT. Not a hub image. Flashing it onto a hub board silently removes
+# Zigbee2MQTT and the broker. bsp/build.sh names its artifact `<board>-minimal_<date>`
+# precisely so `flash-emmc.sh arm64` (which globs `<board>_*.zip`) can never pick it up
+# by accident; select it deliberately with `flash-emmc.sh arm64-minimal`.
+
+# Node.js — the 1h16m. Everything below is downstream of this one line.
+# BR2_PACKAGE_NODEJS is not set
+
+# Zigbee2MQTT rides in as an npm module of the package above; with NODEJS off the module
+# list has nothing to install into. Cleared explicitly so the emitted .config cannot
+# carry a package name that no longer resolves.
+BR2_PACKAGE_NODEJS_MODULES_ADDITIONAL=""
+
+# ICU is in the base config for one reason — Node's Intl (see its section 3 comment).
+# Nothing else in this image links it, so it leaves with Node. ~87M of build tree.
+# BR2_PACKAGE_ICU is not set
+
+# mosquitto is the broker Z2M publishes to. Z2M is the only client in this image, so a
+# broker here would listen to nobody.
+# BR2_PACKAGE_MOSQUITTO is not set
+
+# Drop the hub-application overlay along with the packages. bsp/overlay/z2m holds
+# S70zigbee2mqtt and the mosquitto config; leaving them would ship init scripts for
+# binaries that are not in the rootfs, which fails loudly at boot. bsp/overlay/common
+# stays — that is the BSP surface this profile exists to prove.
+BR2_ROOTFS_OVERLAY="board/milkv/milkv-duos-glibc-arm64-emmc/overlay /bsp/overlay/common"

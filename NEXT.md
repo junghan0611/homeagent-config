@@ -96,6 +96,8 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 
 ## 다음 텀에 정리할 작은 빚
 
+- **Duo S 온보드 버튼으로는 런타임 팩토리리셋을 못 묶는다 — 조사 완료, 보류 (2026-08-30).** GLG가 다시 볼 예정이라 `docs/DUO-S-BUTTONS.md`에 따로 남겼다. 요지: 이 이미지엔 `gpio-keys` 노드도 `CONFIG_KEYBOARD_GPIO`도 없어 **어떤 버튼도 이벤트를 못 낸다**(벽 1), 그리고 RST는 하드웨어 리셋·RECOVERY는 BootROM이 전원 인가 시점에 읽는 스트랩이라 런타임 입력이 아니다(벽 2). SoC의 전용 파워버튼 핀 `PWR_BUTTON1`은 Duo S에서 이더넷 속도 LED로 가 있다(`cvi_board_init.c:59`, 4개 변종 전부). 재개하면 **fork 핀 축이라 위 커널 defconfig 주석 빚과 한 번에 묶는 게 싸다**.
+
 - **커널 defconfig 주석이 틀렸다 — 이미지엔 무해 (2026-07-24 fork 실물 확인).** `build/boards/cv181x/sg2000_milkv_duos_glibc_arm64_emmc/linux/cvitek_..._defconfig` 203번 설명주석이 "ZBDongle-E (CH9102F) → CDC-ACM"인데 **실측은 CP210x**(ttyUSB0). **심볼은 전부 맞다** (`USB_ACM=y`·`USB_SERIAL_CP210X=y`·`CH341=y`·`FTDI_SIO=y`) — 거짓인 건 순수 `#` 주석뿐. kconfig가 주석을 무시하므로 고쳐도 **이미지는 바이트 불변 → 실기 검증 불필요**. fork에서 주석만 정정하고 `setup.sh`의 `SDK_COMMIT` pin만 올리면 끝. (이전 NEXT의 "실기 검증이 끝난 뒤에"는 과한 신중함이었다.)
 - **corepack은 이미지에 남지만 의도적 유지 (2026-07-24 GLG 판단).** `--without-corepack`이 patch 0002의 `ifeq ($(BR2_RISCV_64),y)` 분기 안에만 있어 arm 레인엔 안 걸리고, corepack 1.2MB가 이미지에 남는다. 원래 "닫을 빚"으로 적었으나 **아직 개발 중이라 corepack이 필요하고 급하지 않으므로 지금은 닫지 않는다.** 제품화 단계에서 재판정(그때 patch 0002의 해당 3줄을 `ifeq/else` 분기 **밖**으로 옮기면 양 레인 공통 적용).
 - **`/proc/cmdline`에 `earlycon=sbi riscv.fwsz=0x80000`**가 aarch64 커널에 그대로 남아 있다. 무해하지만 SDK cmdline 템플릿이 레인별로 분리돼 있지 않다는 뜻이다.

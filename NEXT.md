@@ -1,31 +1,51 @@
 # RAIL — 현재 좌표
 
 - [x] **1. flash-and-go 재현** — v2026.7.24, 보드 91 Z2M :8080
-- [~] **2. gecko 패키징 표면을 arm64 이미지에 굽기** ← **이미지·인계 끝. 지금은 gecko의 `.164` 플래시 결과를 기다린다** (GLG가 2026-08-30 그쪽에 플래시 지시). 우리 손 필요 없음
-- [ ] **3. #8 나머지 아이덴티티** — hostname·인증서·제조 주입. gecko 지금 요청 없음
-- [ ] **4. Matter / matter.js** ← PAUSED: 준비 완료, 착수 보류
+- [x] **2. gecko 패키징 표면을 arm64 이미지에 굽기** — minimal 이미지 실증·인계 완료(2026-08-30). `.164` 플래시는 gecko가 몬다, 우리 손 없음
+- [ ] **3. gpu1i에서 minimal 재빌드** ← CURRENT: gpu1i 복귀함. 아래 NOW 한 블록이 전부
+- [ ] **4. #8 나머지 아이덴티티** — hostname·인증서·제조 주입. gecko 지금 요청 없음
+- [ ] **5. Matter / matter.js** ← PAUSED: 준비 완료, 착수 보류
 
-현재 좌표: 1 완료 → 2 이미지 나왔고 gecko가 굽는 중 → 3·4 보류
+현재 좌표: 1·2 완료 → **3 진행(새 세션 첫 자리)** → 4·5 보류
 
-# 다음 세션 첫 자리 — minimal 클린 재빌드 (~15분)
+# NOW — gpu1i에서 minimal 재빌드
 
-**지금 안 하는 이유**: GLG 판단(2026-08-30) — gecko 플래시 결과가 먼저고, 오래 걸리는 건 지금 안 한다. 그 결과를 보고 나서 이걸 한다.
+> 새로 오는 담당자에게: 2026-08-30 세션이 길어져 여기서 끊었다. 아래 한 블록이 전부이고
+> 나머지 절은 참조용이다. 보드는 아무도 안 만진다.
 
-⚠️ **`bsp/sdk` arm64 output 트리는 지금 비어 있다.** 2026-08-30에 내가 클린 full을 시도하며 지웠고(그 빌드는 GLG 판단으로 중단, `EXIT=137`, Buildroot 도달 전), 그래서 **아래 "증분 ~2-3분"은 지금 상태에 해당하지 않는다.** 다음 arm64 빌드는 무엇이든 클린이다.
+- **Stem**: Duo S 제품화 이미지. 이 repo가 이미지를 소유하고, 허브 앱과 gecko 펌웨어는 별도 레인.
+- **Next**: gpu1i에서 **minimal** 한 번 굽는다. `full` 아니다 (GLG 2026-08-30: "z2m 없는 미니멀을 빌드해보자").
 
-```bash
-HOMEAGENT_BSP_SDK=/home/junghan/repos/3rd/milkv/duo-buildroot-sdk-v2 \
-HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
-```
+  ```bash
+  ssh gpu1i 'cd ~/repos/gh/homeagent-config && git pull --rebase origin main'
+  ssh gpu1i 'cd ~/repos/gh/homeagent-config && tmux new-session -d -s bsp \
+    "cd ~/repos/gh/homeagent-config && HOMEAGENT_BSP_PROFILE=minimal \
+     ./bsp/build.sh milkv-duos-glibc-arm64-emmc > ~/bsp-build.log 2>&1; \
+     echo EXIT=\$? >> ~/bsp-build.log"'
+  ```
+  gpu1i는 기본 `bsp/sdk`를 쓰므로 `HOMEAGENT_BSP_SDK` 불필요(랩탑만 `~/repos/3rd/milkv/`를 쓴다).
+  **output 트리를 지우지 마라** — 거긴 V8이 이미 스탬프돼 있다.
 
-- **왜**: 남은 두 빈칸 중 하나 — **"빈 트리에서 minimal이 선다"는 재현 실증**이 아직 없다. 오늘 구운 건 7월 트리 위 증분이었다. 트리가 비어 있는 지금이 그 증명을 공짜로 얻는 창이다.
-- **비용**: V8이 없는 레인이라 ~15분 (랩탑 실측 표에서 `1h29m − 1h16m`). `buildroot/dl` 캐시 580M은 남아 있다.
-- **닫히면**: `setup.sh` → `build.sh` 두 줄이면 빈 기계에서 minimal이 선다는 게 measured가 된다.
-- **`full`(Z2M)은 여기서 굽지 마라.** V8이 랩탑에서 1h16m, gpu1i에서 28m37s다. minimal 프로파일을 만든 이유가 랩탑에서 V8을 안 치르는 것이었으니 **full은 gpu1i 자리다.** 나머지 한 빈칸(`full`이 overlay `common`/`z2m` 분리 이후 미빌드)도 거기서 닫는다 — `target/etc/init.d/S70zigbee2mqtt` 하나만 보면 된다.
+- **Verify**: `grep EXIT= ~/bsp-build.log`가 0이고, 산출물이 `out/milkv-duos-glibc-arm64-emmc-minimal_<date>.zip` + `.manifest.txt`로 나오면 된다. 매니페스트에 `# BR2_PACKAGE_NODEJS is not set`과 `profile: minimal`이 찍힌다. 파일 확인은 `bsp/sdk/buildroot/output/milkv-duos-glibc-arm64-emmc/target/`에서 — **zip 안은 CIMG라 `debugfs`가 못 읽는다**(LEDGER).
+- **Blocker**: 없음. [측정 2026-08-30 14:24] gpu1i 살아 있다(16코어·61G·586G 여유·load 0.00), SDK 핀 `3a50ffe28` 일치, repo는 `cb1ea73`에서 7커밋 뒤.
+- **왜 gpu1i인가**: [측정] 거기 arm64 트리에 `nodejs`·`nodejs-src`·`host-nodejs`·`icu`가 **전부 `.stamp_built`(2026-07-23)**. 랩탑은 그 트리를 2026-08-30에 지웠고 타깃 V8은 애초에 빌드된 적도 없다. 같은 일이 랩탑에선 클린 15분, gpu1i에선 증분 몇 분이다.
+- **끝나면 남는 것**: `full`이 overlay `common`/`z2m` 분리 이후 미빌드인 것 하나. gpu1i에서 프로파일 없이 한 번 더 돌리면 닫히고(V8 스탬프 있어 증분), `target/etc/init.d/S70zigbee2mqtt`와 `etc/mosquitto/mosquitto.conf`가 서는지만 보면 된다. **GLG 승인 없이 하지 마라** — 오늘 그걸 안 묻고 시작했다가 중단됐다.
 
-# NOW — 이미지는 나왔고 넘어갔다. 플래시는 gecko가 몬다
+## ⚠️ 헷갈리기 쉬운 두 축 — 이름이 비슷하다
 
-- **Stem**: Duo S 제품화 이미지. 허브 앱은 별도 레인, **들어앉을 자리는 이 repo**. ARM64 glibc 개발 레인만. RISC-V 아님.
+| 축 | 값 | 어디서 정하나 |
+|---|---|---|
+| **ISA** | `arm64`(glibc) / `riscv64`(musl) | 보드 이름 + `bsp/buildroot/<board>_defconfig`. arm64는 `BR2_aarch64=y`, riscv는 `BR2_riscv=y`. SDK 브랜치도 다르다(arm64 `3a50ffe28` / riscv `087547cf8`) |
+| **프로파일** | `full`(Node+Z2M+mosquitto) / `minimal` | `HOMEAGENT_BSP_PROFILE`, `bsp/buildroot/profiles/<board>_<profile>.fragment` |
+
+**`full`은 ISA가 아니다.** [측정 2026-08-30] gpu1i의 output 트리는 `milkv-duos-glibc-arm64-emmc` **하나뿐**이고 riscv 트리는 없다 — riscv 시도 흔적은 랩탑 쪽에 있다(거긴 트리 셋). 프로파일 프래그먼트도 arm64용 하나뿐이라 riscv 보드에 `minimal`을 걸면 컨테이너 시작 전에 fail-closed 된다.
+
+- **Do not touch**: 보드 `.164`(gecko가 쥐고 있다) · 보드 91 · RISC-V defconfig · `feat/riscv64-nodejs-pure-cross` · gecko 펌웨어 · gpu1i의 output 트리 삭제 · gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/` · hostapd를 부팅 init으로 올리는 것 · eudev 추가 · `S39`/`S99v` 번호 변경 · **minimal 이미지를 허브 보드에 굽는 것**.
+
+# 참조 — 닫힌 것들
+
+## gecko 인계 (닫힘 2026-08-30) — 플래시는 그쪽이 몬다
+
 - **이미 들어 있는 것 (레시피, 2026-08-28)**: `BR2_PACKAGE_HOSTAPD=y` (개방망, WPA3 옵션 없음, init으로 안 올림). `/dev/serial/by-id`는 eudev 없이 mdev helper. `stable-mac`은 eMMC CID → LAA (`02:` eth0 / `06:` wlan0) — #8 MAC 조각. init 순서 계약: `S39stablemac` < `S40network`/`S41dhcpcd`, `S99user` < `S99v_stablemac` < `S99wpa_supplicant`. `S99v`의 `v`는 자리용 글자, 번호 옮기지 말 것.
 - **닫힌 것 (2026-08-30, 랩탑)**: gpu1i가 못 닿아(점프 호스트 `s3i` kex reset) **로컬에서 minimal 프로파일로 구웠다 — 3분 55초.** `milkv-duos-glibc-arm64-emmc-minimal_2026-0830-1137.zip` (57M, sha256 `08eb904b…`). 6개 파일 전부 확인, Node/Z2M/mosquitto 0건. **init 순서 계약도 실물로 확인**: `S39stablemac … S40network S41dhcpcd … S99serial-by-id S99user S99v_stablemac S99wpa_supplicant`.
 - **gecko와 합의 완료 (2026-08-30, entwurf `20260830T131729-9833bd` 왕복 3회)**: 그쪽 `docs/GECKO_PORT.md §8.3` 의존 표를 minimal `target/`과 전수 대조 → **hostapd 포함 10/10**, 추가 요구 `awk`/`sed`/`cut`도 전부 있음(busybox `CONFIG_AWK/SED/CUT=y`, 그리고 minimal 프래그먼트는 심볼 5개만 만져서 **프로파일이 busybox를 건드릴 수 없다**). 남은 이미지 쪽 일 **0**.
@@ -41,7 +61,6 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 - **넘긴 것**: 절대 경로(`HOMEAGENT_BSP_SDK=/home/junghan/repos/3rd/milkv/duo-buildroot-sdk-v2` — SDK 트리는 gitignore라 `git pull`로 안 온다), `./bsp/flash-emmc.sh arm64-minimal`, 함정 둘(cdc_acm은 붙였다 뗀다 / `100%`는 증거가 아니라 UUID로 대조), 롤백(`arm64` → 7월 full 104M, 단 Z2M 선점 문제 동반).
 - **판정 경계 (gecko와 합의)**: `wlan0` MAC ≠ `06:b3:51:d1:75:4e` · `/dev/serial/by-id` 후보 ≠ 1개 · `hostapd` 부재/AP-ENABLED 미확인 → **이미지 축, 우리에게 돌아온다**(재빌드 4분). 그 밖(`install`/`certs`/REG/AWS) → gecko가 가져간다.
 - **Verify (zip, 보드 아님) — 방법이 바뀌었다**: zip 안 `rootfs_ext4.emmc`는 **raw ext4가 아니라 CIMG**다(LEDGER 참조). 파일 단위 확인은 `<sdk>/buildroot/output/<board>/target/`에서 하고, 산출물 확인은 `LC_ALL=C grep -a -c <이름> rootfs_ext4.emmc`로 한다. 같은 CID면 플래시 뒤 wlan0이 다시 `06:b3:51:d1:75:4e`여야 한다 — 그건 플래시 후 gecko 검증.
-- **Blocker**: 없음. full 이미지는 gpu1i 대기(급하지 않음), 플래시는 gecko 로그 회수 신호 대기.
 - **Read**: `bsp/README.md` "Profiles — one board, two package sets"; `bsp/overlay/README.md` "Two overlays, split by profile"; arm64 defconfig `# 6) HOSTAPD` + `PROFILES`; gecko `board/duo-s/README.md` + `docs/GECKO_PORT.md` §8.
 - **Do not touch**: 보드 `.164`. RISC-V defconfig. `feat/riscv64-nodejs-pure-cross`. gecko 펌웨어. hostapd를 부팅 init으로 올리지 말 것. eudev 넣지 말 것. `S39`/`S99v` 번호 변경. gpu1i untracked `meta-hailo/`·`yocto/sstate-cache-backup/`. **minimal 이미지를 허브 보드에 굽지 말 것** (`flash-emmc.sh arm64`는 이미 못 집게 돼 있다).
 
@@ -119,6 +138,8 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 - **Read**: `docs/BUILDROOT.md` "Node.js pure cross-compile" + "Native-musl product contract"; `captures/n0-musl-gap-20260722T115500+0900/`.
 
 # RECENT
+
+- **2026-08-30 gpu1i 복귀 + 세션 인계**: 오후에 gpu1i가 다시 닿았다(점프 `s3i` 복구). 거기 arm64 트리에 V8이 스탬프돼 있어 재빌드가 싸다는 걸 확인하고, GLG 판단으로 **minimal을 새 담당자에게 넘겼다**(위 NOW). 이 세션에서 랩탑 클린 `full`을 시도했다가 중단됨 — Z2M을 굽는 결정을 GLG에 안 묻고 시작한 것이 원인이고, 그 과정에서 랩탑 arm64 output 트리가 지워졌다(`out/` 산출물과 `buildroot/dl`은 무사). 랩탑에서 다시 구우려면 클린 ~15분.
 
 - **2026-08-30 빌드 프로파일 신설 + minimal 이미지 실증 (랩탑)**: gpu1i 불통(점프 호스트 `s3i`가 kex에서 reset)이라 로컬로 돌렸다. 랩탑 트리를 재보니 **타깃 V8은 애초에 빌드된 적이 없었고**(`nodejs/.stamp_built` 없음, `target/`·`images/` 비어 있음, 159/162만 스탬프) — 그래서 Node를 빼도 지불한 것을 버리는 게 아니었다. `HOMEAGENT_BSP_PROFILE=full|minimal` 도입, `bsp/overlay`를 `common`/`z2m`으로 분리, 산출물 이름·매니페스트로 버전 관리. **minimal 빌드 3분 55초**, zip 57M(full 104M, −47M). 6개 표면 파일 확인, Node/Z2M/mosquitto 0건. 보드는 안 만졌다.
 - **2026-08-28 gecko 패키징 표면 (레시피만, 미빌드)**: sks-hub-gecko SoftAP가 이미지에 없어 막힘. arm64에 hostapd(개방망) + mdev `/dev/serial/by-id` + stable-mac(eMMC CID, #8 MAC 조각) 넣음. 보드 `.164` 안 만짐. 다음 = gpu1i 증분 빌드.

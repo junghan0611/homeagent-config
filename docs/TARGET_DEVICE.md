@@ -14,7 +14,7 @@ HomeAgent의 중심은 RPi5 풀스택에서 **미니멀 허브 BSP**로 이동�
 | Commercial reference | **SMHUB Nano MG24** — vendor SMHUB OS, system-application approach |
 | **Big-core boot mode** | **RISC-V C906** — booted on Duo S silicon (2026-07-14); see [`../runtime/README.md`](../runtime/README.md) |
 | Public BSP reference | **Milk-V Duo Buildroot SDK v2** (`milkv-duo/duo-buildroot-sdk-v2`) → own RISC-V build in `../bsp/` |
-| Minimum RAM class | **512MB** for Zigbee2MQTT + MQTT + matter.js/Go experiments |
+| Minimum RAM class | **512MB** for Zigbee2MQTT + MQTT + matter.js/Go experiments — **이 값은 Node를 전제로 한다**. Node를 빼면 256MB(Duo 256M/SG2002)가 후보로 열린다(아래 절) |
 | Radio | Duo S = **USB ZBDongle-E** (EmberZNet 7.4.2); SMHub = onboard EFR32MG24 |
 | Protocol posture | Zigbee NCP **or** Thread RCP by firmware switching; no concurrent assumption |
 | USB coordinator | Duo S working radio (no onboard MG24); dev/proto, not the final product radio |
@@ -39,6 +39,7 @@ Tier numbering is only a lane label. The current work optimizes Tier 2 first.
 |------|-----|-----|---------------|-------|------|--------|
 | **Milk-V Duo S / SDK v2 family** | **SOPHGO SG2000** | C906 (RISC-V boot) + C906L RTOS coprocessor | 512MB-class | USB ZBDongle-E | **core lane** — full-stack build board | in hand, RISC-V boot verified 2026-07-14 |
 | **SMHUB Nano MG24** | **SOPHGO SG2000** | C906 (RISC-V boot) + C906L RTOS coprocessor | **512MB / 8GB eMMC** | **onboard EFR32MG24** | commercial reference (vendor OS) | in hand, OTA beta5 verified |
+| **Milk-V Duo 256M** | **SOPHGO SG2002** | CA53 (ARM) + C906 lanes, 둘 다 SDK에 있음 | **256MB / microSD only** | USB dongle (**온보드 WiFi 없음**) | **Node를 빼면 열리는 후보** (GLG 2026-09-01) | 미보유 · SDK 보드정의 실재 |
 | **Tuya THP23-ZB-X** | **Sigmastar SSD202D** | dual Cortex-A7, 32-bit | **128MB / SPI NAND** | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 4×A76 | 8GB | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4×A76 + 4×A55 | 4GB | USB EFR32 proof | lab target | SSH/GPU verified |
@@ -55,6 +56,55 @@ SG2000 is a practical middle point for a small hub:
 4. **Hub-shaped I/O** — Ethernet/PoE/WiFi/eMMC-class integration is closer to a product hub than a loose dev-board stack.
 
 ---
+
+## 256MB 후보 — Milk-V Duo 256M (SG2002), Node를 뺀 다음의 자리
+
+> **GLG 2026-09-01**: *"nodejs가 필요 없어지면 Milk-V Duo 버전으로 갈 수도 있어. 256MB짜리
+> 제품이고 SG2002 코어 들어간 거야."* — 조건부 후보다. 지금 옮기는 것이 아니라, **Node를
+> 빼는 작업(`docs/ECOSYSTEM-PORTFOLIO.md` §4)이 성공하면 열리는 문**이다.
+
+### SDK가 이미 아는 보드다 [측정, `duo-buildroot-sdk-v2`]
+
+```
+device/milkv-duo256m-glibc-arm64-sd/     ← ARM A53 레인
+device/milkv-duo256m-musl-riscv64-sd/    ← RISC-V 레인
+build/boards/cv181x/sg2002_milkv_duo256m_glibc_arm64_sd/
+    config.json → "board_information": "CA53 + DDR 256MB"
+```
+
+Duo S와 **같은 SDK, 같은 cv181x 계열**이라 보드 브링업이 새 레인이 아니다. ISA 두 축도
+그대로 있다.
+
+### 진짜 숫자 — 256MB는 256MB가 아니다 [측정, `memmap.py`]
+
+| | Duo S (SG2000) | **Duo 256M (SG2002)** |
+|---|---|---|
+| `DRAM_SIZE` | 512M | **256M** |
+| `FREERTOS_SIZE` | 2M | 2M |
+| **`ION_SIZE`** | **170M** | **75M** |
+| Linux에 남는 것 | 512 − 2 − 170 = **340M** | 256 − 2 − 75 = **179M** |
+| 실측 `MemTotal` | **311M** (커널 오버헤드 후) | 미측정 — 위 비율로는 **~165M** 추정 |
+
+**그리고 여기 레버가 하나 있다.** `ION`은 카메라/비디오 파이프라인 몫이다 — 같은 파일에서
+`H26X_BITSTREAM_SIZE = 2M`, `ISP_MEM_BASE_SIZE = 20M`이 그 안에 예약된다. **헤드리스 허브는
+ISP도 H.264 인코더도 쓰지 않는다.** 즉 Duo S의 170M도, Duo 256M의 75M도 대부분 우리에겐
+버리는 값이다. `ION_SIZE`를 줄이는 것은 **우리가 소유한 보드 설정 파일 한 줄**이고, 그것만으로
+Duo 256M의 가용 RAM이 크게 달라진다. **아직 시도 안 했다.**
+
+### 옮기기 전에 알아야 할 두 가지 차이 [측정]
+
+1. **eMMC 변형이 없다.** SDK 보드 정의가 `-sd` 둘뿐이다(Duo S는 `-emmc`/`-sd` 넷).
+   → `bsp/flash-emmc.sh` 경로와 eMMC CID 기반 `stable-mac`의 씨앗이 **그대로 적용되지 않는다.**
+2. **온보드 WiFi가 없다.** [측정] `dts_arm64/*.dts`에서 `aic8800|wifi|sdio` 매치가
+   **Duo 256M = 0건**, Duo S = 3건. → `S99wpa_supplicant`·`hostapd`·`wlan0` stable-MAC 등
+   현재 RAIL의 WiFi 소유권 논의는 이 보드에서 **주제 자체가 사라진다**(대신 USB WiFi 또는
+   유선 전용 결정이 필요해진다).
+
+### 판정
+
+**지금 옮기지 않는다.** 선행조건이 Node 제거이고 그건 아직 조사 단계다
+(`docs/ECOSYSTEM-PORTFOLIO.md`). 다만 **이 문서의 "Minimum RAM class = 512MB"는 Node를
+전제로 한 값**이라는 것을 여기 적어 둔다 — 전제가 바뀌면 그 줄도 바뀐다.
 
 ## 128MB Ceiling — THP23-ZB-X (parked)
 

@@ -3,22 +3,61 @@
 - [x] **1. flash-and-go 재현 + gecko 패키징 표면 인계** — v2026.7.24 → 2026-08-30. `.164` 플래시는 gecko가 몬다, 우리 손 없음
 - [x] **2. 크로스호스트 재현 대조** — gpu1i·랩탑 클린 minimal이 **600바이트 차**로 일치(2026-08-30)
 - [x] **3. 프로파일 가드를 `target/`까지 확장** — `.config`만 보던 구멍을 닫음(2026-08-30)
-- [ ] **4. gecko 플래시 결과 대기** ← CURRENT: 우리 손 없음. 이미지 축이면 돌아온다
-- [ ] **5. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
+- [x] **4. gecko WiFi 소유 원칙 조사 회신** — S99wpa_supplicant 출처/dhcpcd wlan0 관리/wlan0 up 주체 세 질문, 실기 없이 소스로 닫아 gecko RAIL 6 담당에게 회신(2026-08-31)
+- [x] **5. 홈오토메이션 스택 랜드스케이프 조사** — 작은 폼팩터에 무엇을 밀어넣을 수 있나. `docs/ECOSYSTEM-PORTFOLIO.md` 신설(2026-09-01). 실증은 회사 레인이 가져갔다
+- [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← CURRENT: GLG 승인 대기. 회신 결과를 보고 필요하면 착수
+- [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
+- [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
 
-현재 좌표: 1·2·3 완료 → **4 대기(우리 액션 없음)** → 5 보류
+현재 좌표: 1·2·3·4·5 완료 → **6 GLG 승인 대기** → 7·8 보류
 
-# NOW — gecko 플래시 결과 대기
+# NOW — S99wpa_supplicant 제거 판단 대기
 
-> 이미지 쪽 할 일은 0이다. 보드는 아무도 안 만진다. 아래는 결과가 왔을 때 어디로 가는지다.
+> 이미지 쪽 실작업은 아직 0이다. GLG 승인 전엔 코드 안 건드린다.
 
 - **Stem**: Duo S 제품화 이미지. 이 repo가 이미지를 소유하고, 허브 앱과 gecko 펌웨어는 별도 레인.
+- **배경**: gecko(sks-hub-gecko, RAIL 6, `20260831T172806-ed4c31`)가 GLG의 WiFi 소유 원칙("OS는 wlan0를 존재하게 한다. 그 wlan0로 무엇을 할지는 오직 허브 펌웨어가 정한다")을 근거로, 이 이미지의 `S99wpa_supplicant`가 부팅 때 옛 SSID로 STA 연결을 강행해 RAIL 6(전원 재기동 시 사람 개입 없이 복구)을 깬다고 조사 요청. 조사 결과는 2026-08-31 회신 완료(아래 요약).
+- **조사 결론 요약** (전문은 gecko 콜백에 전송, 필요하면 재조회):
+  1. `S99wpa_supplicant`는 `bsp/overlay/common/etc/init.d/S99wpa_supplicant`(homeagent-config 자체 파일, Buildroot 기본 아님). 스크립트만 빼도 `wpa_supplicant`/`hostapd` 바이너리(defconfig `BR2_PACKAGE_WPA_SUPPLICANT`/`BR2_PACKAGE_HOSTAPD`)는 안 건드림. 다른 부팅 소비자가 wlan0 연결 성공에 의존하는 곳 없음(확인됨).
+  2. `dhcpcd`의 wlan0 관리는 설계가 아니라 "usb0만 배제"(Milk-V 벤더 패치)의 부산물 — `S99wpa_supplicant` 제거해도 dhcpcd wlan0 관리는 유지됨.
+  3. (제일 중요) wlan0를 `up`으로 올리는 건 `wpa_supplicant`가 아니라 `stable-mac`(`bsp/overlay/common/usr/bin/stable-mac:56`, MAC 세팅 부산물)이고 순서상 wpa_supplicant보다 먼저 뜬다 → **wpa_supplicant 없이 부팅해도 wlan0는 UP으로 남는다.** 실기 검증 불필요, 소스로 닫힘.
+- **Next**: GLG가 gecko 회신을 보고 `S99wpa_supplicant` 제거(또는 `start`를 no-op) 여부를 결정하면 착수. 아직 지시 없음 — 먼저 움직이지 마라.
+- **Blocker**: GLG 승인.
+- **Read**: `bsp/overlay/README.md` "Init order is half the contract"; `bsp/overlay/common/etc/init.d/S99wpa_supplicant`; `bsp/overlay/common/usr/bin/stable-mac`.
+
+## 참조 — 스택 랜드스케이프 (닫힘 2026-09-01, 실증은 딴 레인)
+
+**이 리포의 중심은 "다 만든다"가 아니다 — 512MB급 작은 폼팩터에 이 주제를 밀어넣는 것이고,
+그래서 남이 만든 스택을 재는 게 일이다(GLG 2026-09-01). 고집할 스택은 없다.**
+
+- **문서**: `docs/ECOSYSTEM-PORTFOLIO.md` (신설). `docs/HUBS.md`(하드웨어)의 짝인 소프트웨어
+  랜드스케이프. **조사 자료이며 채택 결정이 아니다**는 배너가 맨 위에 있다.
+- **한 줄**: 판정은 크기가 아니라 **런타임 개수**다. 그리고 플랫폼 선택보다
+  **Zigbee를 Node에서 떼는 것(141M)** 이 압도적으로 크다.
+- **실증은 우리가 안 한다.** domoticz+Z4D 경로의 실물 검증은 GLG가 회사 레인의 별도 배포판
+  리포에서 직접 돌린다(전담 시민 배치됨). 좌표는 `PRIVATE.md`. **우리 몫은 기억과 재료.**
+- **버전 방침 확정 (GLG 2026-09-01): domoticz는 최신 `2026.3`으로 간다.** Buildroot가 pin한
+  `2024.4`가 아니다. [측정] 업스트림 태그에 `2026.1·2026.2·2026.3` 실재. 부채 0을 사자고
+  2년 묵은 버전을 신지 않는다 — **서브모듈 5개 조달이 알고 지는 값**이고, 그게 이 레인의
+  첫 실작업이 된다(`libwebem`·`jwt-cpp`·`jsoncpp`·`minizip`·`sqlite-amalgamation`;
+  `jwt-cpp`는 Buildroot에 패키지가 없어 새로 쓴다). 착수 시점은 회사 레인 결과 뒤.
+- **놓치면 안 되는 맥락 (GLG)**: 타깃은 **Duo S급 저사양에 꽉 눌러담는 것**이다. 큰 기계에서
+  되는 걸 확인하는 게 아니다. 모든 표는 "되나"가 아니라 **"512MB에 들어가나"**로 읽는다.
+- **그리고 이건 Milk-V 레인 구조를 바꿀 수 있다 (GLG)**: 회사 레인 실증이 잘 되면 이 리포의
+  이미지 구조 자체를 그쪽에 맞춰 다시 볼 수 있다. **지금은 기다린다.**
+- **다음에 값이 붙는 순서**: ① `cryptography<=40.0.2` 핀이 실제 비호환인가(미측정)
+  ② **`2026.3` Buildroot 레시피 — 서브모듈 조달**(조사 아님, 실작업) ③ domoticz 바이너리 실측
+  ④ RSS 실측 ⑤ riscv64/musl 가부.
+- **Do not**: 이 조사를 근거로 지금 이미지에 스택을 얹지 마라. 버전 방침만 정해졌고 착수는
+  회사 레인 결과 뒤다.
+
+## 참조 — gecko 플래시 결과 대기 (PAUSED)
+
 - **Next**: 없음 — 대기. gecko(`20260830T131729-9833bd`)가 `.164`를 굽고 결과를 보낸다.
 - **판정 경계 (gecko와 합의)**: `wlan0` MAC ≠ `06:b3:51:d1:75:4e` · `/dev/serial/by-id` 후보 ≠ 1개 · `hostapd` 부재/AP-ENABLED 미확인 → **이미지 축, 우리에게 돌아온다**. 그 밖(`install`/`certs`/REG/AWS) → gecko가 가져간다.
 - **돌아오면 쓸 이미지**: 오늘 자 minimal이 **두 호스트에서 동일**하게 나왔다. 랩탑 `…-minimal_2026-0830-1432.zip`(59,561,194B) / gpu1i `…-minimal_2026-0830-1410.zip`(59,560,594B). 재빌드가 필요하면 클린 15분(랩탑) 또는 9분(gpu1i).
 - **당분간 `minimal`로 간다 (GLG 2026-08-30).** `full`을 굽는 건 별도 판단이고, 아래 미검증 항목이 붙어 있다.
 - **아직 안 닫힌 것 하나 — `full`은 overlay 분리 이후 미빌드다.** 양 호스트 모두 이제 클린이라 V8 포함 40분 안팎. `target/etc/init.d/S70zigbee2mqtt`와 `etc/mosquitto/mosquitto.conf`가 서는지만 보면 닫힌다. **GLG 승인 없이 시작하지 마라.**
-- **Blocker**: 없음(대기).
 - **Read**: `bsp/README.md` "Profiles" + "Rebuilding after an overlay/config change"(프로파일 전환 예외 포함); `bsp/overlay/README.md`; arm64 defconfig `# 6) HOSTAPD`; gecko `docs/GECKO_PORT.md` §8.
 
 ## ⚠️ 헷갈리기 쉬운 두 축 — 이름이 비슷하다
@@ -133,6 +172,26 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 - **Read**: `docs/BUILDROOT.md` "Node.js pure cross-compile" + "Native-musl product contract"; `captures/n0-musl-gap-20260722T115500+0900/`.
 
 # RECENT
+
+- **2026-09-01 홈오토메이션 스택 랜드스케이프 조사 — 닫힘 (`docs/ECOSYSTEM-PORTFOLIO.md` 신설).**
+  GLG가 SLZB-OS 통합 목록·domoticz·Zigbee for Domoticz를 놓고 "작은 폼팩터에 밀어넣을 가벼운
+  솔루션 포트폴리오"를 물어 조사. **측정된 것**: (1) Buildroot 2025.02 패키지 2951개 전수 대조 →
+  홈오토메이션 호스트 중 **`domoticz`만 패키징돼 있다**(2024.4), HA·openHAB·ioBroker·Jeedom·
+  FHEM은 0건이고 전부 새 런타임을 요구한다. (2) domoticz `hardware/` 149개 드라이버 실사 →
+  1Wire·EnOcean·P1·Teleinfo·RFXCom·Z-Wave 등이 **네이티브**고 **빠진 건 Zigbee 하나**,
+  입구는 `MQTTAutoDiscover.cpp`(=Z2M)뿐. 설치 정적 자산 **~21M**(`Config` 7.8M은 OpenZWave
+  켤 때만). (3) **Zigbee for Domoticz(Z4D)가 그 칸을 메운다** — `Classes/ZigpyTransport/
+  AppBellows.py`가 zigpy/bellows로 **EFR32를 직접 문다**. 실물 14M. 빠진 의존
+  (`zigpy`·`bellows`·`zigpy_znp`·`zigpy_deconz`·`zigpy-blz`)은 **전부 순수 Python**이고 유일한
+  네이티브 의존 `cryptography`는 이미 Buildroot에 있다 → 포크가 아니라 레시피 몇 장.
+  **벽 둘**: 플러그인이 `Domoticz>=2025.2`를 요구하는데 Buildroot는 2024.4(올리면 서브모듈
+  5개 부채), 그리고 `cryptography<=40.0.2` 핀 vs Buildroot 44.0.0(비호환 여부 **미확인**).
+  (4) SMHUB 벤더 매뉴얼 재수집(22/22, **22페이지 중 릴리즈노트 1개만 +2,191B**) → **OS v1.0.0
+  정식 2026-07-10** 확인: **커뮤니티 opkg 앱 저장소**, **Z2M을 지운 채로 OTA 유지**,
+  **ser2net**, beta3의 **ESPHome을 RTOS 코프로세서 코어에** + HA Bluetooth Proxy.
+  즉 벤더의 답도 "다 굽지 않는다"였다. **이미지·보드·커밋 손 안 댐.** 실증은 회사 레인으로 갔다.
+
+- **2026-08-31 gecko WiFi 소유 원칙 조사 회신 — 닫힘 (다음 행동은 GLG 승인 대기).** gecko(sks-hub-gecko RAIL 6)가 GLG의 "OS는 wlan0를 존재하게, 정책은 펌웨어가" 원칙 위반 후보로 `S99wpa_supplicant`를 지목해 세 질문 조사 요청. (1) 그 스크립트는 homeagent-config 자체 overlay 파일(`bsp/overlay/common/etc/init.d/S99wpa_supplicant`)이지 Buildroot 기본이 아니고, 바이너리(`BR2_PACKAGE_WPA_SUPPLICANT`/`HOSTAPD`)와 분리해서 스크립트만 제거 가능함을 확인. (2) `dhcpcd`의 wlan0 관리는 설계가 아니라 Milk-V 벤더 패치가 usb0만 배제한 부산물 — 제거해도 유지됨. (3) wlan0를 `up`시키는 건 wpa_supplicant가 아니라 `stable-mac`(`bsp/overlay/common/usr/bin/stable-mac:56`)이고 순서상 wpa보다 먼저 뜨므로, **wpa_supplicant 없이도 wlan0는 UP으로 남는다** — 실기 없이 소스로 닫음. 이미지 재빌드/커밋 안 함, 보드도 안 만짐. 전문은 gecko 콜백(`20260831T172806-ed4c31`)에 fire-and-forget 전송. 다음 행동(제거 착수 여부)은 GLG 승인 대기.
 
 - **2026-08-30 프로파일 가드를 `target/`까지 확장 — 닫힘.** `bsp/build.sh`가 `.config`만 보던 구멍을 닫았다. (1) **빌드 전 거부**: 비-`full` 프로파일인데 `target/`에 full 마커(`usr/bin/node`·`node_modules`·`mosquitto`·`S70zigbee2mqtt` 등 7개)가 있으면 굽기 전에 exit 1 하고 `rm -rf <sdk>/buildroot/output/<board>`를 알려준다. (2) **빌드 후 rootfs 단언**: 통과 시 `[bsp] profile verified in target/`을 찍고, 실패 시 방금 만든 산출물을 `out/quarantine/`으로 옮긴다 — `flash-emmc.sh`가 glob 최신본을 집으므로 미검증 이미지를 `out/`에 두면 보드까지 한 명령 거리다. 되돌리는 방향만 막는다(`minimal` 트리에 `full`은 안전). **검증**: 부정 방향은 오염 트리를 흉내내 가드 로직만 떼어 실행 → `exit=1` + 오염 파일 열거. 긍정 방향은 랩탑 클린 minimal 실빌드 → `profile verified in target/` 출력, `EXIT=0`. `bsp/README.md`의 "증분 ~2-3분" 절에도 예외를 적었다.
 

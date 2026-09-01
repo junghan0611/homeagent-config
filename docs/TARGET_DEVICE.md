@@ -85,11 +85,58 @@ Duo S와 **같은 SDK, 같은 cv181x 계열**이라 보드 브링업이 새 레�
 | Linux에 남는 것 | 512 − 2 − 170 = **340M** | 256 − 2 − 75 = **179M** |
 | 실측 `MemTotal` | **311M** (커널 오버헤드 후) | 미측정 — 위 비율로는 **~165M** 추정 |
 
-**그리고 여기 레버가 하나 있다.** `ION`은 카메라/비디오 파이프라인 몫이다 — 같은 파일에서
-`H26X_BITSTREAM_SIZE = 2M`, `ISP_MEM_BASE_SIZE = 20M`이 그 안에 예약된다. **헤드리스 허브는
-ISP도 H.264 인코더도 쓰지 않는다.** 즉 Duo S의 170M도, Duo 256M의 75M도 대부분 우리에겐
-버리는 값이다. `ION_SIZE`를 줄이는 것은 **우리가 소유한 보드 설정 파일 한 줄**이고, 그것만으로
-Duo 256M의 가용 RAM이 크게 달라진다. **아직 시도 안 했다.**
+### 레버 — ION은 카메라 몫이고, 우리 보드엔 카메라가 없다
+
+**GLG 2026-09-01: "카메라 없는 거라면 쓸 만해. 그 정도면 눌러 담을 수도 있어."**
+
+`ION`은 멀티미디어 버퍼다. [측정] 같은 `memmap.py` 안에서 그 안쪽이 이렇게 쪼개진다:
+
+```python
+ION_SIZE                   = 170 * SIZE_1M     # Duo S   (Duo 256M = 75M)
+H26X_BITSTREAM_SIZE        = 2   * SIZE_1M     # H.264 비트스트림
+H26X_ENC_BUFF_SIZE         = 0
+ISP_MEM_BASE_SIZE          = 20  * SIZE_1M     # 이미지 시그널 프로세서
+FREERTOS_RESERVED_ION_SIZE = H26X + ENC + ISP  # = 22M
+assert ISP_MEM_BASE_ADDR + ISP_MEM_BASE_SIZE <= ION_ADDR + ION_SIZE
+```
+
+**헤드리스 허브는 ISP도 H.264 인코더도 쓰지 않는다.** 그리고 그 아래에 하나 더 있다 —
+`BOOTLOGO_SIZE = 8000 * SIZE_1K`(≈7.8M)이고 `FRAMEBUFFER`가 같은 자리를 쓴다. **디스플레이가
+없으면 이것도 미수금이다.**
+
+회수 가능한 상한 [계산, 미검증]:
+
+| | 현재 ION | assert가 강제하는 바닥 ¹ | 회수 후보 | + 부트로고 |
+|---|---|---|---|---|
+| Duo S (512M) | 170M | 22M | **~148M** | +7.8M |
+| Duo 256M | 75M | 22M | **~53M** (179M → **~232M**) | +7.8M |
+
+¹ H26X·ISP를 남겨 둘 때의 바닥이다. 카메라 파이프라인을 아예 안 쓰면 그 22M도 협상 대상이지만,
+그건 `assert`가 아니라 **드라이버가 요구하는지**의 문제라 별도 확인이 필요하다.
+
+> **즉 이건 Duo 256M만의 얘기가 아니다.** Duo S가 **지금** 148M을 안 쓰고 예약만 하고 있다.
+
+### 레버가 걸린 자리 [측정]
+
+`memmap.py`는 메모리 맵의 **단일 소스**다. `build/scripts/mmap.mk`가 `mmap_conv.py`로
+`cvi_board_memmap.{h,conf,ld,txt}` 넷을 생성하고, 그걸 **u-boot · 커널 · FreeRTOS 링커**가
+같이 먹는다. 한 파일을 고치면 세 층이 함께 움직인다 — 손으로 맞출 곳이 없다.
+
+**그런데 지금 우리는 그 파일을 주입하지 않는다.** `bsp/build.sh`가 SDK에 넣는 것은 둘뿐이다:
+
+```
+bsp/board/<board>/defconfig        → SDK 보드 defconfig
+bsp/buildroot/<board>_defconfig    → Buildroot 설정 (+ 프로파일 프래그먼트)
+```
+
+`memmap.py`는 `build/boards/cv181x/<board>/`, 즉 **보드 디렉터리 안**이다 — LEDGER가 커널
+defconfig에 대해 이미 내린 판정("소유 범위를 넓힐지 고민할 문제가 아니었다")과 같은 자리다.
+따라서 회수 작업의 실체는 **주입 슬롯 하나를 더 여는 것**(`bsp/board/<board>/memmap.py`)이지
+포크가 아니다.
+
+**아직 시도 안 했다.** 미검증 위험 둘: (a) cvi 멀티미디어 드라이버가 빌드에 포함된 채 ION만
+줄이면 부팅 중 실패할 수 있다 → 드라이버도 같이 빼는 결정과 짝이다. (b) `BOOTLOGO`는
+u-boot 로고 경로가 참조하므로 크기만 줄이는 것과 경로를 끄는 것이 다르다.
 
 ### 옮기기 전에 알아야 할 두 가지 차이 [측정]
 

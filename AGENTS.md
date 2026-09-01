@@ -94,6 +94,13 @@ Defer unless explicitly requested:
 
 ## Invariants as Principles
 
+- **Packing is the deliverable.** 이 리포의 값어치는 기능 목록이 아니라 **저사양에 눌러담는 기술**
+  그 자체다. 그래서 "큰 보드에서 되더라"는 결과가 아니고, 판정은 언제나 **"이 등급에 들어가나"**다.
+  런타임을 하나 더 들이는 선택은 기능이 아니라 **등급을 한 칸 올리는 비용**으로 계산한다
+  (`docs/ECOSYSTEM-PORTFOLIO.md` · `docs/TARGET_DEVICE.md`).
+- **쓰지 않는 예약은 낭비가 아니라 미수금이다.** 벤더 memmap의 멀티미디어 예약(ION/ISP/H26X/
+  부트로고)은 헤드리스 허브가 쓰지 않는다. 회수 가능한 값은 회수 대상으로 적어 두고, 모르는 채
+  두지 않는다.
 - Own the box: serial console, bootloader/recovery, rootfs, service lifecycle, and radio path must be inspectable.
 - Public repo only: no private business logic, secrets, internal production details, or closed firmware blobs.
 - Reproducibility over cleverness: prefer a boring image that can be rebuilt and reflashed.

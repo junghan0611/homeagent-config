@@ -12,10 +12,15 @@
 > 큰 기계에서 되는 걸 확인하는 게 아니라, 작은 기계에 들어가느냐가 유일한 질문이다.
 > 그래서 이 문서의 모든 표는 "되나"가 아니라 **"512MB에 들어가나"**로 읽는다.
 >
-> **그리고 512MB도 종착지가 아니다 (GLG 2026-09-01)**: §4의 Node 제거가 성공하면 타깃 보드가
-> **Milk-V Duo 256M (SG2002, 256MB)** 으로 내려갈 수 있다. 즉 이 문서의 스택 선택은 소프트웨어
-> 취향이 아니라 **하드웨어 등급을 한 칸 내리는 조건**이다. 보드 쪽 실사는
-> `docs/TARGET_DEVICE.md` "256MB 후보" 절.
+> **기준 보드는 Duo S 512MB다 (GLG 2026-09-01: "보드 기준은 512M Duo S로 잡아").**
+> Milk-V Duo 256M(SG2002)은 **조건부 후보로 열어만 둔다** — Node 제거가 성공하면 등급을 한 칸
+> 내릴 수 있다는 뜻이고, 지금 타깃은 아니다. 보드 쪽 실사는 `docs/TARGET_DEVICE.md`
+> "256MB 후보" 절.
+>
+> **그리고 이 리포가 재현성을 만드는 방식 (GLG 2026-09-01)**: *"NixOS로 x86을 하든 Buildroot로
+> 하든, **패키징을 잘하면 재현 가능한 솔루션이 된다.**"* 두 레인이 서로 경쟁하는 게 아니라
+> 같은 원리를 두 타깃에서 실행하는 것이다(§0.1). 그래서 이 문서의 판정 기준은 "무엇이 좋은
+> 스택인가"가 아니라 **"무엇을 재현 가능하게 패키징할 수 있는가"**다.
 >
 > **버전 방침 (GLG 2026-09-01)**: domoticz는 **최신 `2026.3`으로 간다.** Buildroot가 pin한
 > `2024.4`가 아니다 — 아래 §5·§6이 재 놓은 서브모듈 부채는 **모르고 지는 게 아니라 알고
@@ -31,6 +36,24 @@
 잡아먹는 건 "이 스택을 돌리려고 새 런타임(Node/JVM/PHP/Python)을 한 벌 더 들이는가"다.
 
 ---
+
+### 0.1 두 레인은 역할이 다르다 — x86에서 점검, 임베디드에서 검수
+
+**GLG 2026-09-01**: *"거기는 NixOS로 하는 거야. 임베디드 작업 아니다 — 리눅스 머신에 올리는
+거고. x86에서 점검하고 임베디드로 우리가 또 검수하면 되니까."*
+
+| | 실증 레인 (회사, x86 리눅스/NixOS) | **이 리포 (임베디드, Buildroot 크로스)** |
+|---|---|---|
+| 무엇을 답하나 | **이 조합이 도는가** — 스택·버전·의존이 서로 맞물리나 | **이 조합이 이 등급에 들어가는가** — 크로스빌드·풋프린트·RAM |
+| 실패했을 때 뜻 | 스택 선택이 틀렸다 | 스택은 맞고 **우리 축**이 문제다 |
+| 조달 | 배포판 패키지 / 휠 | 소스 크로스빌드 |
+
+**그래서 그쪽에서 넘어오는 사실은 결론이 아니라 검수 대상이다.** 그대로 옮겨 적으면 "x86에서
+됐다"가 "보드에서 된다"로 조용히 승격된다. 이 문서는 인계분을 **[인계 — 실증 레인 보고, 우리
+측정 아님]** 으로 표시하고, 그 위에 우리가 무엇을 다시 재야 하는지를 적는다.
+
+**뒤집어 말하면 그쪽이 우리 미측정 목록을 대신 줄여 준다.** 스택 층에서 이미 갈린 것을 우리가
+크로스빌드로 다시 갈리게 둘 이유가 없다 — 우리 몫은 **그 다음 질문**이다.
 
 ## 1. 층위를 먼저 가른다 — 섞으면 512MB가 터진다
 
@@ -217,15 +240,266 @@ downstream budget이 명시적으로 허용하는 범주다. Node 레인과 성�
    **domoticz 2024.4** / python 3.12.9 → Python 통과, **Domoticz 미달**.
    즉 **Z4D를 쓰려면 도마티즈를 올릴 수밖에 없고**, GLG는 `2026.3`으로 가기로 했다(§5).
    그래서 이건 "막힌 벽"이 아니라 **첫 작업 항목**이다 — 서브모듈 조달.
-2. **cryptography 핀.** 플러그인 `constraints.txt`는 `cryptography<=40.0.2`, Buildroot는
-   **44.0.0**이고 `SETUP_TYPE = maturin`(Rust 툴체인 동반). **그 핀이 실제 비호환인지
-   보수적 핀인지는 안 쟀다** — 값이 큰 한 줄짜리 확인.
+2. **cryptography 핀 — 절반 닫혔고, 나머지 절반은 우리 레인에서 다르게 생겼다.**
+   플러그인 `constraints.txt`는 `cryptography<=40.0.2`, Buildroot는 **44.0.0**이고
+   `SETUP_TYPE = maturin`(Rust 동반).
+
+   **[인계 — 실증 레인 담당자 보고, 우리 측정 아님, 2026-09-01]** 그쪽 x86_64 환경에서
+   `constraints.txt`를 전수 대조한 결과 **Zigbee 스택 전체가 핀을 정확히 통과**했다:
+   `zigpy 2.1.0` · `zigpy_znp 1.1.0` · `zigpy_deconz 1.0.0` · `zigpy-blz 0.1.0` ·
+   `bellows 1.0.0` · `pyserial>=3.5` · `serialx>=1.4.0`. 못 채운 셋
+   (`charset-normalizer==2.0.11` · `jsonschema==4.17.3` · `cryptography<=40.0.2`)은
+   **전부 Zigbee와 무관한 부수 라이브러리**이고 **Z4D가 2022년 핀을 그대로 들고 있는 자리**로
+   판정됐다. `cryptography==40.0.2`는 `cp36-abi3` 휠이 있어 조달 자체는 되지만, 배포판에 2023년
+   암호 라이브러리를 강제하는 건 후퇴라 **채우지 않고 최신으로 진행**하기로 했다.
+
+   **[측정, 이 리포] 그리고 그 핀은 Z4D 자신의 요구가 아니다.** `import cryptography` /
+   `from cryptography…`가 소스 전체에 **0건**이다(tests 제외). `requirements.txt`에 이름만 있고
+   코드가 쓰지 않는다 → 그 핀은 **zigpy 계열의 전이 의존을 대신 눌러 놓은 것**이고, 실제 판정자는
+   `zigpy 2.1.0`이 무엇을 요구하는가다.
+
+   **그리고 그 사실은 우리 레인으로 그대로 복사되지 않는다 — 그게 설계다** (§0.1 참조). [측정]
+
+   | | 실증 레인 (x86 리눅스) | **이 리포 (임베디드 크로스)** |
+   |---|---|---|
+   | 조달 방식 | `…-cp36-abi3-manylinux_2_28_`**`x86_64`**`.whl` | **소스 타르볼 + maturin + Rust 크로스빌드** |
+   | 40.0.2로 내리려면 | 휠 하나 받으면 끝 | **다운그레이드 레시피 + 그 시절 Rust/maturin 호환을 우리가 진다** |
+   | riscv64 | 해당 없음 | 경로는 있다 — `BR2_PACKAGE_HOST_RUSTC`가 `riscv64gc`를 안다 |
+
+   > **그래서 그쪽이 "핀을 안 채우고 최신으로 간다"고 한 결정이 우리 검수 항목을 하나 정해 준다.**
+   > x86에서 최신 `cryptography`로 Z4D가 돌면 **스택 층의 답이 나온 것**이고, 우리가 검수할 것은
+   > 그 다음 질문 하나로 좁혀진다 — **같은 조합이 크로스빌드로도 서는가.** 거기서 서면 벽 2는
+   > 소멸이고(Buildroot 44.0.0 그대로), 안 서면 그건 스택 문제가 아니라 **우리 축의 문제**다.
+
+   ### 벽 2의 실제 조작면 — `CheckRequirements` 플래그
+
+   **[인계]** 실증 레인은 `CheckRequirements=0`으로 켜 두고, 그 근거를 이렇게 갈랐다:
+   *"어제의 우회는 **zigpy가 메이저 갭인 채로** 검사를 끈 것이라 위험했고, 지금은 **zigbee
+   코어가 정확히 맞은 상태에서** 부수 셋만 남긴 것이다. 성격이 다르다."*
+   → **같은 플래그라도 무엇이 안 맞은 채로 끄느냐가 위험을 가른다.** 이 판단은 그대로 가져온다.
+
+   **[측정, 이 리포] 그런데 우리 쪽에선 그 플래그가 다르게 생겼다.** `plugin.py:476`:
+
+   ```python
+   if self.internet_available and self.pluginconf.pluginConf.get("CheckRequirements", True):
+       if check_requirements(Parameters["HomeFolder"]):   # True = 요구사항 미충족
+           self.onStop()                                   # 플러그인이 스스로 멈춘다
+           return
+   ```
+
+   두 가지가 따라온다.
+
+   1. **경고가 아니라 fail-closed 게이트다.** 미충족이면 `onStop()`이다. 이미지에 얹었을 때
+      "돌다가 로그만 지저분한" 종류가 아니라 **안 뜨는** 종류다.
+   2. **`internet_available`이 거짓이면 검사 자체가 건너뛰어진다.** 이 리포의 불변식은
+      *"On-device first: cloud may be a fallback, not a dependency"* 다 — 즉 **오프라인 허브에서는
+      이 게이트가 통과가 아니라 부재가 된다.** 그건 우리가 내린 결정이 아니라 **네트워크 상태가
+      대신 내려 준 결정**이고, 이 리포가 제일 싫어하는 종류다("running ≠ working").
+      (설정 자체는 `Classes/PluginConf.py:439`, `default 1`, hidden/Advanced bool.)
+
+   > **그래서 우리 검수 항목은 "플래그를 어떻게 둘까"가 아니라 이것이다 —
+   > 오프라인 부팅에서 이 게이트가 조용히 사라지지 않게, 값을 우리가 명시적으로 정한다.**
+   > **GLG 2026-09-01: "우리가 할 때는 다시 고민해보면 된다."** 지금 정하지 않는다.
 
 **곁가지**: 이 업스트림은 루트 `AGENTS.md`/`CLAUDE.md` + 하위 디렉터리별 `AGENTS.md`로
 에이전트 규약을 계층화해 뒀고, *"의존성 범프를 routine update로 취급하지 말 것"*을 계약으로
 못 박아 놨다. 벽 2를 건드릴 때 저쪽에 이미 절차가 있다.
 
 ---
+
+## 6.1 실측 — 페어링까지 관통한 스택의 풋프린트 (2026-09-01)
+
+**[측정, 이 세션 · 실증 레인이 띄운 프로세스를 이 리포에서 직접 관측]**
+`domoticz 2026.3` + Z4D가 스마트플러그 페어링까지 관통한 상태에서 잰 값이다.
+호스트는 **x86_64 / glibc / Python 3.14 (nixpkgs)**, 가동 **2분 43초**, 페어링 기기 **1대**.
+
+### 프로세스 — 하나다
+
+```
+PID 1217454  .domoticz-wrapped  -www 8080  Threads 29
+  fd 76 → /dev/ttyUSB0            ← 동글 직결
+```
+
+**`node` 프로세스 0개. 별도 python 데몬 0개. Z2M 0개.** domoticz(C++) · CPython 3.14 ·
+zigpy · bellows · aiohttp가 **한 주소공간**에 있다(`cpython-314` 확장 매핑 240건 확인).
+이 경로의 브로커 의존도 없다 — Z4D가 시리얼을 직접 쥔다.
+
+### 메모리
+
+| 항목 | 값 |
+|---|---|
+| `VmRSS` | **123,788 kB ≈ 121 MB** |
+| `Pss` | 123,320 kB — `Shared_Clean` 496 kB뿐 → **공유 라이브러리로 부풀린 숫자가 아니다** |
+| `Private_Dirty` (힙) | 84,620 kB |
+| `Private_Clean` (코드·데이터) | 38,672 kB |
+| `VmHWM` | `VmRSS`와 동일 → 아직 최고점 |
+| `VmSwap` | 0 |
+
+### 디스크
+
+| 항목 | 값 |
+|---|---|
+| 바이너리 `.domoticz-wrapped` | **18,228,688 B ≈ 17.4 MB** |
+| `share/domoticz` (www·scripts·dzVents) | 25 MB |
+| **설치 소계** | **43 MB** |
+| userdata (`www` 18M + `plugins` 18M 복사본 + DB 420K) | 37 MB |
+| DB (`domoticz.db`, 1기기 페어링 후) | **420 KB** |
+
+§5에서 소스로 추정만 하고 못 쟀던 바이너리가 **17.4MB**로 닫혔다.
+
+### 현재 Z2M 경로와의 대조
+
+| | **domoticz 2026.3 + Z4D** | 현재 Z2M 경로 |
+|---|---|---|
+| 프로세스 | **1** | Node + 브로커 ≥ 2 |
+| 바이너리 | **17.4 M** | node **49.5 M** |
+| 앱 자산 | 25 M | `node_modules` **92 M** |
+| **디스크 소계** | **43 M** | **141 M** |
+| RSS | **121 M** (측정) | **미측정** |
+
+> **디스크는 이겼다 — 1/3.3, 98M 절감.** **RAM은 아직 판정 못 한다.**
+> Z2M+Node의 RSS를 우리가 재본 적이 없어서 비교 대상이 없다. 그리고 121MB는 그 자체로
+> 가벼운 값이 아니다 — Duo S 실측 `MemTotal` 311MB의 **39%**, Duo 256M 추정 165MB의 **73%**다.
+
+### 이 숫자를 옮길 때의 경계
+
+1. **x86_64 / glibc / Python 3.14다.** 우리 레인은 riscv64 또는 aarch64이고 Buildroot의
+   Python은 **3.12.9**다 — 인터프리터 버전부터 다르다(§0.1).
+2. **2분 43초, 기기 1대다.** 정상상태도 아니고 규모도 아니다. `VmHWM = VmRSS`는 "아직 안
+   올라갔다"이지 "여기가 천장이다"가 아니다.
+3. **nix closure는 315.5 MiB**지만 이 값을 우리 rootfs 예산에 그대로 대입하면 안 된다 —
+   nix는 의존을 통째로 세고, Buildroot는 시스템 전체가 공유한다. **회계축이 다르다.**
+4. **121MB의 분해가 아직 없다.** domoticz 단독 vs +Z4D를 갈라 재야 Python/zigpy 몫이 나온다.
+   눌러담기의 다음 한 수는 거기다.
+
+## 6.2 RSS 분해 — 35 MB는 domoticz, 86 MB는 Python (2026-09-01)
+
+**[인계 — 실증 레인 담당자 측정, thinkpad 15:52–15:59, `/proc/<pid>/status`. 우리 측정 아님.]**
+같은 기계·같은 바이너리(`domoticz 2026.3`, nixpkgs `34ab9907` nixos-unstable, python3=3.14.7)
+위에서 세 조건을 갈라 쟀다.
+
+| | 조건 | `VmRSS` | Threads | ttyUSB fd |
+|---|---|---|---|---|
+| **A′** | domoticz만 (Z4D 하드웨어 `enabled=false`) | **35,864 kB ≈ 35.0 MB** | 17 | 0 |
+| **B** | +Z4D 로드, `Mode2=None` (라디오 미기동) | **86,924 kB ≈ 84.9 MB** | 22 | 0 |
+| **C** | +Z4D +EZSP +동글 물림 | **124,376 kB ≈ 121.5 MB** | 29 | 1 |
+
+A′는 두 번 재서 34.9 / 35.0 MB로 재현. B·C는 `VmHWM == VmRSS`, `VmSwap 0`.
+
+```
+CPython 3.14 + Z4D import 계층   B − A′ = 51,060 kB ≈ 49.9 MB
+zigpy / bellows 라디오 스택      C − B  = 37,452 kB ≈ 36.6 MB
+────────────────────────────────────────────────────────────
+Python 스택 전체                 C − A′ = 88,512 kB ≈ 86.4 MB   ← C의 71%
+```
+
+> **"Node를 뺐더니 Python이 들어온 것인가"의 답은 예다.**
+> domoticz C++ 본체는 **35 MB**이고, 나머지 **86 MB가 Python**이다. 하드웨어가 없으면
+> 플러그인 정의는 로드돼도 CPython 인터프리터 인스턴스가 아예 안 뜬다(A′의 17스레드가 그 상태).
+
+**보고자가 밝힌 한계 — B는 하한선이다.** `Mode2=None`에서 `Z4D loaded 676 certified devices`
+로그가 안 나와, certified DB 로드를 포함한 완전 초기화까지 갔는지 확인되지 않았다. 덜 갔다면
+진짜 B는 더 크고 그만큼 "zigpy 몫 36.6 MB"는 **과대평가**다. **이 방향으로만 틀린다.**
+→ 보수적으로 **`CPython+Z4D 계층 ≥ 50 MB` · `zigpy 라디오 ≤ 37 MB`** 로 읽는다.
+
+**디스크 정정**: userdata 37 MB(`www` 18M + `plugins` 18M)는 nix store가 읽기 전용이라 만든
+**쓰기 가능 사본**이고 3rd 리포에 쓰기를 안 내려는 런타임 사본이다. **랩 편의의 산물이지
+하한이 아니다** — 배포판에선 심볼릭 링크로 줄일 여지가 있다.
+
+### 이 숫자가 §4 표를 계산 가능하게 만든다
+
+**호스트(UI·DB·자동화)는 싸고, 비싼 것은 Zigbee 호스트다.** 35 MB 위에 무엇을 얹느냐가 전부다.
+
+| 경로 | 호스트 | Zigbee 호스트 | RSS 합계 |
+|---|---|---|---|
+| domoticz + **Z4D** | 35 M | **+86 M** (CPython+zigpy) | **121 M** (측정) |
+| domoticz + **Z2M** | 35 M | + Node **미측정** + 브로커 | **미측정** |
+| domoticz + **자체 Zig 게이트웨이** | 35 M | + 작다 (미측정) | **여기가 처음으로 계산 가능해졌다** |
+| **A⁰ ser2net** | 35 M(또는 0) | **0** — 남의 기계 | 최소 |
+
+**기준 보드는 Duo S 512MB다 (GLG 2026-09-01: "보드 기준은 512M Duo S로 잡아. 내가 그걸로
+가니까").** 그 기준에서:
+
+| 보드 | 가용 RAM | `domoticz+Z4D` 121 M | 판정 |
+|---|---|---|---|
+| **Duo S 512M (기준)** | **311 M** (실측 `MemTotal`) | **39%** | **여유 있다** |
+| Duo S + ION 회수 | ~459 M (계산) | 26% | — |
+| Duo 256M (조건부 후보) | ~165 M (추정) | 73% | 빡빡 |
+| Duo 256M + ION 회수 | ~232 M (계산) | 52% | 가능 |
+
+**Duo S 기준으로는 이 스택이 들어간다.** 256M 줄은 지금 타깃이 아니라 참고이고,
+`docs/TARGET_DEVICE.md`의 ION 회수와 곱해지면 그때 다시 본다.
+
+**그리고 Python 86 MB를 "새 비용"으로 읽으면 안 된다 (GLG 2026-09-01: "python은 어차피
+들어갈 테니까").** [측정] 우리 arm64 defconfig는 이미 `BR2_PACKAGE_PYTHON3=y`(:107)다 —
+**디스크 축에서 Python은 이미 지불된 값이다.** 다만 **RAM 축은 다르다**: 이미지에 있는 것과
+인터프리터가 떠서 86 MB를 쥐는 것은 별개다. 두 축을 섞지 않는다. 요지는
+**"Node가 빠지는 것이 순이득"**이고, Duo S 기준에서 그 순이득은 충분하다.
+
+## 6.3 ⚠️ Z4D는 기동할 때마다 밖으로 나간다 (2026-09-01)
+
+**[인계 — 실증 레인 담당자가 소스와 로그로 확인. 우리 측정 아님.]** §6의 `CheckRequirements`
+게이트를 우리가 지적하자 그쪽이 구현을 열어 더 큰 것을 찾았다.
+
+```python
+# Modules/checkingUpdate.py:456-466
+def is_internet_available():
+    try:
+        with urllib.request.urlopen("https://www.google.com", timeout=3) as response:
+            return response.status == 200
+    except (urllib.error.URLError, socket.timeout):
+        return False
+```
+
+1. **기동 때마다 `https://www.google.com`으로 아웃바운드**를 시도한다. 오프라인이면
+   **3초 타임아웃**을 물고, 그 결과로 §6의 요구사항 게이트가 **사라진다.**
+2. **텔레메트리가 기본 ON.** `MatomoOptIn` 기본값 **1 = opt-out** [읽음
+   `Classes/PluginConf.py:36`]. 실제로 발신됐다 [측정 15:44:44, 로그 원문]:
+   `Z4D sends analytics information.` 대상은 `https://z4d.pipiche.net/matomo.php`
+   [읽음 `Modules/matomo_request.py:76`].
+3. **런타임 pip 업그레이드 시도.** `Plugin looks to upgrade the Certified Device package` —
+   기동 중 외부 패키지를 pip으로 올리려 한다(그쪽 환경은 pip 부재로 실패).
+
+**우리 불변식과 정면으로 만난다** — *"On-device first: cloud may be a fallback, not a
+dependency for local control"* · *"Own the box"*. 임베디드 이미지에는 pip이 없고, 제품 허브가
+기동할 때마다 제3자에게 신호를 보내는 것은 기본값으로 둘 수 없다.
+
+**GLG 지시 (2026-09-01): 텔레메트리는 끈다.** 실증 레인에 그렇게 지시가 갔다.
+남는 것은 나머지 둘 — `is_internet_available()`의 google.com 조회와 런타임 pip 업그레이드다.
+**끌 수 있는지, 끄면 무엇이 같이 죽는지가 우리가 검수할 항목**이다(§9). 거부권이 아니라
+결정 입력이고, 지금 판정하지 않는다.
+
+## 6.4 라이선스 — 등급이 바뀌지 않는다 (GLG 확인 요청, 2026-09-01)
+
+**결론: 이 스택으로 갈아타도 우리가 지는 라이선스 의무는 달라지지 않는다.
+우리는 이미 GPL-3.0을 싣고 있다.**
+
+| 구성요소 | 라이선스 | 근거 |
+|---|---|---|
+| **domoticz** | **GPL-3.0** | [읽음] `License.txt` 머리말 + Buildroot `domoticz.mk`의 `DOMOTICZ_LICENSE = GPL-3.0` |
+| **Z4D** (Zigbee for Domoticz) | **GPL-3.0** | [읽음] `LICENSE.txt` + 소스 헤더 `SPDX-License-Identifier: GPL-3.0` |
+| **zigpy · bellows · zigpy-znp** | **GPL-3.0** | [측정] 이 기계 store 산출물의 `dist-info/METADATA` → `License: GPL-3.0` |
+| **현재 우리가 싣는 Zigbee2MQTT** | **GPL-3.0** | [측정] `zigbee2mqtt-2.13.0/package.json` → `"license": "GPL-3.0"` |
+| Node.js | MIT | 인계·통념, 이 리포에서 확인 안 함 |
+
+> **핵심**: 맨 아래에서 두 번째 줄이 답이다. **현재 이미지가 이미 GPL-3.0 애플리케이션을 싣고
+> 있다.** domoticz+Z4D는 같은 등급으로의 교체이지 새 의무의 도입이 아니다.
+
+**임베디드에서 실제로 걸리는 조항은 GPL-3.0 §6 Installation Information(반-티보화)이다** —
+"User Product"에 오브젝트 코드를 실어 보내면 **사용자가 수정본을 설치할 수 있게** 해야 한다.
+이 리포의 불변식이 이미 그 방향이다 — *"Own the box: serial console, bootloader/recovery,
+rootfs, service lifecycle, radio path must be inspectable."* **그리고 이 의무는 지금의 Z2M
+경로에도 똑같이 붙어 있다.** 새로 생기는 게 아니다.
+
+**소스 제공 의무의 기계도 이미 있다.** [측정] Buildroot에 `legal-info` 타깃이 있고
+(`buildroot/Makefile:144`), `manifest.csv` · `licenses/` · `sources/`를 산출한다(`:226-231`).
+**제품 이미지를 굽는 흐름에 `make legal-info`를 한 칸 넣는 것이 이 의무의 구현이다.**
+아직 우리 `bsp/build.sh`는 이걸 부르지 않는다 — 등록해 둘 빚이다.
+
+**아직 확인 안 한 것**: `z4d-certified-devices`(별도 pip 패키지, 기기 정의 DB)의 라이선스.
+그리고 위 zigpy 계열 근거는 이 기계에 있던 **구버전 산출물**(zigpy 1.4.1 / bellows 0.49.1 /
+zigpy-znp 1.0.0)의 메타데이터다 — 실제 사용 버전(2.1.0 / 1.0.0 / 1.1.0)에서 재확인이 남는다.
+상류가 라이선스를 바꿨을 가능성은 낮지만 확인 안 한 것은 확인 안 한 것이다.
 
 ## 7. 스크립트 면이 필요해지면
 
@@ -252,15 +526,23 @@ MQTT: `mosquitto` 2.0.20(우리 이미지에 이미 `=y`) · `paho-mqtt-c` · `p
 
 ## 9. 안 잰 것 (값 붙는 순서)
 
-1. **`cryptography<=40.0.2`가 실제 비호환인가** — 업스트림 체인지로그 한 번. §6 벽 2의 전부.
+1. **최신 `cryptography`로 Z4D가 실제로 도는가** — 핀 자체는 §6에서 정리됐다(Z4D 코드가
+   `cryptography`를 직접 쓰지 않고, Zigbee 스택은 핀을 전부 통과한다). 남은 건 런타임 사실
+   하나뿐이고, **실증 레인이 최신으로 진행하기로 했으므로 그 답은 거기서 나온다.** 돌면 우리
+   벽 2는 소멸, 안 돌면 우리 쪽 비용이 그쪽보다 크다(휠 vs 크로스빌드).
 2. **domoticz `2026.3`을 Buildroot에서 굽는 레시피** — 서브모듈 5개(`libwebem`·`jwt-cpp`·
    `jsoncpp`·`minizip`·`sqlite-amalgamation`) 조달 방식 미결정. **GLG가 버전을 정했으므로
    이건 조사가 아니라 실작업이다.** §5·§6 벽 1.
-3. **domoticz 바이너리 실측** — minimal 트리에 domoticz만 켜서 굽는다(V8 없어 싸다).
-4. **RSS 실측** — MemTotal 311MB 보드에서. §3의 RAM 열은 전부 남의 숫자다.
-5. **riscv64/musl 가부** — 제품 ISA 레인. domoticz·zigpy 양쪽 다 미측정.
-6. **`ser2net`로 EZSP 원격 구동 시 지연·안정성** — A⁰의 유일한 미지수.
-7. **SMHUB v1.0.0 실기** — 우리 기기는 아직 beta5 슬롯이다(`docs/SMHUB.md`). §2.2는
+3. ~~domoticz 바이너리 실측~~ → **닫힘: 17.4 MB** (x86_64, §6.1). 크로스빌드 값은 별개.
+4. ~~RSS 분해~~ → **닫힘: 35 M(domoticz) + 86 M(Python) = 121 M** (§6.2, x86). 남은 것:
+   (a) **Z2M+Node 대조군** — 실증 레인이 RAIL 1 뒤에 재고 먼저 제안하기로 했다 (b) 기기 수에
+   따른 증가 곡선 (c) **riscv64/musl에서 다시 — 이건 우리 몫이다.**
+5. **Z4D의 아웃바운드 셋을 끌 수 있는가** (§6.3) — `is_internet_available()`의 google.com 조회 ·
+   Matomo 텔레메트리(기본 ON) · 런타임 pip 업그레이드. 설정으로 끄면 무엇이 같이 죽는지까지가
+   질문이다. **오프라인 제품 허브의 가부가 여기 달렸다.**
+6. **riscv64/musl 가부** — 제품 ISA 레인. domoticz·zigpy 양쪽 다 미측정.
+7. **`ser2net`로 EZSP 원격 구동 시 지연·안정성** — A⁰의 유일한 미지수.
+8. **SMHUB v1.0.0 실기** — 우리 기기는 아직 beta5 슬롯이다(`docs/SMHUB.md`). §2.2는
    전부 릴리즈노트 문서지 실측이 아니다.
 
 ---

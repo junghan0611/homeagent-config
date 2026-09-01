@@ -45,6 +45,16 @@
   되는 걸 확인하는 게 아니다. 모든 표는 "되나"가 아니라 **"512MB에 들어가나"**로 읽는다.
 - **그리고 이건 Milk-V 레인 구조를 바꿀 수 있다 (GLG)**: 회사 레인 실증이 잘 되면 이 리포의
   이미지 구조 자체를 그쪽에 맞춰 다시 볼 수 있다. **지금은 기다린다.**
+- **Node를 빼면 보드가 한 칸 내려간다 (GLG 2026-09-01)**: 타깃이 **Milk-V Duo 256M
+  (SG2002, 256MB)** 으로 갈 수 있다. [측정] SDK에 보드 정의가 이미 있다
+  (`device/milkv-duo256m-{glibc-arm64,musl-riscv64}-sd`, `config.json` = `"CA53 + DDR 256MB"`),
+  Duo S와 같은 cv181x 계열이라 브링업이 새 레인이 아니다. **그런데 256MB는 256MB가 아니다** —
+  `memmap.py` 기준 Linux 몫은 Duo S가 `512−2−170(ION)=340M`(실측 MemTotal 311M),
+  Duo 256M은 `256−2−75(ION)=179M`(→ 같은 비율이면 **~165M** 추정, 미측정). **ION은 카메라/ISP
+  몫이라 헤드리스 허브엔 거의 버리는 값이고, 그 줄은 우리가 소유한 보드 설정이다 — 아직 안 건드렸다.**
+  차이 둘도 미리 잡아둠: **eMMC 변형 없음**(`-sd`만; flash-emmc·eMMC CID stable-mac 경로 무효)
+  · **온보드 WiFi 없음**(dts에 `aic8800|wifi|sdio` **0건** vs Duo S 3건 → RAIL 6의 wlan0 주제가
+  이 보드에선 사라진다). 상세 = `docs/TARGET_DEVICE.md` "256MB 후보" 절. **지금 옮기지 않는다.**
 - **다음에 값이 붙는 순서**: ① `cryptography<=40.0.2` 핀이 실제 비호환인가(미측정)
   ② **`2026.3` Buildroot 레시피 — 서브모듈 조달**(조사 아님, 실작업) ③ domoticz 바이너리 실측
   ④ RSS 실측 ⑤ riscv64/musl 가부.

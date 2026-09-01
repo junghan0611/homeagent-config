@@ -69,6 +69,10 @@ lanes are Duo S (arm64 dev / RISC-V product ISA) + SMHub reference.)*
 | What devices/product line can the hub support? | [`docs/HUBS.md`](docs/HUBS.md) §7 |
 | Single radio doing Zigbee + Thread at once — how / **when**? | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) |
 | Chip trajectory & when to flip to single-chip concurrent | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) §3.7 |
+| **Should a stack run on the hub, or should the hub only talk to it?** | [`docs/ECOSYSTEM-PORTFOLIO.md`](docs/ECOSYSTEM-PORTFOLIO.md) |
+| Which home-automation host actually fits 512MB? (Buildroot survey) | [`docs/ECOSYSTEM-PORTFOLIO.md`](docs/ECOSYSTEM-PORTFOLIO.md) §3 |
+| What does the Zigbee host cost — Z2M vs zigpy vs our own vs none? | [`docs/ECOSYSTEM-PORTFOLIO.md`](docs/ECOSYSTEM-PORTFOLIO.md) §4 · §6.2 |
+| What does it cost to speak to Home Assistant / openHAB / Node-RED / …? | [`docs/INTEGRATION-SURFACE.md`](docs/INTEGRATION-SURFACE.md) |
 
 ---
 
@@ -85,6 +89,8 @@ lanes are Duo S (arm64 dev / RISC-V product ISA) + SMHub reference.)*
 | [`docs/TARGET_DEVICE.md`](docs/TARGET_DEVICE.md) | board/radio strategy details |
 | [`docs/HUBS.md`](docs/HUBS.md) | certified Zigbee/Matter hub landscape research (DIRIGERA lane parked — not our direction), SoC/radio comparison, product line |
 | [`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md) | single-radio Zigbee+Thread concurrency — strategy & timing (MG21/24/26 → Series 3) |
+| [`docs/ECOSYSTEM-PORTFOLIO.md`](docs/ECOSYSTEM-PORTFOLIO.md) | home-automation stack landscape — what a 512MB hub can host, and what it should only talk to. The software half of `docs/HUBS.md` |
+| [`docs/INTEGRATION-SURFACE.md`](docs/INTEGRATION-SURFACE.md) | the survey under it — all 36 SLZB integrations, transport axis and on-box cost (draft) |
 | [`docs/README.md`](docs/README.md) | docs map |
 
 Start with `NEXT.md` when continuing work.

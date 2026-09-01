@@ -24,6 +24,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`BUILDROOT.md`](BUILDROOT.md) | SG2000/Duo S Buildroot experience + strategy (core lane) | building/flashing the Duo S image, either ISA lane (operational how-to in `../bsp/README.md`) |
 | [`TARGET_DEVICE.md`](TARGET_DEVICE.md) | board and radio strategy details | SG2000 / SSD202D / EFR32 decisions |
 | [`THP23-LIBERATION.md`](THP23-LIBERATION.md) | THP23-ZB-X liberation research (parked 128MB evidence) | reference for the parked 128MB lower-bound lane |
+| [`DUO-S-BUTTONS.md`](DUO-S-BUTTONS.md) | Duo S 온보드 버튼으로 런타임 팩토리리셋을 못 묶는 이유 (조사 완료·보류 2026-08-30). 벽 둘을 분리 — 이미지에 `gpio-keys` 노드도 `CONFIG_KEYBOARD_GPIO`도 없어 **어떤 버튼도 이벤트를 못 낸다**(벽 1), RST=하드웨어 리셋·RECOVERY=BootROM 스트랩이라 런타임 입력이 아니다(벽 2) | 버튼/팩토리리셋/입력 GPIO를 다시 볼 때 |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | ADRs and structure decisions | changing process/backend boundaries |
 | [`API.md`](API.md) | REST/SSE API notes | changing clients or routes |
 | [`BUILD.md`](BUILD.md) | **origin-lane** build workflow notes (RPi5/Android/Yocto) | origin-lane build/release tooling — not the SG2000 runtime build |
@@ -38,6 +39,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`MULTIPROTOCOL.md`](MULTIPROTOCOL.md) | **핵심 난제 SSOT — 단일 EFR32MG24로 Zigbee+Thread 동시** (Multi-PAN RCP + cpcd + zigbeed + otbr). 동일채널 vs Concurrent Listening 모드, HA 애드온 폐기·2-라디오 후퇴의 정직한 판정, SMHub 증명 게이트 G0~G4 | 단일 라디오 멀티프로토콜 설계/증명, MG24 재플래시(RCP), Zigbee+Thread 동시 재현 | 
 | [`HUBS.md`](HUBS.md) | **인증 Zigbee/Matter 허브 랜드스케이프 SSOT** (조사 자료 — 우리 방향 아님; DIRIGERA 레인 폐기 2026-07-14) — 인증(CSA Matter)받고 자체 펌웨어/데몬을 올릴 수 있는 개방 허브 조사. IKEA DIRIGERA·Zemismart M1(인증 블랙박스 레퍼런스)·SMHub(SG2000 학습 앵커) 비교. Main SoC 동형 분석, Thread TBR vs z2m 경로, 오픈소스 클론 후보 | 허브 랜드스케이프 조사, Thread/TBR 개념 확인 |
 | [`ECOSYSTEM-PORTFOLIO.md`](ECOSYSTEM-PORTFOLIO.md) | **홈오토메이션 스택 랜드스케이프** (조사 자료 — 채택 결정 아님). `HUBS.md`(하드웨어)의 짝. 층위 A⁰/A/A′/B/C, Buildroot 2025.02 패키지 실사(domoticz만 패키징됨), Zigbee 호스트 선택지 4개(Z2M·Z4D·자체·ser2net), domoticz·Zigbee for Domoticz 실사, 벤더 두 곳의 어댑터/앱-레지스트리 모델 | "512MB에 무엇을 얹고 무엇을 얹지 않나", Node를 빼는 경로 검토, 외부 플랫폼 연동 판단 |
+| [`INTEGRATION-SURFACE.md`](INTEGRATION-SURFACE.md) | **SLZB Integrations 36개 전수 실사** (초안). `ECOSYSTEM-PORTFOLIO.md`의 층위 모델을 이어 씀 — 전송축이 **34/36 HTTP로 수렴**하고 `libcurl`+`mosquitto`가 이미 `=y`라 **36/36이 새 온박스 코드 0으로 붙는다**(§6.1). 온박스 호스팅 후보는 Buildroot **0/9**이지만 그건 베이스 이미지 질문이고, 업계의 그릇은 **런타임 앱 레지스트리**다(§3.1) — 그 부품(`opkg`·`opkg-utils`·`rauc`)은 이미 트리에 있다(§6.4) | 외부 플랫폼 연동 비용 산정, "무엇을 발행하면 몇 개가 붙나", 앱 레지스트리 그릇 논의 |
 | [`SMHUB.md`](SMHUB.md) | **SMHub Nano Mg24 single SSOT** — HW platform, radios, state model (backend.db/OpenRC/p7), live 0.9.8 verify log, control-boundary/reproduction matrix, info walls, vendor-manual review, open design questions, next verification steps | any SMHub product-verification / bring-up / config-set work (merges former PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW) |
 
 ## Current Direction

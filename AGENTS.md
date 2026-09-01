@@ -25,6 +25,7 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 | 다음에 뭘 할지 (실작업 핸드오프) | `NEXT.md` → **Phase F** |
 | 왜 / 방향 / 제품화 틀 (North star, 페이즈 그리드) | `ROADMAP.md` |
 | Buildroot 경험·전략 / 운영 how-to | `docs/BUILDROOT.md` / `bsp/README.md` |
+| **밖의 스택을 얹을까 말을 걸까** (랜드스케이프 + 통합 실사) | `docs/ECOSYSTEM-PORTFOLIO.md` → `docs/INTEGRATION-SURFACE.md` |
 | SMHub 실측 버전·설치면 (참고 근거, 벤더 비공개분 포함 좌표) | `docs/SMHUB.md` |
 | Duo S 라디오 펌웨어 (보드 정렬 7.4.2) | `firmware/zbdonglee/` |
 | 런타임 아키텍처 (Zig `homeagentd` + C906L 메일박스) | `runtime/README.md` |
@@ -57,6 +58,8 @@ Keep this repo focused on the hub: Linux host, onboard radio, protocol bridge, r
 | `ROADMAP.md` | phase direction and open lanes |
 | `VERSION.md` | stack, version, physical device matrix |
 | `runtime/README.md` | SG2000 runtime architecture (RISC-V C906 boot, L0–L4, Zig + C906L); front-door for `runtime/` code |
+| `docs/ECOSYSTEM-PORTFOLIO.md` | 홈오토메이션 스택 랜드스케이프 — **512MB에 무엇을 얹고 무엇에 말만 거나**. 층위 A⁰/A/A′/B/C, Buildroot 실사, Zigbee 호스트 선택지, 벤더 두 곳의 어댑터/앱-레지스트리 모델. `docs/HUBS.md`(하드웨어)의 소프트웨어 짝 |
+| `docs/INTEGRATION-SURFACE.md` | 위 문서의 **하위 실사** — SLZB Integrations 36개 전수. 전송축 수렴, 온박스 비용, 오프라인 판정 (초안) |
 | `docs/BUILDROOT.md` / `bsp/README.md` | 커스텀 Buildroot 코어 레인 — 경험·전략 / 운영 how-to (제품화 틀의 실제 빌드면) |
 | `docs/SMHUB.md` | SMHub Nano 실측 SSOT — HW/라디오/설치면/버전 (제품이 뭘 깔아주나의 참고 근거) |
 | `docs/TARGET_DEVICE.md` | board/radio strategy details |
@@ -156,7 +159,10 @@ Do not say:
 3. `ROADMAP.md`
 4. `runtime/README.md` for the SG2000 runtime (Zig + C906L)
 5. `VERSION.md`
-6. `docs/TARGET_DEVICE.md` when board/radio details matter
-7. `PRIVATE.md`
+6. `docs/TARGET_DEVICE.md` when board/radio details matter — **기준 보드는 Duo S 512MB**이고,
+   그 문서의 "256MB 후보"·"ION 회수" 절이 눌러담기의 하드웨어 쪽 여지다
+7. `docs/ECOSYSTEM-PORTFOLIO.md` (+ `docs/INTEGRATION-SURFACE.md`) when the question is
+   **밖의 스택을 얹을지 말을 걸지** — 온박스 호스팅 후보, Zigbee 호스트 선택지, 외부 플랫폼 연동 비용
+8. `PRIVATE.md`
 
 For code changes, inspect the relevant source and tests directly. Do not rely on stale prose when the code is the source of truth. Zig hub logic lives in `runtime/zig/homeagentd/`; the C906L FreeRTOS mailbox base in `runtime/c906/rtos-agent/` — both SG2000-only (Milk-V Duo S / SMHUB Nano).

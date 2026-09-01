@@ -145,6 +145,19 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 
 ## 다음 텀에 정리할 작은 빚
 
+- **ION 예약 회수 — Duo S가 지금 148M을 안 쓰고 잡고 있다 (조사 완료, 착수 안 함, 2026-09-01).**
+  [측정] `build/boards/cv181x/<board>/memmap.py`의 `ION_SIZE`가 Duo S 170M / Duo 256M 75M이고,
+  그 안쪽 예약은 `H26X_BITSTREAM 2M` + `ISP_MEM_BASE 20M`(= `FREERTOS_RESERVED_ION_SIZE` 22M)
+  뿐이다. **헤드리스 허브는 ISP도 H.264도 안 쓴다** → assert가 강제하는 바닥 22M까지면
+  **Duo S ~148M · Duo 256M ~53M 회수 후보**. 별도로 `BOOTLOGO/FRAMEBUFFER 7.8M`도 디스플레이가
+  없으면 미수금이다. **레버 위치**: `memmap.py`는 단일 소스이고 `build/scripts/mmap.mk`가
+  `cvi_board_memmap.{h,conf,ld,txt}`를 만들어 u-boot·커널·FreeRTOS 링커가 같이 먹는다 →
+  한 파일이 세 층을 움직인다. **다만 `bsp/build.sh`는 지금 `memmap.py`를 주입하지 않는다**
+  (defconfig 둘만) → 실작업은 **주입 슬롯 하나 추가**(`bsp/board/<board>/memmap.py`)이지
+  포크가 아니다. **미검증 위험 둘**: cvi 멀티미디어 드라이버가 들어있는 채로 ION만 줄이면 부팅
+  실패 가능(드라이버 제거와 짝) · `BOOTLOGO`는 u-boot 로고 경로가 참조. 상세 =
+  `docs/TARGET_DEVICE.md` "레버 — ION은 카메라 몫이고" 절. **GLG 승인 없이 시작하지 마라.**
+
 - **Duo S 온보드 버튼으로는 런타임 팩토리리셋을 못 묶는다 — 조사 완료, 보류 (2026-08-30).** GLG가 다시 볼 예정이라 `docs/DUO-S-BUTTONS.md`에 따로 남겼다. 요지: 이 이미지엔 `gpio-keys` 노드도 `CONFIG_KEYBOARD_GPIO`도 없어 **어떤 버튼도 이벤트를 못 낸다**(벽 1), 그리고 RST는 하드웨어 리셋·RECOVERY는 BootROM이 전원 인가 시점에 읽는 스트랩이라 런타임 입력이 아니다(벽 2). SoC의 전용 파워버튼 핀 `PWR_BUTTON1`은 Duo S에서 이더넷 속도 LED로 가 있다(`cvi_board_init.c:59`, 4개 변종 전부). 재개하면 **fork 핀 축이라 위 커널 defconfig 주석 빚과 한 번에 묶는 게 싸다**.
 
 - **커널 defconfig 주석이 틀렸다 — 이미지엔 무해 (2026-07-24 fork 실물 확인).** `build/boards/cv181x/sg2000_milkv_duos_glibc_arm64_emmc/linux/cvitek_..._defconfig` 203번 설명주석이 "ZBDongle-E (CH9102F) → CDC-ACM"인데 **실측은 CP210x**(ttyUSB0). **심볼은 전부 맞다** (`USB_ACM=y`·`USB_SERIAL_CP210X=y`·`CH341=y`·`FTDI_SIO=y`) — 거짓인 건 순수 `#` 주석뿐. kconfig가 주석을 무시하므로 고쳐도 **이미지는 바이트 불변 → 실기 검증 불필요**. fork에서 주석만 정정하고 `setup.sh`의 `SDK_COMMIT` pin만 올리면 끝. (이전 NEXT의 "실기 검증이 끝난 뒤에"는 과한 신중함이었다.)

@@ -37,6 +37,7 @@ This directory keeps supporting evidence and implementation notes. The living ro
 | [`PLATFORM-MATRIX.md`](PLATFORM-MATRIX.md) | legacy platform comparison | origin-lane platform questions |
 | [`MULTIPROTOCOL.md`](MULTIPROTOCOL.md) | **핵심 난제 SSOT — 단일 EFR32MG24로 Zigbee+Thread 동시** (Multi-PAN RCP + cpcd + zigbeed + otbr). 동일채널 vs Concurrent Listening 모드, HA 애드온 폐기·2-라디오 후퇴의 정직한 판정, SMHub 증명 게이트 G0~G4 | 단일 라디오 멀티프로토콜 설계/증명, MG24 재플래시(RCP), Zigbee+Thread 동시 재현 | 
 | [`HUBS.md`](HUBS.md) | **인증 Zigbee/Matter 허브 랜드스케이프 SSOT** (조사 자료 — 우리 방향 아님; DIRIGERA 레인 폐기 2026-07-14) — 인증(CSA Matter)받고 자체 펌웨어/데몬을 올릴 수 있는 개방 허브 조사. IKEA DIRIGERA·Zemismart M1(인증 블랙박스 레퍼런스)·SMHub(SG2000 학습 앵커) 비교. Main SoC 동형 분석, Thread TBR vs z2m 경로, 오픈소스 클론 후보 | 허브 랜드스케이프 조사, Thread/TBR 개념 확인 |
+| [`ECOSYSTEM-PORTFOLIO.md`](ECOSYSTEM-PORTFOLIO.md) | **홈오토메이션 스택 랜드스케이프** (조사 자료 — 채택 결정 아님). `HUBS.md`(하드웨어)의 짝. 층위 A⁰/A/A′/B/C, Buildroot 2025.02 패키지 실사(domoticz만 패키징됨), Zigbee 호스트 선택지 4개(Z2M·Z4D·자체·ser2net), domoticz·Zigbee for Domoticz 실사, 벤더 두 곳의 어댑터/앱-레지스트리 모델 | "512MB에 무엇을 얹고 무엇을 얹지 않나", Node를 빼는 경로 검토, 외부 플랫폼 연동 판단 |
 | [`SMHUB.md`](SMHUB.md) | **SMHub Nano Mg24 single SSOT** — HW platform, radios, state model (backend.db/OpenRC/p7), live 0.9.8 verify log, control-boundary/reproduction matrix, info walls, vendor-manual review, open design questions, next verification steps | any SMHub product-verification / bring-up / config-set work (merges former PRODUCT-CONFIG-MODEL + SMHUB-CONTROL-MAP + SMHUB-MANUAL-REVIEW) |
 
 ## Current Direction

@@ -207,7 +207,7 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
   이고, 릴노트의 "Persistent Device Identity"는 OTA 경로에 여전히 적용되지 않는다.
   **우리 쪽 접근 절반은 살아 있다**: `~smlight/.ssh/authorized_keys` **98바이트, mtime Jun 30 07:37**
   → 6/30에 등록한 우리 공개키가 OTA 두 번을 넘어 p7에서 지속(§3.7 판정과 일치).
-- **⚠️ §3.6 복구 절차를 그대로 밟았는데 키가 남지 않았다 (2026-09-07, 미해결).** 순서대로
+- **⚠️ §3.6 복구 절차를 그대로 밟았는데 키가 남지 않았다 (2026-09-07, 원인 규명됨 — 아래 ★).** 순서대로
   ① `sudo rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub` (에러 없음)
   ② `sudo ssh-keygen -A` → **`generating new host keys: RSA ECDSA ED25519` 출력**
   ③ `sudo mkdir -p /run/sshd`
@@ -218,15 +218,36 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
   → **성공 출력이 셋(keygen 배너 · `sshd -t` 통과 · `Starting sshd`) 나왔는데 결과는 원상복귀다.**
   이 리포/실증 레인이 「가짜 초록」이라 부르는 자리의 교과서적 표본이고, **판정은 `ls`와 `pgrep`이
   했다**(배너 아님).
-  - **1순위 가설**: 무언가가 **공장 0바이트 키를 되돌려 놓는다.** mtime이 새로 생성된 값이 아니라
-    **원래 빌드시각으로 되돌아온 것**이 근거 — `cp -a`/`cp -p`(타임스탬프 보존) 계열 복원이거나,
-    `/etc/ssh` 쓰기가 overlay upper에 안 붙고 ro lower가 다시 보이는 것. `sshd` init 또는
-    `smhub-services`/`firstboot` 계열이 sshd 기동 시 `/etc/ssh`를 벤더 원본으로 덮는 경로 의심.
-  - **다음 진단 (읽기만)**: `ls -la /etc/ssh` · `mount | grep -E 'overlay|/etc'` ·
-    `readlink -f /etc/ssh` · `cat /etc/init.d/sshd` · `grep -rl ssh_host /etc/init.d /usr/lib/smhub /opt/bin`
-    · `find / -xdev -name 'ssh_host_ed25519_key' 2>/dev/null` (다른 위치에 생성됐는지).
-  - **함의**: 이 유닛의 SSH는 "키를 만들면 된다"가 아니라 **누가 `/etc/ssh`를 소유하는가** 문제다.
-    제품 이미지에선 이 축을 우리가 소유해야 한다([#8](https://github.com/junghan0611/homeagent-config/issues/8)).
+  - **★ 원인 확정 (2026-09-07, `cat /etc/init.d/sshd`) — 오버레이가 아니었다.** 벤더 init의
+    `start_pre()`가 **p7에 키를 캐시하고 매 기동 복원**한다:
+    ```sh
+    persist="/mnt/user/ssh"
+    if [ -d "$persist" ] && ls "$persist"/ssh_host_*_key 1>/dev/null 2>&1; then
+            cp -p "$persist"/ssh_host_*_key* /etc/ssh/      # ← 매번 복원
+    else
+            /usr/bin/ssh-keygen -A
+            mkdir -p $persist
+            cp -p /etc/ssh/ssh_host_*_key* "$persist"/
+    fi
+    ```
+    즉 **`/mnt/user/ssh`에 0바이트 키가 이미 저장돼 있고**(공장/최초부팅 시 0바이트 상태를 그대로
+    저장), `cp -p`가 타임스탬프까지 보존해 되돌린다 → 우리가 `/etc/ssh`에 만든 키는 **sshd 기동
+    직전에 덮였다.** `grep -rl ssh_host`가 가리킨 파일도 **`/etc/init.d/sshd` 하나뿐**이고,
+    `find / -xdev`가 아무것도 못 찾은 것도 정합한다(`/etc`와 `/mnt/user`가 별도 마운트라 `-xdev`가
+    건너뛴다). **벤더는 OTA 생존을 의도했고**(주석 `Persist host keys on the user data partition so
+    they survive OTA`) **하필 0바이트를 영속화해 버린 것**이 이 유닛의 결함이다.
+  - **해법 = 벤더 경로를 그대로 쓴다 (한 줄).** `/etc/ssh`만 고치면 안 되고 **캐시를 비워야** 한다:
+    ```sh
+    sudo rm -f /mnt/user/ssh/ssh_host_* /etc/ssh/ssh_host_*; sudo rc-service sshd restart
+    ```
+    캐시가 비면 `start_pre()`의 else 분기가 **스스로** `ssh-keygen -A` → p7 저장을 한다 →
+    **그 순간부터 OTA·리부트를 넘어 지속**(벤더가 설계한 그대로). §3.6의 "리부트 지속성 미검증"이
+    이 경로로 닫힌다. 검증: `ls -l /etc/ssh/ssh_host_*`(비-0바이트, 오늘 mtime) ·
+    `ls -l /mnt/user/ssh` · `pgrep -x sshd` · `ss -ltn | grep :22`.
+  - **함의**: 이 유닛의 SSH는 "키를 만들면 된다"가 아니라 **누가 `/etc/ssh`를 소유하는가** 문제였다 —
+    답은 **p7의 `/mnt/user/ssh`**. 제품 이미지에선 이 축을 우리가 소유해야 한다
+    ([#8](https://github.com/junghan0611/homeagent-config/issues/8)). 그리고 **`rc-service`가 찍는
+    `Starting sshd`는 여전히 증거가 아니다** — 진실원은 `pgrep`/`ss`.
 
 ### 3.7 설치면(install surface) — rootfs ro/rw 경계 + OTA 지속성 (라이브 실측 2026-07-03)
 

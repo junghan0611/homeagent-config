@@ -109,14 +109,18 @@ Buildroot `2026.02`에 boost 1.83(≥ domoticz 최소 1.69) · lua 5.3.6 · mini
     **거부** — 그 값은 셸 계정이고 Web UI 계정이 아니다). GLG 브라우저에선 열린다(세션 쿠키 추정).
     → **제품화 축으로 올라간다**([#8](https://github.com/junghan0611/homeagent-config/issues/8)):
     "계정/인증을 이미지가 소유하는가". 지금은 벤더 공장 admin 1행에 딸려 있다.
-- **Blocker (갱신 2026-09-07): SSH가 「가짜 초록」으로 실패했다 — 진단이 다음 한 걸음.**
-  §3.6 절차를 그대로 밟았는데(0바이트 삭제 → `ssh-keygen -A` → `/run/sshd` → `sshd -t` → restart)
-  **성공 출력 셋**(keygen 배너 · `sshd -t` 통과 · `Starting sshd`)이 나오고도 `ls`는 **다시 0바이트
-  6개, mtime `Dec 11 2025`**(= 원래 빌드시각)이고 `pgrep -x sshd` 무출력. **1순위 가설 = 무언가가
-  공장 0바이트 키를 타임스탬프 보존으로 되돌려 놓는다**(`cp -a` 계열 복원, 또는 `/etc/ssh` 쓰기가
-  overlay upper에 안 붙음). 상세·진단 명령은 `docs/SMHUB.md` §3.6 새 항목.
-  **우리 쪽 절반은 살아 있다**: `~smlight/.ssh/authorized_keys` 98B/`Jun 30` = 6/30 등록 공개키가
-  OTA 두 번을 넘어 지속. **막힌 건 서버 host key 하나.**
+- **Blocker (2026-09-07, 원인 확정 — 남은 건 한 줄 실행)**: SSH가 「가짜 초록」으로 실패한 정체는
+  **오버레이가 아니라 벤더 init**이었다. `/etc/init.d/sshd`의 `start_pre()`가 **p7 `/mnt/user/ssh`에
+  host key를 캐시하고 매 기동 `cp -p`로 복원**하는데, 거기 **0바이트 키가 이미 저장돼 있다**
+  (`cp -p`가 mtime까지 보존 → `Dec 11 2025`가 되살아난 이유). 즉 우리가 `/etc/ssh`에 만든 키는
+  **sshd 기동 직전에 덮였다.** 벤더 의도는 OTA 생존(주석 그대로)이었고, 하필 **0바이트를
+  영속화**한 것이 결함이다.
+  - **해법은 벤더 경로를 그대로 쓰는 한 줄**: `sudo rm -f /mnt/user/ssh/ssh_host_* /etc/ssh/ssh_host_*;
+    sudo rc-service sshd restart` → 캐시가 비면 else 분기가 스스로 `ssh-keygen -A` + p7 저장을 하고,
+    **그 순간부터 OTA·리부트를 넘어 지속**한다. §3.6의 "리부트 지속성 미검증"이 이 경로로 닫힌다.
+  - **클라이언트 쪽은 준비돼 있다**: `.sshkey/id_ed25519`, 공개키는 p7 `authorized_keys`(98B,
+    `Jun 30`)에 OTA 두 번을 넘어 등록 상태. → 실행되면 즉시 `ssh -i .sshkey/id_ed25519
+    smlight@<기기>`로 붙고 **웹 입력이 이 레인에서 사라진다.**
   - **이건 부수적이 아니다**: 셸 진입점이 인증 뒤 Web Terminal 하나로 좁혀져 있어 **④ 빌드 이후
     설치·기동·측정 전부가 사람 손 하나를 거친다.** 그래서 SSH 복구는 편의가 아니라 레인의 처리량이다.
 - **Read**: **[#10](https://github.com/junghan0611/homeagent-config/issues/10)**(이 레인의 판 — 버전 좌표·조달면·판정 렌즈) · `docs/SMHUB.md` **§4.1**(오늘 재측정) + §3.7(설치면 p7 · 패턴 (a) ipk+OpenRC) ·

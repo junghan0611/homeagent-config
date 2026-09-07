@@ -94,8 +94,31 @@ Buildroot `2026.02`에 boost 1.83(≥ domoticz 최소 1.69) · lua 5.3.6 · mini
       **beta5 재확인은 안 했다**. 그리고 0.9.8 factory baseline은 이미 `captures/`에 있다.
     - 기억은 파일에 있다: [#10](https://github.com/junghan0611/homeagent-config/issues/10) ·
       `docs/SMHUB.md` §3.6(SSH 결함)·§3.7(설치면)·§4.1(플랫폼) · `CHANGELOG.md`.
-- **Blocker**: OTA 실행 승인(GLG가 직접 볼 예정 — Web UI). 그리고 빌드 base를 **upstream `2026.02`**
-  (또는 1.0.2 재측정값에 해당하는 태그)로 둘지, `bsp/`처럼 포크 핀을 세울지(현 `bsp/`는 Duo S SDK 핀).
+  - **OTA 결과 (2026-09-07, GLG 실행) — 성공.** **`1.0.2` 부팅**(배너 + `/etc/os-release`
+    `VERSION_ID=1.0.2`), 리부트 후 ~100초 네트워크 복귀, **RAUC가 `kernel.0`(A)로 부팅하고
+    boot status `good`** = OTA가 `bad`였던 A 슬롯을 새로 쓰며 회복시켰다.
+  - **② ABI 재측정 닫힘 — glibc가 안 움직였다.** [측정, GLG Console] Buildroot
+    **`2026.02-1281-g9407f694e5`**(beta5는 `+18`) · 커널 6.18.17-patch21(build **2026-07-15**) ·
+    **glibc 2.42 그대로** · Python **3.14.6**(3.14.3에서, 같은 3.14 soname) · `nproc` 1 ·
+    MemTotal 488M(used 220 / avail 268).
+    → **③ base 핀 확정: upstream Buildroot 태그 `2026.02`.** 벤더가 같은 계열에서 1263커밋을
+    더 갔는데도 유일한 심볼 버전 축(glibc)이 2.42에 머물렀다. 2.42로 빌드 → 2.42+ 실행(하위호환).
+    Python 차이는 soname `libpython3.14.so.1.0` 동일이라 무해. **GCC만 재확인 남음**(beta5 15.2.0).
+  - **⚠️ 1.0.2가 Web UI 인증을 강제한다 (신규 사실).** beta5는 무인증으로 열렸는데 1.0.2는
+    `Email or Username` + `Password` 화면이 먼저 뜬다([측정] 헤드리스 브라우저, `smlight`/`smlight`
+    **거부** — 그 값은 셸 계정이고 Web UI 계정이 아니다). GLG 브라우저에선 열린다(세션 쿠키 추정).
+    → **제품화 축으로 올라간다**([#8](https://github.com/junghan0611/homeagent-config/issues/8)):
+    "계정/인증을 이미지가 소유하는가". 지금은 벤더 공장 admin 1행에 딸려 있다.
+- **Blocker (갱신 2026-09-07): SSH가 「가짜 초록」으로 실패했다 — 진단이 다음 한 걸음.**
+  §3.6 절차를 그대로 밟았는데(0바이트 삭제 → `ssh-keygen -A` → `/run/sshd` → `sshd -t` → restart)
+  **성공 출력 셋**(keygen 배너 · `sshd -t` 통과 · `Starting sshd`)이 나오고도 `ls`는 **다시 0바이트
+  6개, mtime `Dec 11 2025`**(= 원래 빌드시각)이고 `pgrep -x sshd` 무출력. **1순위 가설 = 무언가가
+  공장 0바이트 키를 타임스탬프 보존으로 되돌려 놓는다**(`cp -a` 계열 복원, 또는 `/etc/ssh` 쓰기가
+  overlay upper에 안 붙음). 상세·진단 명령은 `docs/SMHUB.md` §3.6 새 항목.
+  **우리 쪽 절반은 살아 있다**: `~smlight/.ssh/authorized_keys` 98B/`Jun 30` = 6/30 등록 공개키가
+  OTA 두 번을 넘어 지속. **막힌 건 서버 host key 하나.**
+  - **이건 부수적이 아니다**: 셸 진입점이 인증 뒤 Web Terminal 하나로 좁혀져 있어 **④ 빌드 이후
+    설치·기동·측정 전부가 사람 손 하나를 거친다.** 그래서 SSH 복구는 편의가 아니라 레인의 처리량이다.
 - **Read**: **[#10](https://github.com/junghan0611/homeagent-config/issues/10)**(이 레인의 판 — 버전 좌표·조달면·판정 렌즈) · `docs/SMHUB.md` **§4.1**(오늘 재측정) + §3.7(설치면 p7 · 패턴 (a) ipk+OpenRC) ·
   §2.1(EZSP 13 계약) · `docs/ECOSYSTEM-PORTFOLIO.md` §4~§6(domoticz+Z4D 비용) · `PRIVATE.md`(피드 인증).
 

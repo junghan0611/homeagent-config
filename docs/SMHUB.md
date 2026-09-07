@@ -201,6 +201,32 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
 - **결정(2026-07-01)**: beta5에서도 표준 sshd 는 host key 0바이트로 죽으므로, 영구 SSH가 필요하면 **overlay `/etc/ssh` 에 host key
   재생성(0바이트 삭제 → `ssh-keygen -A`) 후 리부트로 지속성 검증**한다. 그 전까지는 `/tmp/hk` 우회(세션 한정) 또는 `Settings→Console`(SSH 불요)로 접근.
   벤더 매뉴얼상 SSH 는 별도 토글 없이 부팅 완료(LED chase 종료) 시 기동 전제 — 이 유닛은 host key 결함으로 그 전제가 깨져 있다.
+- **1.0.2 재확인 (2026-09-07) — 결함 유지, 그리고 복구가 「가짜 초록」으로 실패했다.** OTA 후에도
+  `/etc/ssh/ssh_host_{rsa,ecdsa,ed25519}_key{,.pub}` 6개가 **전부 0바이트, mtime `Dec 11 2025` 그대로**
+  (= 2025-12-11 rootfs 빌드시각). `sudo sshd -t` → `no hostkeys available -- exiting`. **네 번째 재확인**
+  이고, 릴노트의 "Persistent Device Identity"는 OTA 경로에 여전히 적용되지 않는다.
+  **우리 쪽 접근 절반은 살아 있다**: `~smlight/.ssh/authorized_keys` **98바이트, mtime Jun 30 07:37**
+  → 6/30에 등록한 우리 공개키가 OTA 두 번을 넘어 p7에서 지속(§3.7 판정과 일치).
+- **⚠️ §3.6 복구 절차를 그대로 밟았는데 키가 남지 않았다 (2026-09-07, 미해결).** 순서대로
+  ① `sudo rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub` (에러 없음)
+  ② `sudo ssh-keygen -A` → **`generating new host keys: RSA ECDSA ED25519` 출력**
+  ③ `sudo mkdir -p /run/sshd`
+  ④ `sudo sshd -t && sudo rc-service sshd restart` → **`sshd -t` 통과**(그래서 restart가 실행됐다),
+     `Stopping sshd ... start-stop-daemon: no matching processes found ... Starting sshd ...`
+  그런데 직후 `ls -l /etc/ssh/ssh_host_*` 는 **다시 0바이트 6개, mtime `Dec 11 2025`** 이고
+  `pgrep -x sshd` **무출력** = sshd 안 뜬다.
+  → **성공 출력이 셋(keygen 배너 · `sshd -t` 통과 · `Starting sshd`) 나왔는데 결과는 원상복귀다.**
+  이 리포/실증 레인이 「가짜 초록」이라 부르는 자리의 교과서적 표본이고, **판정은 `ls`와 `pgrep`이
+  했다**(배너 아님).
+  - **1순위 가설**: 무언가가 **공장 0바이트 키를 되돌려 놓는다.** mtime이 새로 생성된 값이 아니라
+    **원래 빌드시각으로 되돌아온 것**이 근거 — `cp -a`/`cp -p`(타임스탬프 보존) 계열 복원이거나,
+    `/etc/ssh` 쓰기가 overlay upper에 안 붙고 ro lower가 다시 보이는 것. `sshd` init 또는
+    `smhub-services`/`firstboot` 계열이 sshd 기동 시 `/etc/ssh`를 벤더 원본으로 덮는 경로 의심.
+  - **다음 진단 (읽기만)**: `ls -la /etc/ssh` · `mount | grep -E 'overlay|/etc'` ·
+    `readlink -f /etc/ssh` · `cat /etc/init.d/sshd` · `grep -rl ssh_host /etc/init.d /usr/lib/smhub /opt/bin`
+    · `find / -xdev -name 'ssh_host_ed25519_key' 2>/dev/null` (다른 위치에 생성됐는지).
+  - **함의**: 이 유닛의 SSH는 "키를 만들면 된다"가 아니라 **누가 `/etc/ssh`를 소유하는가** 문제다.
+    제품 이미지에선 이 축을 우리가 소유해야 한다([#8](https://github.com/junghan0611/homeagent-config/issues/8)).
 
 ### 3.7 설치면(install surface) — rootfs ro/rw 경계 + OTA 지속성 (라이브 실측 2026-07-03)
 
@@ -295,22 +321,29 @@ META: **SMHUB 0.9.8**, Buildroot `2025.11-33-g52d9e5043c-dirty`, kernel **6.18.1
 data sha256). (bridge online·ember 7.4.2·config.gz full text·opkg·buzzer.conf 는 captures 저장 완료. buzzer
 crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/sub 왕복은 broker publish라 strict 무변형 아님 → retained SUB 만 하거나 unique·retain=false·QoS0 smoke 로 분리.
 
-### 4.1 라이브 플랫폼 재측정 — 1.0.0.beta5 (2026-09-07, domoticz 이관 준비)
+### 4.1 라이브 플랫폼 재측정 — **1.0.2** (2026-09-07, domoticz 이관 준비)
 
 **목적**: SMHub에 domoticz를 올릴 때의 **ABI 계약**과 **패키지 조달면**을 실기에서 확정. 접근은
 SSH가 아니라 **Web UI → Console(Web Terminal)** — `:22`는 여전히 refused(§3.6 host key 결함 유지).
-무변형(읽기만), 설치·설정 변경 0.
+beta5 측정 → 같은 날 **`1.0.2` OTA(GLG 실행)** → 재측정한 값이 아래 오른쪽 열이다.
 
-| 축 | 라이브 값 | 0.9.8 대비 |
-|---|---|---|
-| FW / HW | **1.0.0.beta5** / HW rev 0.98 | OS 라인 이동 |
-| Buildroot | **`2026.02-18-g60430d6802`** (`/etc/os-release VERSION`) | 2025.11-33 → **2026.02+18** |
-| 커널 | **6.18.17-patch21** riscv64 (build 2026-03-04) | patch0 → patch21 |
-| libc / 컴파일러 | **glibc 2.42** (Buildroot), **GCC 15.2.0**, `libstdc++.so.6.0.34` | 신규 측정 |
-| Python | **3.14.3** (`libpython3.14.so.1.0` in rootfs) | 신규 측정 |
-| 메모리 | `MemTotal` **488M**, zram swap **511M** | swap 0 → zram(beta 라인, §5.4 B6와 일치) |
-| **코어 수** | **`nproc` = 1**, ISA `rv64imafdc_zicntr_zicsr_zifencei_zihpm_zaamo_zalrsc_zca_zcd` | 신규 측정 |
-| 저장 | `/` 739M ro 47% · **p7 `/mnt/user` 5.7G, 9% (493M)** | 동형 |
+| 축 | **1.0.2 (현재)** | 1.0.0.beta5 (같은 날 OTA 전) | 0.9.8 |
+|---|---|---|---|
+| FW / HW | **1.0.2** / HW rev 0.98 | 1.0.0.beta5 | 0.9.8 |
+| Buildroot | **`2026.02-1281-g9407f694e5`** | `2026.02-18-g60430d6802` | 2025.11-33 |
+| 커널 | **6.18.17-patch21** riscv64 (build **2026-07-15**) | patch21 (build 2026-03-04) | patch0 |
+| **libc** | **glibc 2.42 — 안 움직였다** | glibc 2.42 | 미측정 |
+| Python | **3.14.6** (`libpython3.14.so.1.0`) | 3.14.3 | 미측정 |
+| 메모리 | `MemTotal` **488M** (used 220 / avail 268) | 488M + zram 511M | 488M, swap 0 |
+| **코어 수** | **`nproc` = 1** | 1 | 1 |
+| RAUC 슬롯 | **`kernel.0`(A) booted, boot status `good`** — OTA가 A를 새로 쓰며 `bad`를 회복시켰다 | `kernel.1`(B) booted, A=`bad` | — |
+| 저장 | p7 `/mnt/user` 5.7G | 동형 | 동형 |
+
+**★ ABI 판정: base = upstream Buildroot 태그 `2026.02` 확정.** 벤더는 같은 `2026.02` 계열에서
+`+18` → `+1281` 커밋으로 움직였는데 **glibc는 2.42에 그대로 있다** — 즉 우리가 걱정한 단 하나의
+심볼 버전 축이 OTA를 넘어 안 변했다. Python은 3.14.3 → **3.14.6**(같은 3.14, soname
+`libpython3.14.so.1.0` 동일 → 확장/링크 ABI 영향 없음). GCC는 재확인 대상(beta5에서 15.2.0).
+→ **`2026.02` 태그로 크로스빌드하면 이 기기에서 실행된다**(glibc는 하위호환, 2.42로 빌드 → 2.42+ 실행).
 
 **패키지 조달면 (opkg)**
 

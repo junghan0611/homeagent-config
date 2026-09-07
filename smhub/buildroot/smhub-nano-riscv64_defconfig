@@ -1,0 +1,50 @@
+# SMHUB Nano Mg24 (SG2000, riscv64) — cross-build sysroot for our .ipk payloads.
+#
+# This is NOT an image config. The SMHub product runs the vendor's own OS
+# (SMHUB 1.0.2, RAUC A/B, rootfs ro) and the only writable install surface is
+# p7 (/opt, /home, /var). So this Buildroot tree exists to produce ONE thing:
+# a riscv64 binary + libraries that run unmodified on that vendor rootfs.
+#
+# Every value below is matched to the LIVE unit, measured 2026-09-07 over SSH
+# (docs/SMHUB.md §4.1). Do not "upgrade" these — a newer glibc yields symbol
+# versions the device does not have, and the binary will not start:
+#
+#   Buildroot   2026.02-1281-g9407f694e5   -> upstream tag 2026.02 (this tree)
+#   glibc       2.42                       -> tag 2026.02 pins 2.42-51-gcbf39c2
+#   GCC         15.2.0                     -> BR2_GCC_VERSION_15_X
+#   libstdc++   .so.6.0.34                 -> follows GCC 15.2.0
+#   Python      3.14.6                     -> tag ships 3.14.3, same 3.14 soname
+#   ISA         rv64imafdc (+Zc)           -> custom I/M/A/F/D/C below
+#   cores       nproc = 1                  -> matters at runtime, not here
+BR2_riscv=y
+BR2_riscv_custom=y
+BR2_RISCV_ISA_RVI=y
+BR2_RISCV_ISA_RVM=y
+BR2_RISCV_ISA_RVA=y
+BR2_RISCV_ISA_RVF=y
+BR2_RISCV_ISA_RVD=y
+BR2_RISCV_ISA_RVC=y
+BR2_RISCV_64=y
+BR2_RISCV_ABI_LP64D=y
+
+# Toolchain — the ABI contract. glibc, not uClibc/musl: the vendor rootfs is glibc.
+BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
+BR2_GCC_VERSION_15_X=y
+BR2_TOOLCHAIN_BUILDROOT_CXX=y
+BR2_INSTALL_LIBSTDCPP=y
+
+# domoticz's own dependency gate (package/domoticz/Config.in): lua 5.3 exactly.
+BR2_PACKAGE_LUA=y
+BR2_PACKAGE_LUA_5_3=y
+
+# USE_PYTHON=ON is not optional for us: it is what makes Z4D (the Zigbee
+# plugin) possible at all. Links against libpython3.14.so.1.0, present in the
+# vendor rootfs.
+BR2_PACKAGE_PYTHON3=y
+
+# The payload. Selects boost, cereal, jsoncpp, libcurl, minizip-zlib,
+# mosquitto, openssl, sqlite and zlib through Config.in.
+BR2_PACKAGE_DOMOTICZ=y
+
+# No image is produced — we package an .ipk from target/ and staging/ instead.
+# BR2_TARGET_ROOTFS_TAR is not set

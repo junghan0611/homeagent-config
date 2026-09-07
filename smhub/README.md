@@ -42,6 +42,16 @@ base는 upstream 태그 `2026.02`**이고(glibc `2.42-51-gcbf39c2`, GCC 15.2.0 �
   굽기 때문에 **컨테이너는 POSIX 호스트일 뿐 산출물 ABI에 기여하지 않는다.**
   - ⚠️ **호스트와 컨테이너를 섞어 굽지 마라.** 호스트에서 만든 `output/build/buildroot-config/conf`는
     nix 로더에 링크돼 컨테이너에서 `Error 127`로 죽는다. 섞였으면 `rm -rf smhub/sdk/output`.
+  - ⚠️ **컨테이너는 프로세스보다 오래 산다.** `docker run`을 띄운 셸/감독 프로세스를 죽여도
+    컨테이너는 계속 굽는다 — 그 상태로 다시 시작하면 **두 make가 같은 트리를 쓴다.** 재시작 전
+    확인: `docker ps --filter ancestor=milkvtech/milkv-duo:latest`, 남아 있으면 `docker kill <id>`.
+- **중단은 안전하고, 이어굽기가 기본이다.** Buildroot는 `output/build/*/.stamp_*`로 단계를 기억하므로
+  랩탑이 잠들거나 빌드를 죽여도 `./smhub/build.sh` 한 번이면 **그 패키지부터** 이어간다
+  (지운 것만 다시 굽는다 — `rm -rf output`은 툴체인부터 전부 다시라는 뜻).
+- **첫 빌드 소요 (실측 기준선, 랩탑 16코어)**: 호스트 툴 8개 ≈13분 → 크로스 툴체인
+  (binutils 2.44 · GCC 15.2 · **glibc 2.42**) → boost 1.83 + python3 → domoticz.
+  **합계 50~90분** 예상. 진행 확인은 `tail smhub/sdk/output/build/build-time.log` 또는
+  `ls smhub/sdk/output/build/*/.stamp_built | wc -l`.
 
 ## 조달 판정 — 무엇을 싣고 무엇을 안 싣나
 

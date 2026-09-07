@@ -5,25 +5,99 @@
 - [x] **3. 프로파일 가드를 `target/`까지 확장** — `.config`만 보던 구멍을 닫음(2026-08-30)
 - [x] **4. gecko WiFi 소유 원칙 조사 회신** — S99wpa_supplicant 출처/dhcpcd wlan0 관리/wlan0 up 주체 세 질문, 실기 없이 소스로 닫아 gecko RAIL 6 담당에게 회신(2026-08-31)
 - [x] **5. 홈오토메이션 스택 랜드스케이프 조사** — 작은 폼팩터에 무엇을 밀어넣을 수 있나. `docs/ECOSYSTEM-PORTFOLIO.md` 신설(2026-09-01). 실증은 회사 레인이 가져갔다
-- [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← CURRENT: GLG 승인 대기. 회신 결과를 보고 필요하면 착수
+- [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← **DEPRIORITIZED (GLG 2026-09-07: "당장 필요 없다")**. Duo S/이미지 축 검증은 끝났고 틀이 바뀌었다. 지시 오면 재개
 - [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
+- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT (GLG 2026-09-07 틀 변경)**. Milk-V는 되는 걸 검증했으니, 이제 **제품 폼(SMHub Nano, riscv64)** 에 domoticz를 얹는다. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**. 9-1 버전 좌표 확정 ✅ → 9-2 OS 1.0.2 OTA(GLG 진행) → 9-3 조달/빌드 → 9-4 기동
 
-현재 좌표: 1·2·3·4·5 완료 → **6 GLG 승인 대기** → 7·8 보류
+현재 좌표: 1·2·3·4·5 완료 → **9 SMHub domoticz 이관(9-1 닫힘, 9-2 착수 대기)** → 6 보류(GLG 판단) · 7·8 보류
 
-# NOW — S99wpa_supplicant 제거 판단 대기
+# NOW — SMHub에 domoticz: 버전 좌표 확정 (9-1 닫힘 2026-09-07)
 
-> 이미지 쪽 실작업은 아직 0이다. GLG 승인 전엔 코드 안 건드린다.
+> **틀 변경 (GLG 2026-09-07)**: Milk-V Duo S 레인은 "되는 것"을 이미 증명했다. 이제 **통합보드
+> 제품(SMHub Nano Mg24, riscv64 고정)에 domoticz를 올린다.** 실증 레인(회사, x86/NixOS)이 스택을
+> 관통시켰고(47대 계약), 그 스택을 제품 폼에서 다시 세우는 것이 여기 몫이다.
+> **6번(S99wpa_supplicant)은 당장 필요 없다.**
 
-- **Stem**: Duo S 제품화 이미지. 이 repo가 이미지를 소유하고, 허브 앱과 gecko 펌웨어는 별도 레인.
-- **배경**: gecko(sks-hub-gecko, RAIL 6, `20260831T172806-ed4c31`)가 GLG의 WiFi 소유 원칙("OS는 wlan0를 존재하게 한다. 그 wlan0로 무엇을 할지는 오직 허브 펌웨어가 정한다")을 근거로, 이 이미지의 `S99wpa_supplicant`가 부팅 때 옛 SSID로 STA 연결을 강행해 RAIL 6(전원 재기동 시 사람 개입 없이 복구)을 깬다고 조사 요청. 조사 결과는 2026-08-31 회신 완료(아래 요약).
-- **조사 결론 요약** (전문은 gecko 콜백에 전송, 필요하면 재조회):
-  1. `S99wpa_supplicant`는 `bsp/overlay/common/etc/init.d/S99wpa_supplicant`(homeagent-config 자체 파일, Buildroot 기본 아님). 스크립트만 빼도 `wpa_supplicant`/`hostapd` 바이너리(defconfig `BR2_PACKAGE_WPA_SUPPLICANT`/`BR2_PACKAGE_HOSTAPD`)는 안 건드림. 다른 부팅 소비자가 wlan0 연결 성공에 의존하는 곳 없음(확인됨).
-  2. `dhcpcd`의 wlan0 관리는 설계가 아니라 "usb0만 배제"(Milk-V 벤더 패치)의 부산물 — `S99wpa_supplicant` 제거해도 dhcpcd wlan0 관리는 유지됨.
-  3. (제일 중요) wlan0를 `up`으로 올리는 건 `wpa_supplicant`가 아니라 `stable-mac`(`bsp/overlay/common/usr/bin/stable-mac:56`, MAC 세팅 부산물)이고 순서상 wpa_supplicant보다 먼저 뜬다 → **wpa_supplicant 없이 부팅해도 wlan0는 UP으로 남는다.** 실기 검증 불필요, 소스로 닫힘.
-- **Next**: GLG가 gecko 회신을 보고 `S99wpa_supplicant` 제거(또는 `start`를 no-op) 여부를 결정하면 착수. 아직 지시 없음 — 먼저 움직이지 마라.
-- **Blocker**: GLG 승인.
-- **Read**: `bsp/overlay/README.md` "Init order is half the contract"; `bsp/overlay/common/etc/init.d/S99wpa_supplicant`; `bsp/overlay/common/usr/bin/stable-mac`.
+- **Stem**: 제품 폼 = **SMHub Nano**(SG2000, riscv64, MG24 온보드). 이미지는 벤더 것이고 우리는
+  **p7 설치면 + ipk**로 얹는다(`docs/SMHUB.md` §3.7 패턴 (a)). Duo S는 이제 개발/대조 보드.
+- **기기는 켜져 있다** — 접근은 SSH가 아니라 **Web UI → Console(Web Terminal)**. `:22`는 여전히
+  refused(host key 0바이트, §3.6). 오늘 측정은 전부 그 경로로 했고 **무변형(읽기만)** 이다.
+
+## 9-1. 버전 좌표 — 실측으로 확정 (닫힘)
+
+| 축 | 값 | 근거 |
+|---|---|---|
+| **SMHub OS (라이브)** | **1.0.0.beta5**, Buildroot **`2026.02-18-g60430d6802`**, 커널 **6.18.17-patch21** riscv64 | [측정] `/etc/os-release`·`uname -a` |
+| **libc / 컴파일러 / Python** | **glibc 2.42** · **GCC 15.2.0** · `libstdc++.so.6.0.34` · **Python 3.14.3** | [측정] `/lib/libc.so.6`·`python3 -V` |
+| **하드웨어 여유** | `MemTotal` **488M** + zram 511M · **`nproc` = 1** · p7 5.7G(9%) | [측정] `free -m`·`/proc/cpuinfo`·`df` |
+| **domoticz 목표 버전** | **`2026.3`** (2026-08-02 stable = upstream 최신) | [측정] GitHub releases; 태그 `2026.1·2026.2·2026.3` |
+| **실증 레인이 도는 버전** | **domoticz 2026.3** (nixpkgs unstable) + Python 3.14 | [읽음] 그쪽 `flake.nix`·`README.md` — **목표와 동일** |
+| **Buildroot 레시피 현황** | `DOMOTICZ_VERSION = 2024.4` — **master(2026-08-27)까지 그대로** | [읽음] `package/domoticz/domoticz.mk` |
+| **Z4D 최소 요구** | Domoticz **≥2025.1**(readme), 권장 **≥2025.2**(Z4D AGENTS/CLAUDE) | [읽음] Z4D `readme.md:31`·`CLAUDE.md:91` |
+| **판정** | Buildroot 핀 2024.4는 **Z4D 게이트 미달** → **2026.3으로 bump가 선택이 아니라 전제** | 위 두 줄의 교차 |
+
+**★ ABI 계약이 base를 정해 준다 (이 항목이 제일 값나간다).** 기기의 glibc 2.42 / Python 3.14.3 /
+GCC 15.2.0 은 upstream Buildroot **태그 `2026.02`** 의 핀과 **정확히 일치**한다
+([측정] `git show 2026.02:package/{glibc,python3}` → `glibc 2.42-51-gcbf39c2`, `python3 3.14.3`,
+`BR2_GCC_VERSION_15_X = 15.2.0`). 벤더 rev의 `-18-g60430d6802`는 **upstream에 없는 벤더 자체 18커밋**
+이라 bit-identical은 불가하지만, **`2026.02`가 우리 크로스빌드의 재현 가능한 base**다.
+**master(glibc 2.44)로 빌드하면 2.42 기기에서 심볼이 안 맞아 실행되지 않는다** — 이 축은 최신으로
+올리는 게 이득이 아니다. (domoticz는 최신, 툴체인은 기기와 동일 — 두 방향이 반대다.)
+
+**조달면 판정 (opkg)**: 벤더 피드 `https://pkg.smlight.tech/v1`(basic auth) 카탈로그는
+**45 stanza / 17 패키지명**이고 **domoticz 0건**, 라이브러리 패키지도 없다(앱 ipk만) —
+[측정] 기기 `opkg list` + off-device `curl /v1/Packages` 양쪽 일치. 즉 **벤더가 주는 길은 없고,
+우리가 riscv64 ipk를 만든다.** ipk 메타 필드는 **`Required-OS-Version: 1.0.0`**, `Architecture: riscv64`.
+
+**빌드해야 하는 것 / 이미 지불된 것**: rootfs에 `libcurl.so.4`·`libsqlite3.so.3.51.2`·`libssl.so.3`·
+**`libmosquitto.so.1`**·`libjsoncpp.so.26`·`libz`·`libpython3.14.so.1.0`·`libstdc++.so.6.0.34`가
+**이미 있다**(+`/usr/sbin/mosquitto` 실행 중). **없는 것 = boost · lua5.3 · minizip · fmt/cereal.**
+→ 우리 ipk가 실을 것 = **domoticz 2026.3 본체 + boost(atomic/date_time/system/thread) + lua 5.3 + minizip**.
+Buildroot `2026.02`에 boost 1.83(≥ domoticz 최소 1.69) · lua 5.3.6 · minizip-zlib 1.3.2 · cereal 1.3.2가
+전부 있다 → **레시피 조달 대상은 domoticz 하나**(서브모듈 5개: `libwebem`·`jwt-cpp`·`jsoncpp`·`minizip`·
+`sqlite-amalgamation` — [측정] 2026.3 `.gitmodules`). domoticz 2026.3은 cmake ≥3.16 · C++17 ·
+`find_package(Python3 3.4 COMPONENTS Development)`(플러그인=Z4D의 전제) 요구.
+
+**라디오 자리는 비어 있다**: z2m 2.10.1이 **설치돼 있지만 `rc-status default`에 없다**(started = mosquitto만)
+→ 지금 `/dev/ttyS1`(MG24, EmberZNet 7.4.2 / EZSP 13)을 잡은 프로세스가 없다. Z4D(bellows)가 EZSP 13으로
+같은 라디오를 물 수 있는 자리다. **단 z2m을 켜면 즉시 경쟁** — 한 라디오 한 host 스택.
+
+## 9-2. 다음 한 걸음 — **(A) 트랙 확정 (GLG 2026-09-07)**, 단 OS 버전을 먼저 고정한다
+
+- **트랙 = (A) domoticz만 먼저.** GLG 지시("당연히 A로 쪼개서 가야한다"). `2026.3`이 riscv64 /
+  glibc 2.42에서 서는지 하나만 본다. Z4D·`cryptography`는 그 뒤 별개 관문.
+- **선행 사실 둘이 이미 갈렸다**: ① Z4D는 **`cryptography` 없음 + pip 없음**([측정] 기기
+  `import cryptography` → ModuleNotFoundError, `python3 -m pip` 무응답) → **riscv64 Rust/PyO3
+  크로스빌드가 이 레인의 진짜 벽**이고, 실증 레인의 "x86_64 휠 하나"가 여기선 안 통한다.
+  ② **`nproc`=1** — 실증 레인이 x86 4스레드를 잠정 하한으로 적은 형상을 **단일 코어**로 받는다.
+  RSS는 128M/488M(26%)로 여유가 있지만 **CPU가 새 미측정 축**이다.
+- **⚠️ 빌드 전에 OS 버전을 고정해야 한다 (2026-09-07 발견).** 기기 `Settings → Updates`가
+  **Stable 채널에 `1.0.2 (stable)` 사용 가능**을 보고한다(현재 `1.0.0.beta5` = beta 라인).
+  우리 ipk는 **glibc 2.42 / Python 3.14.3 / GCC 15.2.0에 못박힌 바이너리**이므로, beta5에 맞춰
+  굽고 나서 OTA로 1.0.2에 올리면 **base가 움직여 그 바이너리가 무효가 될 수 있다.**
+  → 순서는 **① 1.0.2로 OTA → ② `docs/SMHUB.md` §4.1 재측정(glibc/python/Buildroot rev 3분) →
+  ③ 그 값으로 base 핀 확정 → ④ 빌드.** 제품 폼이므로 채널도 **Stable이 맞다**(beta 라인에 제품을
+  올리지 않는다).
+  - **OTA 안전 근거**: RAUC는 비활성 슬롯만 쓰고 실패 시 B로 남는다. 단 [측정] 지금 **`kernel.0`(A)의
+    boot status = `bad`**, 부팅은 `kernel.1`(B) — OTA가 A를 새로 쓰며 그 상태도 갱신한다.
+    **p7(`/opt`·`/home`·`/var`)은 OTA가 안 건드린다** → 설치면·z2m 데이터 생존. **SSH host key 0바이트
+    결함은 OTA로 안 고쳐진다**(§3.6, beta5 OTA에서 이미 반증됨) → 접근은 계속 Web Terminal.
+    **금지 유지**: Type-C full flash를 OTA보다 먼저 하지 말 것(A/B 롤백 전제 붕괴).
+  - **백업은 안 한다 — 날것으로 간다 (GLG 2026-09-07).** *"완전 깔끔하게 날것으로 가려고 하는 거야.
+    재현 가능해야 하니까. 삽질의 기억은 우리 리포에 있을 거야."* 이 레인의 자산은 **기기의 상태가
+    아니라 절차**다. `backend.db`·z2m data(네트워크키)는 벤더 공장 상태의 파생물이고, 다시 만들 수
+    있는 것을 보존하면 그게 재현 불가능한 특수 상태가 된다 — 이 리포 불변식 "ssh로 밀어넣어 제품을
+    만들지 않는다"의 같은 얼굴이다. **그래서 OTA 전에 아무것도 뽑지 않는다.**
+    - 잃을 게 실제로 적다는 근거: [측정 0.9.8] **paired end-device 0**(z2m `database.db` 1행 =
+      Coordinator 자기 자신). beta5에서 z2m은 미기동이라 그 뒤 페어링이 생겼을 가능성은 낮지만
+      **beta5 재확인은 안 했다**. 그리고 0.9.8 factory baseline은 이미 `captures/`에 있다.
+    - 기억은 파일에 있다: [#10](https://github.com/junghan0611/homeagent-config/issues/10) ·
+      `docs/SMHUB.md` §3.6(SSH 결함)·§3.7(설치면)·§4.1(플랫폼) · `CHANGELOG.md`.
+- **Blocker**: OTA 실행 승인(GLG가 직접 볼 예정 — Web UI). 그리고 빌드 base를 **upstream `2026.02`**
+  (또는 1.0.2 재측정값에 해당하는 태그)로 둘지, `bsp/`처럼 포크 핀을 세울지(현 `bsp/`는 Duo S SDK 핀).
+- **Read**: **[#10](https://github.com/junghan0611/homeagent-config/issues/10)**(이 레인의 판 — 버전 좌표·조달면·판정 렌즈) · `docs/SMHUB.md` **§4.1**(오늘 재측정) + §3.7(설치면 p7 · 패턴 (a) ipk+OpenRC) ·
+  §2.1(EZSP 13 계약) · `docs/ECOSYSTEM-PORTFOLIO.md` §4~§6(domoticz+Z4D 비용) · `PRIVATE.md`(피드 인증).
 
 ## 참조 — 스택 랜드스케이프 (닫힘 2026-09-01, 실증은 딴 레인)
 
@@ -122,9 +196,48 @@
   떠서 86M을 쥐는 것은 다르다). 요지는 **Node가 빠지는 것이 순이득**.
 - **텔레메트리는 끈다 (GLG 지시, 실증 레인에 전달됨).** 남는 검수 항목은 둘 —
   `is_internet_available()`의 google.com 조회, 런타임 pip 업그레이드.
-- **다음에 값이 붙는 순서**: ① **최신 `cryptography`로 Z4D가 도는가**(실증 레인이 답한다)
-  ② **`2026.3` Buildroot 레시피 — 서브모듈 조달**(조사 아님, 실작업) ③ domoticz 바이너리 실측
-  ④ RSS 실측 ⑤ riscv64/musl 가부.
+- **실증 레인 3차 회신 — 47대 계약이 서고 납품물이 정해졌다 (인계 2026-09-07, 우리 측정 아님).**
+  전담 시민(`works-nixos-zigbee`, meta-session `20260907T140211-fae201`)이 랩 현황을 넘겼다.
+  회신 불필요로 왔고, **인계 이유는 GLG가 이걸 SMHub 임베디드 보드에 얹어 테스트할 계획**이라는 것이다
+  (아직 우리 쪽 지시는 아니다 — RAIL 항목을 만들지 않았다).
+  - **납품물 = USB 설치 이미지 하나(NixOS 배포판)**, 스택은 `domoticz + Z4D` **동글 직결(z2m 없음)**.
+    현장은 SK하이닉스 데모룸 Zigbee 스마트플러그 **400대** 전력량 수집.
+  - **[인계] 리포팅 계약 47/47 통과·실패 0**(전부 `4/4` 되읽기), 위젯 237개, 기기 최신 갱신 2초 /
+    중앙 82초 / 최고령 273초(< `PowerPollingFreq=300`). 랩의 47대(10A 43 + `_TZ3000_w0qqde0g` 4)는
+    **전부 대리물이고 납품 제품은 16A SP** — 산정은 16A로 다시 잰다. 물려받는 건 숫자가 아니라 구조.
+  - **[인계] 47대 부하에서 CPU 4.6% · RSS 128M** — 우리 9/1 관측 121M(무부하급)의 연장선이고,
+    **대수가 붙어도 등급이 안 바뀐다**는 첫 증거다. Duo S 실측 `MemTotal` 311M 기준 41%.
+  - **듀얼 동글은 구조적으로 안 된다.** domoticz가 Hardware 행마다 파이썬 sub-interpreter를 띄우는데
+    zigpy가 쓰는 `cryptography`가 Rust(PyO3) 확장이라 그 안에서 import되지 않는다(상류 PyO3#3451,
+    ETA 없음). 둘 이상은 **domoticz 프로세스를 나누는 배치**로만 된다 → 배치 결정(GLG 2026-09-04):
+    저사양 미니PC + 동글 1개 = 1세트, 10세트를 100m에 10m 간격, 세트당 30~40대.
+    **우리 쪽 의미: "라디오 1개 = 프로세스 1개" 상한을 그대로 물려받는다** — 온보드 EFR32 + USB RCP
+    동시 구상(LEDGER "USB 2동글")은 Z4D 경로에서 한 프로세스로 못 선다.
+  - **임베디드 검수 항목 셋 추가**: ① Z4D는 `(Model, Manufacturer)` 정확 매칭이 없으면 `0702`/`0b04`를
+    읽고도 버리고 On/Off 스위치로 등록한다 — 위젯이 서고 `Data: 'On'`까지 정상으로 보이므로
+    **화면만 보고 통과 판정하면 안 된다**(새 모델은 `z4d/local-devices/`에 정의 추가). 이건 9/1에
+    확인한 "신규 플러그까지 붙는다"의 뒷면이다. ② 동글 식별은 `/dev/serial/by-id/` 시리얼로 —
+    `/dev/ttyUSB*` 번호는 꽂는 순서로 바뀐다(우리 mdev by-id helper와 같은 계약, 그쪽도 같은 결론).
+    ③ **채널 프로비저닝은 동글 꽂기 전에** 들어가야 한다 — 채널은 코디네이터 형성 시점에 정해지므로
+    `/etc/gq-node/channel` → seed 유닛 → z4d 순서이고, **init 순서가 계약의 절반**인 우리 overlay와
+    같은 종류의 제약이다.
+  - **그쪽이 명명한 반복 실패 모양 = 「가짜 초록」** — 성공 응답이 생존의 증거가 아닌 자리(z2m kWh
+    미갱신도 에러가 아니라 조용한 미갱신이었고, 채널 시드 배포 때 `mktemp` 0600이 그대로 옮겨가
+    z4d가 못 읽는데 로그는 성공을 찍었다). **우리 불변식 "A banner is not evidence"와 같은 것**이고,
+    임베디드 이관 시 첫 렌즈로 쓴다(우리 쪽 등가물 = `usb_dl` 거짓 완료 → UUID 대조).
+  - **SSOT는 그쪽 파일이다**(요약 아님): `~/repos/work/works-nixos-zigbee`의 `NEXT.md`(좌표·LEDGER) ·
+    `INTERFERENCE.md`(무선/채널 정본) · `SP-10A-16A.md`(기기 raw, Part A만). 그쪽 RAIL은
+    1(스택)·2(리포팅 계약)·3(동글당 30대)·5(USB 설치 이미지) 닫힘, **4.6 노드 간 간섭이 현재 좌표**
+    (다음 한 걸음 = 두 번째 노드 하나 → 채널 형성·0대 energy scan·10m 이웃 dBm 동시 답), 4(마스터
+    취합면)은 4.6 답 대기로 PAUSED.
+  - **경계**: `~/repos/3rd/zigbee/*`는 읽기 전용 참조(커밋·vendoring 금지), `hejhub-nano`는 다른 레인,
+    미니PC 하드웨어 축은 GLG가 아직 열어 둔 상태. 노드 좌표/계정은 공개 파일에 안 적는다(`PRIVATE.md`).
+- **다음에 값이 붙는 순서**: ① ~~최신 `cryptography`로 Z4D가 도는가~~ → **답 왔다 (인계 2026-09-07)**:
+  그쪽 RAIL 1(스택) 닫힘 + 47대 `4/4` 통과 = **최신 `cryptography`로 Z4D가 돈다**(단 x86_64 휠 ·
+  단일 sub-interpreter 한정 — 우리 몫은 여전히 **소스 타르볼 + maturin + Rust 크로스빌드**로 같은
+  조합이 서는가) ② **`2026.3` Buildroot 레시피 — 서브모듈 조달**(조사 아님, 실작업) ③ domoticz
+  바이너리 실측 ④ RSS 실측 — **47대 부하값 128M이 인계로 들어왔으니 남은 건 riscv64/musl 실측**
+  ⑤ riscv64/musl 가부.
 - **Do not**: 이 조사를 근거로 지금 이미지에 스택을 얹지 마라. 버전 방침만 정해졌고 착수는
   회사 레인 결과 뒤다.
 

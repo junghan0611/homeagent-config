@@ -295,6 +295,53 @@ META: **SMHUB 0.9.8**, Buildroot `2025.11-33-g52d9e5043c-dirty`, kernel **6.18.1
 data sha256). (bridge online·ember 7.4.2·config.gz full text·opkg·buzzer.conf 는 captures 저장 완료. buzzer
 crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/sub 왕복은 broker publish라 strict 무변형 아님 → retained SUB 만 하거나 unique·retain=false·QoS0 smoke 로 분리.
 
+### 4.1 라이브 플랫폼 재측정 — 1.0.0.beta5 (2026-09-07, domoticz 이관 준비)
+
+**목적**: SMHub에 domoticz를 올릴 때의 **ABI 계약**과 **패키지 조달면**을 실기에서 확정. 접근은
+SSH가 아니라 **Web UI → Console(Web Terminal)** — `:22`는 여전히 refused(§3.6 host key 결함 유지).
+무변형(읽기만), 설치·설정 변경 0.
+
+| 축 | 라이브 값 | 0.9.8 대비 |
+|---|---|---|
+| FW / HW | **1.0.0.beta5** / HW rev 0.98 | OS 라인 이동 |
+| Buildroot | **`2026.02-18-g60430d6802`** (`/etc/os-release VERSION`) | 2025.11-33 → **2026.02+18** |
+| 커널 | **6.18.17-patch21** riscv64 (build 2026-03-04) | patch0 → patch21 |
+| libc / 컴파일러 | **glibc 2.42** (Buildroot), **GCC 15.2.0**, `libstdc++.so.6.0.34` | 신규 측정 |
+| Python | **3.14.3** (`libpython3.14.so.1.0` in rootfs) | 신규 측정 |
+| 메모리 | `MemTotal` **488M**, zram swap **511M** | swap 0 → zram(beta 라인, §5.4 B6와 일치) |
+| **코어 수** | **`nproc` = 1**, ISA `rv64imafdc_zicntr_zicsr_zifencei_zihpm_zaamo_zalrsc_zca_zcd` | 신규 측정 |
+| 저장 | `/` 739M ro 47% · **p7 `/mnt/user` 5.7G, 9% (493M)** | 동형 |
+
+**패키지 조달면 (opkg)**
+
+- 피드: `src/gz smhub_core https://pkg.smlight.tech/v1`, **HTTP basic auth**(크레덴셜은 기기
+  `/etc/opkg/smlight.conf` + `PRIVATE.md`, 공개 파일 금지). `/etc/opkg/` 에 conf 1개뿐.
+- **카탈로그 = 45 stanza / 17 패키지명** (off-device `curl` 로 독립 확인, 기기 `opkg list`와 일치):
+  `esphome-bin · matterbridge{,-hass,-shelly,-z2m} · nodejs · nodered · openthread · picoclaw{,-core} ·
+  smhub-{broker,services,ui,web} · tailscale · zigbee2mqtt · zwavejsui`.
+  → **`domoticz` 0건.** 라이브러리 패키지(boost/lua/mosquitto/…)도 피드에 **없다** — 앱 ipk만 있는 피드다.
+- 설치본 9개: `esphome-bin 2026.5.3-3 · nodejs 22.22.0-2 · nodered 4.1.5-1 · python3 3.14 ·
+  smhub-broker 1.0.3-3 · smhub-services 1.0.4-1 · smhub-ui 1.0.3-1 · smhub-web 0.3.1-1 ·
+  zigbee2mqtt 2.10.1-2`. **z2m는 설치돼 있으나 `rc-status default`에 안 뜬다** → 지금 `/dev/ttyS1`은
+  비어 있다(`mosquitto`만 started). 라디오를 다른 host 스택이 잡을 자리가 **열려 있는 상태**.
+- ipk 메타데이터 실제 필드명은 **`Required-OS-Version: 1.0.0`** (릴노트 표기 `Require-OS-Version`과
+  다르다). `Architecture: riscv64`, `Maintainer: tl@smlight`. 우리 ipk도 이 형식을 따른다.
+
+**rootfs에 이미 있는 domoticz 의존 / 없는 것** (`ls /usr/lib`)
+
+| 있다 | 없다 |
+|---|---|
+| `libcurl.so.4` · `libsqlite3.so.3.51.2` · `libssl.so.3` · **`libmosquitto.so.1`(+`libmosquittopp`)** · `libjsoncpp.so.26` · `libz.so.1.3.2` · `libpython3.14.so.1.0` · `libstdc++.so.6.0.34` · `/usr/sbin/mosquitto` | **boost · lua · minizip · fmt · cereal** |
+
+→ **우리가 조달할 것 = domoticz 본체 + boost(atomic/date_time/system/thread) + lua 5.3 + minizip.**
+나머지는 벤더 rootfs가 이미 지불했다. 단 rootfs는 ro·A/B라 **설치면은 p7 하나**(§3.7 패턴 (a)).
+
+**ABI 계약 (결정적)**: 기기 glibc **2.42** / Python **3.14.3** / GCC **15.2.0** 은 upstream Buildroot
+**태그 `2026.02`** 의 핀과 정확히 일치한다(`glibc 2.42-51-gcbf39c2` · `python3 3.14.3` ·
+`BR2_GCC_VERSION_15_X=15.2.0`). 벤더 rev `…-18-g60430d6802` 는 upstream에 없는 **벤더 자체 18커밋**이라
+bit-identical 재현은 불가하지만, **`2026.02`가 우리 크로스빌드의 재현 가능한 base**다. 최신 master
+(glibc 2.44)로 빌드하면 **2.42 기기에서 심볼이 안 맞아 실행 불가** — 여기서 버전을 위로 올리면 안 된다.
+
 ---
 
 ## 5. 통제 경계 + 재현 세트 매트릭스 (beta5 정적 추출 + 0.9.8 라이브)

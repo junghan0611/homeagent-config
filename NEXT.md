@@ -99,6 +99,40 @@ Buildroot `2026.02`에 boost 1.83(≥ domoticz 최소 1.69) · lua 5.3.6 · mini
 - **Read**: **[#10](https://github.com/junghan0611/homeagent-config/issues/10)**(이 레인의 판 — 버전 좌표·조달면·판정 렌즈) · `docs/SMHUB.md` **§4.1**(오늘 재측정) + §3.7(설치면 p7 · 패턴 (a) ipk+OpenRC) ·
   §2.1(EZSP 13 계약) · `docs/ECOSYSTEM-PORTFOLIO.md` §4~§6(domoticz+Z4D 비용) · `PRIVATE.md`(피드 인증).
 
+## 9-3. 레시피 계획 — OTA 대기 중 기기 없이 확정한 것 (2026-09-07)
+
+**서브모듈은 회피 불가고, 그래서 오히려 싸다.** [측정] GitHub 태그 타르볼
+`domoticz-2026.3.tar.gz`(13.5MB)의 `extern/` 5개는 **전부 빈 디렉터리**(엔트리 6개뿐)이고,
+CMake는 그 부재를 `FATAL_ERROR: The submodules were not downloaded!`로 잡는다
+(`CMakeLists.txt:151-162`). 더 결정적인 건 **`add_subdirectory(extern/libwebem)`에 옵션이 없다**
+(`:471`, `target_link_libraries(domoticz webem)`) — 즉 `USE_BUILTIN_*`을 다 꺼도 **libwebem은
+반드시 서브모듈로 와야 한다.** → Buildroot의 `$(call github,…)` 타르볼 방식으로는 안 선다.
+
+**해법은 한 줄이다**: `DOMOTICZ_SITE_METHOD = git` + `DOMOTICZ_GIT_SUBMODULES = YES`
+([측정] Buildroot가 지원 — `package/pkg-download.mk:130`이 `-r`을 넘기고, 쓰는 패키지도
+`azure-iot-sdk-c`·`libplacebo`·`brickd` 등 실재). 서브모듈 리비전은 태그의 gitlink가 고정하므로
+**재현성이 유지되고**, Buildroot가 만든 타르볼이 `dl/`에 캐시된다.
+→ **새 Buildroot 패키지 0개. 레시피 1장(기존 `package/domoticz` 수정)이 전부다.**
+
+**빌드 옵션 방향 — 없는 건 정적으로 삼키고, 있는 건 rootfs 것을 쓴다**
+
+| 항목 | 2026.3 기본값 | 우리 선택 | 이유 |
+|---|---|---|---|
+| `USE_BUILTIN_JSONCPP` / `MINIZIP` / `JWTCPP` | YES | **YES 유지**(정적) | 기기에 minizip 없음, jsoncpp는 있지만 ABI 걸 이유 없음. **ipk가 그만큼 자립** |
+| `USE_BUILTIN_SQLITE` | NO | **NO** | rootfs `libsqlite3.so.3.51.2` 사용 |
+| `USE_PYTHON` | YES | **YES 필수** | Z4D 플러그인의 전제. rootfs `libpython3.14` 대상 |
+| `USE_STATIC_BOOST` | YES | **OFF + 동봉** | [측정] Buildroot boost는 `link=shared runtime-link=shared` 고정(`boost.mk:110`)이라 `.a`가 안 나온다 → boost 정적은 불가. `libboost_{thread,system,date_time,atomic}.so` 동봉 확정 |
+| `USE_LUA_STATIC` | YES | 빌드에서 확인 | domoticz는 `liblua5.3.a`/`liblua5.3.so` + `lua5.3/lua.h`를 찾는데 Buildroot는 `liblua.so`/`/usr/include`에 깐다 → `find_package(Lua)` fallback(`:496`) 의존. 2024.4가 이 경로로 서 있으니 통과가 기대값이지만 **첫 빌드에서 볼 것** |
+| `USE_PRECOMPILED_HEADER` | YES | **OFF** | 기존 레시피가 이미 끈다 |
+
+→ **ipk 내용 = domoticz 바이너리(jsoncpp·minizip·jwtcpp·libwebem 정적 내장) + boost 4개 + lua**,
+그리고 정적 자산 **`www/` 14.6M + `Config/` 5.5M**([측정] 타르볼). `Config/`는 OpenZWave 경로용이
+대부분이라 **회수 후보**(9-4에서 판정). 설치 위치는 `/opt/domoticz`(기존 레시피 기본값 =
+p7 지속면과 정합).
+
+**Do not**: OTA 진행 중 기기에 접근하지 마라(Web Terminal 포함). 이 절은 전부 로컬 소스/타르볼
+측정이고 기기를 안 건드렸다.
+
 ## 참조 — 스택 랜드스케이프 (닫힘 2026-09-01, 실증은 딴 레인)
 
 **이 리포의 중심은 "다 만든다"가 아니다 — 512MB급 작은 폼팩터에 이 주제를 밀어넣는 것이고,
@@ -115,8 +149,9 @@ Buildroot `2026.02`에 boost 1.83(≥ domoticz 최소 1.69) · lua 5.3.6 · mini
 - **버전 방침 확정 (GLG 2026-09-01): domoticz는 최신 `2026.3`으로 간다.** Buildroot가 pin한
   `2024.4`가 아니다. [측정] 업스트림 태그에 `2026.1·2026.2·2026.3` 실재. 부채 0을 사자고
   2년 묵은 버전을 신지 않는다 — **서브모듈 5개 조달이 알고 지는 값**이고, 그게 이 레인의
-  첫 실작업이 된다(`libwebem`·`jwt-cpp`·`jsoncpp`·`minizip`·`sqlite-amalgamation`;
-  `jwt-cpp`는 Buildroot에 패키지가 없어 새로 쓴다). 착수 시점은 회사 레인 결과 뒤.
+  첫 실작업이 된다(`libwebem`·`jwt-cpp`·`jsoncpp`·`minizip`·`sqlite-amalgamation`).
+  ~~`jwt-cpp`는 Buildroot에 패키지가 없어 새로 쓴다~~ **← 정정(2026-09-07, 아래 9-3): 새 패키지는
+  0개다. `SITE_METHOD=git` + `GIT_SUBMODULES=YES` 한 줄이 다섯 개를 한꺼번에 가져온다.**
 - **놓치면 안 되는 맥락 (GLG)**: 타깃은 **Duo S급 저사양에 꽉 눌러담는 것**이다. 큰 기계에서
   되는 걸 확인하는 게 아니다. 모든 표는 "되나"가 아니라 **"512MB에 들어가나"**로 읽는다.
 - **그리고 이건 Milk-V 레인 구조를 바꿀 수 있다 (GLG)**: 회사 레인 실증이 잘 되면 이 리포의

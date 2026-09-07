@@ -8,11 +8,38 @@
 - [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← **DEPRIORITIZED (GLG 2026-09-07: "당장 필요 없다")**. Duo S/이미지 축 검증은 끝났고 틀이 바뀌었다. 지시 오면 재개
 - [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
-- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT (GLG 2026-09-07 틀 변경)**. Milk-V는 되는 걸 검증했으니, 이제 **제품 폼(SMHub Nano, riscv64)** 에 domoticz를 얹는다. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**. 9-1 버전 좌표 확정 ✅ → 9-2 OS 1.0.2 OTA(GLG 진행) → 9-3 조달/빌드 → 9-4 기동
+- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT (GLG 2026-09-07 틀 변경)**. Milk-V는 되는 걸 검증했으니, 이제 **제품 폼(SMHub Nano, riscv64)** 에 domoticz를 얹는다. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**. 9-1 버전 좌표 ✅ → 9-2 OS `1.0.2` OTA ✅ + SSH 영구 복구 ✅ → **9-3 크로스빌드 진행 중** → 9-4 패키징·기동·CPU/RSS 실측
 
-현재 좌표: 1·2·3·4·5 완료 → **9 SMHub domoticz 이관(9-1 닫힘, 9-2 착수 대기)** → 6 보류(GLG 판단) · 7·8 보류
+현재 좌표: 1·2·3·4·5 완료 → **9 진행 중 (9-1·9-2 닫힘, 9-3 빌드 굽는 중)** → 6 보류(GLG 판단) · 7·8 보류
 
-# NOW — SMHub에 domoticz: 버전 좌표 확정 (9-1 닫힘 2026-09-07)
+# NOW — 이어받는 자리 (2026-09-07 퇴근 시점 상태)
+
+> **한 줄**: 막고 있던 미지값 셋(ABI · 조달 경로 · 셸 접근)이 전부 닫혔고, **domoticz 2026.3
+> riscv64 크로스빌드가 돌고 있다.** 남은 건 빌드 결과 → 패키징 → 기동 → **1코어 CPU 실측**.
+
+**돌아와서 첫 명령 (순서대로)**
+
+```bash
+docker ps --filter ancestor=milkvtech/milkv-duo:latest   # 살아 있나 / 두 개면 하나 kill
+ls smhub/sdk/output/build/*/.stamp_built | wc -l         # 진행 stamp 수
+tail -20 smhub/sdk/output/build/build-time.log           # 마지막 단계
+./smhub/build.sh                                         # 죽어 있으면 이어굽기(증분, 안전)
+ls -l smhub/sdk/output/target/opt/domoticz/domoticz      # 나왔나 = 판정
+SMHUB_SSH=smlight@<기기> ./smhub/pack-ipk.sh              # 좌표는 PRIVATE.md
+```
+
+- **빌드**: `2026-09-07 17:18` 시작(랩탑 16코어, 컨테이너 `milkvtech/milkv-duo:latest`).
+  호스트 툴 8개 ≈13분 → 크로스 툴체인(binutils 2.44 · GCC 15.2 · glibc 2.42) → boost·python3 →
+  domoticz. **첫 빌드 50~90분 예상.** 랩탑이 잠들면 그 패키지만 다시 → `./smhub/build.sh` 한 번.
+- **접근**: `ssh -i .sshkey/id_ed25519 smlight@<기기>` — **웹 콘솔 필요 없다**(오늘 영구 복구).
+  sudo pw는 벤더 기본값(`PRIVATE.md`).
+- **손 안 댄 것**: 기기의 z2m(설치돼 있으나 미기동) · MG24 라디오 · 벤더 설정 · backend.db.
+  **백업 안 했다**(GLG "날것으로 간다") — 그게 의도다.
+- **보고**: 오늘 작업을 cos 비서실장(`20260907T143610-c31ef8`)에 전송 완료 —
+  프레이밍은 **works-nixos-zigbee 서포트**(같은 스택을 512MB급 보드에 올려 "미니PC 축"의 열린
+  결정에 값을 준다). 그쪽에 회신할 첫 값 = **1코어가 세트 하나(30~40대)를 받는가**.
+
+## 9-1~9-2 배경 — 틀 변경과 버전 좌표 (닫힘)
 
 > **틀 변경 (GLG 2026-09-07)**: Milk-V Duo S 레인은 "되는 것"을 이미 증명했다. 이제 **통합보드
 > 제품(SMHub Nano Mg24, riscv64 고정)에 domoticz를 올린다.** 실증 레인(회사, x86/NixOS)이 스택을

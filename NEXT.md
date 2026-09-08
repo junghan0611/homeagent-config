@@ -8,10 +8,102 @@
 - [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← **DEPRIORITIZED (GLG 2026-09-07: "당장 필요 없다")**. Duo S/이미지 축 검증은 끝났고 틀이 바뀌었다. 지시 오면 재개
 - [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
-- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT**. 9-1 버전 좌표 ✅ → 9-2 OS `1.0.2` OTA ✅ + SSH 복구 ✅ → **9-3 크로스빌드 + ipk ✅ (2026-09-08)** → **9-4 설치·기동·등급 측정 ← 여기**. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**
+- [x] **9. SMHub(통합보드)에 domoticz 올리기 — 돈다 (2026-09-08)**. 9-1 버전 좌표 ✅ → 9-2 OTA+SSH ✅ → 9-3 크로스빌드+ipk ✅ → **9-4 설치·기동·리부트 생존·유휴 실측 ✅**. 남은 것은 **부하 등급 판정 하나**(→ 11). **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**
+- [ ] **11. 부하 등급 판정** ← **NEXT**. 유휴는 쟀다(domoticz 23.6M/0.5% · z2m 93.0M/12%, available 263M). **30~40대 페어링에서 1코어가 받는가**는 미측정 — 기기가 있어야 한다
 - [x] **10. Zigbee 호스트 결정 — `domoticz + Z2M`, Z4D는 안 쓴다 (GLG 2026-09-08)**. 아래 「RAIL 10 결정」 참조. riscv64 Rust/PyO3 크로스빌드 벽이 통째로 사라졌다
 
-현재 좌표: 1·2·3·4·5·**10** 완료 → **9 진행 중 (9-1·9-2·9-3 닫힘, 9-4가 다음)** → 6 보류(GLG 판단) · 7·8 보류
+현재 좌표: 1·2·3·4·5·**9·10** 완료 → **11(부하 등급) 이 다음** → 6 보류(GLG 판단) · 7·8 보류
+
+---
+
+# RAIL 10 결정 — Zigbee 호스트는 Z2M, Z4D는 쓰지 않는다 (GLG 2026-09-08)
+
+**전제 셋을 GLG가 고정했다**: ① 듀얼 동글은 안 한다(전부 싱글) ② 메모리 풋프린트는 판정 축이
+아니다 ③ domoticz는 Z2M으로 된다.
+
+**결정적 사실**: [측정 `docs/ECOSYSTEM-PORTFOLIO.md` §5] domoticz `hardware/` 149개 드라이버 중
+**Zigbee만 네이티브가 없고**, 유일한 입구가 `hardware/MQTTAutoDiscover.cpp` = **Z2M+MQTT**다.
+즉 Z2M이 우회로가 아니라 **domoticz의 표준 Zigbee 경로**이고, Z4D가 서드파티 우회로다.
+
+**Z4D의 존재 이유는 하나였고, 그게 전제 ②에서 사라진다.** `EP §4`의 판정은 "플랫폼 선택보다
+Zigbee를 Node에서 떼는 것이 크다"였다 — Z4D는 경량이라 후보였던 게 아니라 **Node를 빼주는 유일한
+domoticz 경로**라서 후보였다. 그런데 [측정 §6.2] Node 49.5M을 빼자 **CPython+zigpy 86M**이 들어왔고,
+풋프린트가 판정 축이 아니면 남는 이유가 없다.
+
+**반대편 비용은 그대로 남는다**: riscv64 Rust/PyO3 벽(기기에 `cryptography`·`pip` 없음, 위 9-2) ·
+가짜 초록(`0702`/`0b04`를 읽고 버리고 On/Off 등록) · 컨버터 DB 규모 · 아웃바운드(google.com 조회 +
+Matomo 텔레메트리 기본 ON + 런타임 pip 업그레이드) · 비표준 경로.
+
+**Node를 빼고 싶어지면 목적지는 Z4D가 아니다** — `EP §4` 표의 우리 답은 **자체 Zig 게이트웨이**
+(EZSP 직결)다. Z4D는 양쪽에서 눌린 중간항이다:
+
+```
+Node를 유지한다  →  Z2M          (표준 경로 · SMHub에서 이미 돎 · 컨버터 DB)
+Node를 뺀다      →  자체 Zig     (EZSP 직결, 이 리포의 원래 축)
+                    Z4D = Node 대신 Python+Rust를 받는 중간항
+```
+
+**지금 구운 ipk는 그대로 쓴다 — 다시 빌드할 게 없다.** [측정 2026-09-08] 바이너리에
+`MQTTAutoDiscover` 심볼이 내장돼 있고(`on_message(mosquitto_message*)`, `zigbee2mqtt` 문자열),
+`libmosquitto.so.1`을 링크하며, 브로커는 기기에 이미 떠 있다. **선택한 경로를 이미 싣고 있다.**
+
+- `USE_PYTHON=ON`은 **유지한다.** 이유가 "Z4D 전제"에서 "dlopen이라 비용 0, 열어둘 이유 없음"으로
+  바뀌었을 뿐이다. 플러그인을 안 쓰면 CPython 인스턴스가 아예 안 뜬다([측정 §6.2] A′ 조건 = 35 MB).
+  끄면 바이너리가 조금 줄지만 **재빌드 4시간을 쓸 값이 아니다.**
+- 9-4의 목적이 바뀐다: **"Z4D 준비"가 아니라 "1코어 488M이 이 등급을 받는가"**. 그 값은 플랫폼
+  선택과 무관하게 works-nixos-zigbee 레인에 돌려줄 숫자다.
+- `EP §9`의 미결 하나가 절반 닫힌다 — *"riscv64/musl 가부: domoticz·zigpy 양쪽 다 미측정"*에서
+  **zigpy 쪽은 이제 안 재도 된다.**
+
+---
+
+# NOW — 이어받는 자리 (2026-09-08)
+
+> **한 줄**: **domoticz 2026.3이 SMHub Nano(riscv64/1코어/488M)에서 돌고, 리부트도 건넜다.**
+> 남은 미지값은 **부하 하나** — 30~40대에서 1코어가 받는가.
+
+**절차는 문서가 진다 → [`smhub/RUNBOOK.md`](smhub/RUNBOOK.md)** (증거 경계표가 맨 위에 있다).
+이 파일은 현재 작업자 handoff다.
+
+## 오늘 닫힌 것 (RUNBOOK ❓ 네 칸 전부)
+
+| 판정 | 값 |
+|---|---|
+| 설치 | `opkg install` → `domoticz - 2026.3-1` |
+| 기동 | pid 살아 있고 **8081 listen**, 밖에서 **HTTP 200** |
+| **리부트 생존** | 자동 재기동 ✅ + **SSH host key가 리부트를 건넜다** → `docs/SMHUB.md` §3.6 닫힘 |
+| 유휴 실측 | 아래 표 |
+
+**[측정 2026-09-08, 리부트 후 279초, 페어링 0대, 두 스택 동시]**
+
+| | `VmRSS` | Threads | CPU(누적) |
+|---|---|---|---|
+| **domoticz 2026.3** | **23.6 MB** | 18 | **1.46 s (0.5%)** |
+| **zigbee2mqtt 2.13.0** | **93.0 MB** | 11 | **33.4 s (12%)** |
+| 시스템 | used 224M / **available 263M** | | load 0.29 |
+
+**읽는 법**: 부담은 domoticz가 아니라 **Zigbee 호스트**다 — RSS 3.9배, CPU 23배. `EP §6.2`가
+x86에서 내린 판정이 제품 폼에서 재현됐고, 그 표의 `domoticz + Z2M` 빈칸이 **116.6 MB**로 채워졌다
+(x86 `domoticz + Z4D`는 121 MB였다). 여유는 절반 남는다.
+
+## 다음 한 걸음 (RAIL 11)
+
+**부하 등급.** 지금 값은 전부 **페어링 0대의 유휴치**다. 그 상태에서 z2m이 이미 CPU 12%를 쓴다.
+
+```bash
+# 기기 좌표는 PRIVATE.md
+ssh -i .sshkey/id_ed25519 smlight@<기기> 'D=$(pgrep -x domoticz|head -1); Z=$(pgrep -f "^/opt/bin/node /opt/bin/zigbee2mqtt"|head -1); for p in $D $Z; do grep -E "^VmRSS|^Threads" /proc/$p/status; awk "{print \$14+\$15}" /proc/$p/stat; done; free -m|head -2; cat /proc/loadavg'
+```
+
+- **기기를 붙여야 한다** — 페어링할 Zigbee 장치 없이는 못 잰다.
+- **domoticz ↔ z2m 연결은 아직 안 했다.** domoticz `Setup → Hardware`에 **MQTT Auto Discovery**
+  (`hardware/MQTTAutoDiscover.cpp`)를 `localhost:1883`으로 추가하면 z2m이 붙인 기기가 뜬다.
+  그게 RAIL 10이 고른 표준 경로이고, **부하 측정의 전제**다.
+- 그때까지 **"1코어가 세트를 받는다"고 말하지 않는다.** running ≠ working.
+
+## 손 안 댄 것
+
+z2m 설정·페어링·벤더 설정·`backend.db` 무변형. 라디오(`/dev/ttyS1`)는 z2m이 계속 쥔다.
 
 ---
 

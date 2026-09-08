@@ -535,8 +535,116 @@ curl -s "http://127.0.0.1:8081/json.htm?type=command&param=getdevices"   # 기�
 | Zigbee2MQTT Bridge (Restart required) | Off |
 
 **EZSP 좌표(§2.1)가 domoticz까지 올라왔다** = 파이프가 끝까지 통했다는 뜻이다.
-**단 Zigbee 기기는 0대다** — z2m `bridge/devices`에 Coordinator 자신뿐이라 올라올 게 없다.
-"기기가 보인다"는 페어링 뒤에 다시 판정한다(§7).
+
+### 6.4.5 페어링 실물 판정 ✅ (2026-09-08)
+
+Tuya `TS011F` 스마트플러그 5대를 붙이니 domoticz 기기가 **4 → 37개**로 늘었고, **전력량이
+값으로 왔다**:
+
+```
+kWh 5.810 · Voltage 216~219 V · Power 0 W · Current 0 A
++ Switch / Switch type button / Indicator mode / Child lock   (기기당 엔티티 ~9개)
+```
+
+> ⚠️ **「가짜 초록」은 사라진 게 아니라 자리를 옮겼다 — 범위를 반드시 달아라.**
+> `docs/ECOSYSTEM-PORTFOLIO.md` §6.3이 기록한 Z4D의 병(`0702`/`0b04`를 읽고도 버리고 On/Off로
+> 등록)은 **이 조합에서는 재현되지 않았다**: `_TZ3210_tjhw9ziq` · `_TZ3000_w0qqde0g`
+> (둘 다 정의는 `TS011F_plug_1` 하나. `A1Z`/Nous는 그 **whiteLabel**이지 별개 정의가 아니다).
+> **그러나 16A는 반대다** — [인계, works-nixos-zigbee 2026-09-08, zhc 26.90.0
+> `dist/devices/tuya.js:11261`] `applicationVersion:65`가 `TS011F_plug_3`(polling)로 끌어가고
+> 그 폴링 목록에 `energy`가 없어 **kWh가 영구히 안 온다.** 화면은 초록이다.
+> → **"z2m은 안 그렇다"고 일반화하지 마라. 기종마다 확인한다.**
+
+**판정도 위젯이 아니라 값으로 한다:**
+
+```sh
+$SSH 'curl -s "http://127.0.0.1:8081/json.htm?type=command&param=getdevices"' \
+  | grep -E '"SubType" : "(kWh|Voltage|Current)"' -A1
+```
+
+---
+
+## 6.5 ⚠️ 시리얼이 부하에서 끊긴다 — 이 보드의 진짜 병목
+
+여러 대를 **연속으로** 페어링하면 z2m이 반복해서 죽는다. **메모리 문제가 아니다**
+([측정] available 208~263 M, OOM 흔적 0).
+
+```
+zh:ember:uart:ash: RTS/CTS config is off, enabling software flow control.
+ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT → ASH_NCP_FATAL_ERROR
+z2m: Adapter disconnected, stopping
+```
+
+`ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT`는 [읽음 `zigbee-herdsman/src/adapter/ember/uart/enums.ts:190`]
+**`NcpFailedCode`** — 즉 **NCP가 호스트의 ACK를 못 받아** 낸 실패다. 마지막 프레임이
+`SEND_UNICAST`(host→NCP)인 건 호스트 큐의 마지막 항목일 뿐이고, **죽은 방향은 NCP→host**다.
+
+### 6.5.1 하드웨어 진단 [측정 2026-09-08, 실기]
+
+```text
+uart:16550A  mmio:0x04150000  irq:6  tx:13647 rx:25232
+DT:  uart-has-rtscts ✗   dmas ✗   dma-names ✗   cts-gpios ✗   rts-gpios ✗
+dmesg: dw-apb-uart 4150000.serial: failed to request DMA
+termios: -crtscts / ixon ixoff
+```
+
+셋이 갈렸다:
+
+| 사실 | 뜻 |
+|---|---|
+| **DT에 `dmas` 없음** → `failed to request DMA` | **UART가 PIO로 돈다.** 바이트마다 인터럽트고, **1코어**에서 node가 인터뷰를 돌리는 동안 RX FIFO를 못 비우면 오버런이다 |
+| **DT에 `uart-has-rtscts` 없음 + 포트가 `16550A`** | **하드웨어 자동 RTS 경로가 없다**(AFE 있는 `16750`/`U6_16550A`가 아니다). `rtscts: true`는 **핀 배선을 따지기 전에 드라이버에서 막힌다** → `docs/SMHUB.md` §5.5 Q5의 "배선 미검증"이 여기로 좁혀졌다 |
+| `/proc/tty/driver/serial`에 **`oe:`/`bo:` 없음** | 이 커널 빌드는 `tx:`/`rx:`만 낸다 → **오버런을 직접 세는 길이 막혔다** |
+
+### 6.5.2 대응 — `adapter_concurrent`를 내린다 ✅ 적용됨
+
+ember 어댑터의 in-flight 기본이 **16**이다 [읽음 `zigbee-herdsman/src/adapter/ember/adapter/emberAdapter.ts:278`
+`new Queue(this.adapterOptions.concurrent || 16)`], 그리고 z2m 설정 한 줄로 내려간다
+[읽음 `zigbee2mqtt/lib/zigbee.ts:54`, `lib/util/settings.schema.json:730-736` — min 1 / max 64,
+`requiresRestart`]. PIO + 1코어 + no-flow 상태에서 16 동시는 소방호스다.
+
+```yaml
+advanced:
+  adapter_concurrent: 2
+```
+
+```sh
+$SSH 'sudo cp -a /opt/zigbee2mqtt/data/configuration.yaml{,.bak-$(date +%s)}'
+$SSH "sudo sed -i '/^advanced:/a\\  adapter_concurrent: 2' /opt/zigbee2mqtt/data/configuration.yaml"
+$SSH 'ls -l /opt/zigbee2mqtt/data/configuration.yaml'    # 소유자 smlight 확인 (§6.4.1)
+$SSH 'sudo rc-service zigbee2mqtt restart'
+```
+
+**판정** — 설정이 실제로 먹었는지는 브로커가 말한다:
+
+```sh
+$SSH "mosquitto_sub -h 127.0.0.1 -t zigbee2mqtt/bridge/info -C 1 -W 8" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["config"]["advanced"].get("adapter_concurrent"))'
+```
+
+**되돌리기**: 그 줄 삭제 후 재시작. NCP·펌웨어·네트워크키·`database.db` 전부 무관.
+
+- **손으로 간격 두고 붙이는 것보다 이쪽이 낫다.** 손 회피는 페어링 국면만 막지만, 이 값은
+  **정상 보고 주기에도 계속 적용된다** — §7이 묻는 게 상시 트래픽이다.
+- ⚠️ **보율을 낮추지 마라(115200→57600).** NCP 보율은 플래시된 값이라 호스트만 바꾸면 안 맞고,
+  맞추려면 리플래시인데 **벤더 원본 `.gbl`이 우리에게 없다**(`docs/SMHUB.md` §6-6) — 편도 문이다.
+  게다가 프레임 전송시간이 늘어 `CONFIG_ACK_TIME_MAX 2400ms` 여유가 **줄어든다**;
+  지금 죽는 이유가 바로 그 타임아웃이다.
+- ASH 파라미터(`ASH_MAX_TIMEOUTS 6`, `CONFIG_TX_K 3` 등)는 [읽음 `ash.ts:143-149`,
+  `consts.ts:29`] **전부 모듈 상수라 설정으로 못 만진다.** 소스 패치는 downstream budget 위반.
+
+### 6.5.3 §7에 미리 걸리는 값
+
+[읽음 `emberAdapter.ts:185-197`] `DEFAULT_STACK_CONFIG`:
+
+- **`MAX_END_DEVICE_CHILDREN: 32`** — 코디네이터 직접 자식 상한. **30~40대 목표의 바로 그 근처**다.
+  지금 플러그는 전부 Router(mains)라 안 걸리지만 **배터리 end device가 섞이면 여기가 먼저 찬다.**
+- `CONCENTRATOR_MIN_TIME 5` / `MAX_TIME 60` — MTORR을 5~60초마다 브로드캐스트한다.
+  **페어링을 끝내도 시리얼 압력이 0이 되지 않는다.**
+
+`~/…/data/stack_config.json`으로 덮어쓸 수 있다(`:292-299`).
+
+---
 
 ---
 
@@ -607,6 +715,8 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `homeassistant/` 토픽이 없다 | z2m 기본값이 `enabled: false` | §6.4.1 |
 | z2m이 `EACCES ... configuration.yaml`로 죽는다 | 설정 파일 소유자가 `root`로 바뀌었다 | §6.4.1 — `chown smlight:smlight`. **`rc-status`는 그때도 `started`** |
 | domoticz 페이지는 뜨는데 화면이 빈다 | LAN이 신뢰망에 없어 API가 401 | §6.4.2 |
+| 연속 페어링 중 z2m이 반복해서 죽는다 | `ASH_NCP_FATAL_ERROR` — PIO UART + 1코어 + no-flow | **§6.5**. 메모리 아니다 |
+| 전력량 위젯은 서는데 kWh가 안 온다 | 16A `TS011F_plug_3` polling 경로 | §6.4.5 — **기종마다 확인** |
 | `json.htm`이 전부 401 | 초기 domoticz는 `Users`가 비어 있다 | §6.4.3 |
 | `reboot`를 보냈는데 안 내려간다 | ssh 세션과 함께 죽었다 | `nohup sh -c "sleep 2; reboot"` 후 **:22가 닫히는지 확인** |
 | 리부트 후 domoticz가 안 뜬다 | `rc-update add`를 안 했거나 영속 실패 | §6 판정에 리부트가 있는 이유 |

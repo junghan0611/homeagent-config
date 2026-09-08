@@ -536,7 +536,15 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
 - **Q3 버전 좌표 독립 재확인 — ✅**: `coordinator_backup.json`에서 `ezspVersion 13` + `source zigbee-herdsman@10.0.7` + pan_id `e760`(=59232, §2 일치) 독립 확인. (EmberZNet 7.4.2 GA는 backup에 없음 = 런타임 `bridge/info` 값 축, §2/§4 V4 의존.)
 - **Q4 EZSP 13 내 7.4↔7.5 델타 — ⚠️ 열림(§9)**: 로컬은 GSDK 4.5.0=7.5.1만 보유 → 진짜 frame-ID diff엔 7.4.2 `ezsp-enum.h` 필요. 단 `ezsp.c` 하위호환 경로(*initial EZSP_VERSION old packet format*)로 코어 코디네이터 커맨드 상호운용은 안전. 잔여 리스크=7.5 전용 신규 frame 호출. Phase 2(직접구동 b) 착수 시 확정.
 - **Q5 MG24 NCP 리플래시 이미지 — `ncp-uart-hw` (단 flow control 텐션)**: GSDK "em260" 후신 = `app/ncp/sample-app/ncp-uart-hw/ncp-uart-hw.slcp`, **MG24=Cortex-M33**(prebuilt `build/gcc/cortex-m33/zigbee-ncp-uart`), 출력 `.gbl`, 툴=벤더 `smhub-flasher`(릴노트 "Radio page supports Nano Mg24 flashing")/`universal-silabs-flasher`. GSDK UART NCP 샘플은 이 hw판만(`-sw` 부재).
-  ⚠️ **flow control 텐션(사실로 굳히지 않음)**: 라이브 동작 정본 = z2m **`rtscts: false`(no-flow)** @115200. 그런데 stock `ncp-uart-hw`는 기본 **RTS/CTS on**(`SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE=usartHwFlowControlCtsAndRts`, `EMBER_SERIAL1_RTSCTS`). → 벤더 flashed 이미지는 **no-flow 빌드**이거나 그렇게 구동 중이며, **stock hw판을 그대로 리플래시 후 no-flow 호스트로 몰면 부하 시 바이트 드롭 가능**. Phase 2 직접구동 전 flow-control 정합(NCP를 no-flow로 빌드 vs 양단 RTS/CTS — `ttyS1` RTS/CTS 배선 미검증) **재조정 항목**. (§6.1 재플래시 경로.)
+  ✅ **[2026-09-08 실기로 좁혀짐]** 이 텐션은 **호스트 쪽에서 이미 닫혔다**: DT에
+  `uart-has-rtscts`가 **없고** `/dev/ttyS1` 포트가 **`16550A`**(AFE 있는 `16750`/`U6_16550A`가
+  아니다)라 **하드웨어 자동 RTS 경로 자체가 없다.** 즉 `rtscts: true`는 핀 배선을 따지기 전에
+  드라이버에서 막힌다. 게다가 DT에 `dmas`도 없어(`failed to request DMA`) **UART가 PIO로 돈다** —
+  1코어에서 부하가 걸리면 RX 오버런이 구조적으로 가능하다. 실제로 연속 페어링에서
+  `ASH_NCP_FATAL_ERROR`로 z2m이 죽었고, 대응은 `advanced.adapter_concurrent: 2`다
+  (`smhub/RUNBOOK.md` §6.5). **NCP가 no-flow 빌드인지 stock hw인지는 여전히 미확인**이고,
+  `.gbl`이 없어 추출도 안 된다.
+  ⚠️ **원문 (2026-07-03 기록)**: 라이브 동작 정본 = z2m **`rtscts: false`(no-flow)** @115200. 그런데 stock `ncp-uart-hw`는 기본 **RTS/CTS on**(`SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE=usartHwFlowControlCtsAndRts`, `EMBER_SERIAL1_RTSCTS`). → 벤더 flashed 이미지는 **no-flow 빌드**이거나 그렇게 구동 중이며, **stock hw판을 그대로 리플래시 후 no-flow 호스트로 몰면 부하 시 바이트 드롭 가능**. Phase 2 직접구동 전 flow-control 정합(NCP를 no-flow로 빌드 vs 양단 RTS/CTS — `ttyS1` RTS/CTS 배선 미검증) **재조정 항목**. (§6.1 재플래시 경로.)
 
 **derisk 종합**: Q1·Q2 🟢 = **Phase 1(쉘) 실착수 막는 board blocker 없음**. Q3 확인사살 통과, Q4·Q5는 Phase 2 경계 명확.
 

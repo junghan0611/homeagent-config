@@ -56,7 +56,15 @@
 - **지원 OS 프로파일.** 지금 검증된 프로파일은 **`1.0.2` 하나**다. 기기의 `VERSION_ID`가 다르면
   §3으로 가서 ABI를 다시 재고, base 태그를 다시 정해야 한다(§3의 판정 규칙).
 
-### 0.2 클라이언트 키 (없으면 만든다)
+### 0.2 이 문서의 명령 표기
+
+아래에서 `$SSH`는 이 별칭이다. 붙여넣기 전에 한 번 선언하고 쓴다:
+
+```bash
+SSH='ssh -i .sshkey/id_ed25519 smlight@<기기>'    # <기기> 좌표는 PRIVATE.md
+```
+
+### 0.3 클라이언트 키 (없으면 만든다)
 
 `.sshkey/`는 의도적으로 gitignore다 — 새 클론에는 **없다**.
 
@@ -130,8 +138,8 @@ ssh -i .sshkey/id_ed25519 smlight@<기기> 'ls -l /mnt/user/ssh/'
 ②의 키가 505/399/2590 바이트 수준이면 결함이 제거된 것이다. ①만 보고 넘어가면 **다음
 리부트에서 되돌아온다** — 그게 이 함정의 본질이다.
 
-> 상태: 우리 유닛은 2026-09-08 ①②를 통과했다. **리부트를 실제로 건넌 실증은 ❓ 미검증** —
-> 다음 리부트/OTA 때 ②를 한 번 더 보면 `docs/SMHUB.md` §3.6이 완전히 닫힌다.
+> 상태: 우리 유닛은 2026-09-08 ①②를 통과했고, **같은 날 리부트도 건넜다**(복귀 후 같은 키,
+> `docs/SMHUB.md` §3.6 닫힘). **새 유닛에서는 재검증한다** — 이 결함은 유닛마다 걸린다.
 
 ---
 
@@ -259,9 +267,9 @@ domoticz 2026.3은 `find_package(Python3 3.4 COMPONENTS Development)`를 쓴다
 CMake Error: Python3 not found on your system, use USE_PYTHON=NO or sudo apt-get install python3-dev
 ```
 
-**`USE_PYTHON=NO`로 끄지 말고 우회해라.** (Z4D를 안 쓰기로 한 지금은 Python 플러그인이 필수가
-아니지만, dlopen이라 **안 쓰면 비용이 0**이고 — 플러그인을 안 띄우면 CPython 인스턴스가 아예
-안 뜬다 — 끄자고 4시간을 다시 구울 값이 아니다. 열어 둔다.)
+**`USE_PYTHON=NO`로 끄지 말고 우회해라.** Z4D는 이 리포의 지원 경로가 아니라서 Python 플러그인이
+필수는 아니지만, dlopen이라 **안 쓰면 비용이 0**이고(플러그인을 안 띄우면 CPython 인스턴스가 아예
+안 뜬다) 검증된 바이너리를 4시간 다시 굽는 값이 아니다. 열어 둔 채로 둔다.
 해법은 캐시 변수를 직접 물려주는 것이고, **이미 `smhub/package/domoticz/domoticz.mk`에 들어
 있다**(`Python3_INCLUDE_DIR` / `Python3_LIBRARY`). 성공하면 configure 로그에 이 줄이 뜬다:
 
@@ -319,32 +327,37 @@ build-image-digest / http-port / required-os / 동봉 목록 / rootfs 제공 목
 
 ---
 
-## 6. 설치·기동 ❓ 미검증
+## 6. 설치·기동 ✅ — 한 유닛 통과, 새 유닛은 판정을 다시 밟는다
 
-> 여기부터는 아직 실기로 통과시키지 않았다. 절차는 §3.7 패턴 (a)에서 도출한 것이고,
-> 처음 밟는 사람이 판정을 직접 봐야 한다.
+> 우리 유닛은 2026-09-08에 아래 판정을 전부 통과했다. **그건 이 절차가 옳다는 증거이지 새
+> 유닛이 통과했다는 뜻이 아니다** — 판정 ①~④와 리부트는 유닛마다 다시 본다.
 
 ```bash
 scp -i .sshkey/id_ed25519 smhub/out/domoticz_*_riscv64.ipk smlight@<기기>:/tmp/
-ssh -i .sshkey/id_ed25519 smlight@<기기> 'sudo opkg install /tmp/domoticz_*_riscv64.ipk'
-ssh -i .sshkey/id_ed25519 smlight@<기기> 'sudo rc-update add domoticz default && sudo rc-service domoticz start'
+$SSH 'sudo opkg install /tmp/domoticz_*_riscv64.ipk'
+$SSH 'sudo rc-update add domoticz default && sudo rc-service domoticz start'
 ```
 
-**판정 — 셋 다 봐라. `rc-status`는 사실원이 아니다.**
+**판정 — 넷 다 봐라. `rc-status`는 사실원이 아니다.**
 
 ```bash
-ssh ... 'opkg list-installed | grep domoticz'      # ① 설치됨
-ssh ... 'pgrep -a domoticz'                        # ② 프로세스 살아 있음
-ssh ... 'ss -ltn | grep 8081'                      # ③ 실제로 듣고 있음
-curl -sI http://<기기>:8081                        # ④ 밖에서 응답
+$SSH 'opkg list-installed | grep domoticz'      # ① 설치됨
+$SSH 'pgrep -a domoticz'                        # ② 프로세스 살아 있음
+$SSH 'ss -ltn | grep 8081'                      # ③ 실제로 듣고 있음
+curl -sI http://<기기>:8081                     # ④ 밖에서 응답
 ```
 
 **그리고 리부트를 건너라. 이게 판정의 절반이다.**
 
+⚠️ **`$SSH 'sudo reboot'`는 자주 실행되지 않는다** — ssh 세션이 끊기며 같이 죽는다. 분리해서
+띄우고, **:22가 실제로 닫히는지 먼저 확인한다**(안 닫히면 리부트가 안 걸린 것이다):
+
 ```bash
-ssh ... 'sudo reboot'        # ~100초
-# 돌아온 뒤: ①②③④를 그대로 반복 + SSH가 여전히 붙는지(§2.4 ②)
-ssh -i .sshkey/id_ed25519 smlight@<기기> 'ls -l /mnt/user/ssh/; uptime'
+$SSH 'echo <sudo-pw> | sudo -S nohup sh -c "sleep 2; reboot" >/dev/null 2>&1 &'
+# ① 정말 내려갔나 — 닫힘을 봐야 한다
+until ! timeout 3 bash -c 'exec 3<>/dev/tcp/<기기>/22' 2>/dev/null; do sleep 3; done; echo "내려갔다"
+# ② 돌아오면: 위 ①②③④를 그대로 반복 + host key가 살아남았는지(§2.4 ②)
+$SSH 'ls -l /mnt/user/ssh/; uptime'
 ```
 
 리부트 전만 보면 **두 가지를 동시에 놓친다**: `rc-update`가 실제로 영속했는지, 그리고 §2의
@@ -360,9 +373,16 @@ ssh ... 'logread | tail -50'     # 또는 /var/log
 ### 6.1 ⚠️ 포트 — 8080은 비어 있지 않다
 
 벤더 z2m 프론트엔드가 **8080을 이미 쓴다**(`/opt/bin/node /opt/bin/zigbee2mqtt`, 실측
-2026-09-08). 그래서 우리 init 스크립트는 **8081**을 쓴다. 새 기기에서 8081도 차 있으면
-`/etc/init.d/domoticz`의 `-www` 값을 바꾸고, `pack-ipk.sh` 쪽도 같이 고쳐라(**기기에서만 고치면
-다음 ipk에서 되돌아온다**).
+2026-09-08). 그래서 우리 init 스크립트는 **8081**을 쓴다.
+
+새 기기에서 8081도 차 있으면 — **기기의 `/etc/init.d/domoticz`를 고치지 마라.** 포트는
+pack-time 입력이라 기기 수정은 다음 ipk에서 사라진다. 다시 구워서 다시 깐다:
+
+```bash
+$SSH 'sudo rc-service domoticz stop; sudo opkg remove domoticz'
+HOMEAGENT_SMHUB_HTTP_PORT=8083 SMHUB_SSH="smlight@<기기>" ./smhub/pack-ipk.sh
+# 새 ipk로 §6 처음부터 다시
+```
 
 ### 6.2 ⚠️ 라디오는 하나뿐이다
 
@@ -380,8 +400,7 @@ MG24 (/dev/ttyS1) ── z2m ──→ mosquitto :1883 ──→ domoticz :8081
 
 셋 다 이미 있거나 나왔다. **z2m을 내리지 마라** — 내리면 Zigbee가 사라진다.
 
-> Z4D(domoticz의 Zigbee 플러그인)는 **쓰지 않는다.** 그걸 쓰면 z2m을 내리고 같은 라디오를
-> 뺏어야 하는데, 그 경로는 riscv64에서 Rust/PyO3 크로스빌드 벽에 걸리고 이득도 없다.
+> **이 리포는 Z4D를 쓰지 않는다** (RAIL 10). z2m이 라디오를 계속 쥐고, 분기는 없다.
 > 근거는 `docs/ECOSYSTEM-PORTFOLIO.md` §6 배너와 `NEXT.md`「RAIL 10 결정」.
 
 ### 6.3 설치면
@@ -393,57 +412,58 @@ MG24 (/dev/ttyS1) ── z2m ──→ mosquitto :1883 ──→ domoticz :8081
 
 ## 6.4 domoticz ↔ z2m 연결 ✅ — 표준 경로를 세운다
 
-RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받는다**. 양쪽에 각각 할 일이 있다.
+RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받는다**.
+
+> 🚫 **먼저 알아야 할 것 — 이 절이 만드는 상태는 셋 다 패키지 밖이다.**
+> 공장 초기화·재설치로 **사라지고**, `.ipk`를 다시 깔아도 복원되지 않는다
+> (`smhub/pack-ipk.sh`에 postinst가 없다).
+>
+> | 무엇 | 어디 | 소유자 |
+> |---|---|---|
+> | `homeassistant.enabled: true` | 벤더 `configuration.yaml` | **없음 — 손수정** |
+> | `Preferences.WebLocalNetworks` | `domoticz.db` | **없음 — 손수정** |
+> | `Hardware` 행 (MQTT Auto Discovery) | `domoticz.db` | **없음 — 손수정** |
+>
+> 제품이라면 **idempotent postinst 또는 이미지 시드**가 이 셋을 소유해야 한다
+> ([#8](https://github.com/junghan0611/homeagent-config/issues/8) 축). 지금은 손으로 넣은 상태임을 알고 쓴다.
 
 ### 6.4.1 z2m — HA discovery를 켠다 ⚠️ 기본이 꺼져 있다
 
 [측정 2026-09-08] 벤더 기본값은 **`homeassistant: enabled: false`**다. 이대로면 `homeassistant/`
-토픽이 **하나도 안 나오고**, domoticz는 붙어도 **아무것도 못 본다**. 켜야 한다:
+토픽이 **하나도 안 나오고**, domoticz는 붙어도 **아무것도 못 본다**.
 
 ```sh
 C=/opt/zigbee2mqtt/data/configuration.yaml
 sudo cp -a "$C" "$C.bak-$(date +%Y%m%d%H%M%S)"
-# homeassistant: 블록의 enabled 를 true 로
+sudo awk '
+  /^homeassistant:/ {inblk=1; print; next}
+  /^[a-z]/ && !/^  / {inblk=0}
+  inblk && /^  enabled:/ {sub(/false/,"true")}
+  {print}
+' "$C" > /tmp/z2m.new && sudo mv /tmp/z2m.new "$C"
+grep -A1 '^homeassistant:' "$C"          # enabled: true 인지 restart 전에 확인
 sudo rc-service zigbee2mqtt restart
 ```
 
-판정 — 토픽이 실제로 흐르는지 본다(`rc-service`가 아니라):
+원래 모습은 이렇고(들여쓰기 2칸, 최상위 블록):
+
+```yaml
+homeassistant:
+  enabled: false      # ← true 로
+```
+
+**판정 — 토픽이 실제로 흐르는지 본다** (`rc-service`가 아니라):
 
 ```sh
 mosquitto_sub -h 127.0.0.1 -t 'homeassistant/#' -W 8 -v | head -3
 ```
 
-> ⚠️ **이건 기기 쪽 수정이라 재현되지 않는다.** 우리 `.ipk`가 소유하지 않는 벤더 설정이고,
-> 공장 초기화하면 사라진다. 제품이라면 이미지나 패키지가 이 값을 소유해야 한다
-> ([#8](https://github.com/junghan0611/homeagent-config/issues/8) 축). 지금은 **손으로 켠 상태**임을 알고 쓴다.
+`Timed out`이면 안 켜진 것이다.
 
-### 6.4.2 domoticz — MQTT Auto Discovery 하드웨어 추가
-
-Web UI(`Setup → Hardware`)로도 되지만, API가 재현 가능하다. **`Mode1`과 `extra`가 함정이다.**
-
-```sh
-# 기기 안에서 (domoticz는 기본적으로 127.0.0.1만 신뢰한다 — 6.4.3)
-Q="type=command&param=addhardware&htype=125&name=Zigbee2MQTT&enabled=true"
-Q="$Q&address=127.0.0.1&port=1883&username=&password=&datatimeout=0&loglevel=7"
-Q="$Q&Mode1=0&Mode2=0&Mode3=0&Mode4=0&Mode5=0&Mode6=0"
-Q="$Q&extra=%3B%3B%3Bhomeassistant"        # = ";;;homeassistant"
-curl -s "http://127.0.0.1:8081/json.htm?$Q"
-```
-
-**함정 둘 (둘 다 조용히 실패한다)**
-
-| 함정 | 증상 | 근거 |
-|---|---|---|
-| `Mode1`이 **대문자**이고 비면 거부 | `{"status":"ERR"}`만 나온다. 이유를 안 알려준다 | `main/WebServerCmds.cpp` `ValidateHardware` — MQTT 계열은 `smode1.empty()`면 `return false` |
-| `extra`의 **네 번째 `;` 구획 = discovery prefix** | 하드웨어는 등록되고 브로커에 **연결까지 되는데 기기가 0개**다 | `hardware/MQTTAutoDiscover.cpp:57-76` — `Extra`를 `;`로 쪼개 `[3]`을 prefix로 쓰고, 비면 `"Auto Discovery Topic empty!"` 후 **아무것도 구독하지 않는다** |
-
-두 번째가 특히 「가짜 초록」이다 — `ss`로 보면 domoticz가 1883에 붙어 있어서 **연결은 성공으로
-보인다.** 판정은 연결이 아니라 **기기 수**로 한다.
-
-### 6.4.3 domoticz 인증 — 초기 상태에서 API가 전부 401
+### 6.4.2 domoticz — 로컬 API 401부터 푼다 ⚠️ 이걸 먼저 안 하면 다음 절이 전부 막힌다
 
 [측정] 새로 설치한 domoticz는 `Users` 테이블이 비어 있고, 그 상태에서 `json.htm`이 **401**을
-돌려준다(`getversion`만 열려 있다). 로컬을 신뢰망으로 등록하면 열린다:
+돌려준다(`getversion`만 열려 있다). 로컬을 신뢰망으로 등록한다:
 
 ```sh
 sudo rc-service domoticz stop
@@ -452,13 +472,45 @@ sudo sqlite3 /opt/domoticz/domoticz.db \
 sudo rc-service domoticz start
 ```
 
-> ⚠️ 이것도 **기기 쪽 상태**(`/opt/domoticz/domoticz.db`)다. 제품이라면 패키지가 시드해야 한다.
-> 그리고 **관리자 계정은 아직 아무도 안 만들었다** — 지금은 "로컬은 무인증"이라 도는 것이다.
+**판정 — 다음 절로 넘어가기 전에 이게 200이어야 한다** (기기 안에서):
 
-### 6.4.4 판정 ✅ — 실측 (2026-09-08)
+```sh
+curl -s "http://127.0.0.1:8081/json.htm?type=command&param=gethardware"
+```
+
+> ⚠️ **관리자 계정은 아직 아무도 안 만들었다.** 지금 도는 이유는 "로컬은 무인증"이기 때문이다.
+> 제품이라면 계정을 이미지가 소유해야 한다(같은 [#8](https://github.com/junghan0611/homeagent-config/issues/8) 축).
+
+### 6.4.3 domoticz — MQTT Auto Discovery 하드웨어 추가
+
+Web UI(`Setup → Hardware`)로도 되지만 API가 재현 가능하다. **기기 안에서** 친다(§6.4.2 때문):
+
+```sh
+Q="type=command&param=addhardware&htype=125&name=Zigbee2MQTT&enabled=true"
+Q="$Q&address=127.0.0.1&port=1883&username=&password=&datatimeout=0&loglevel=7"
+Q="$Q&Mode1=0&Mode2=0&Mode3=0&Mode4=0&Mode5=0&Mode6=0"
+Q="$Q&extra=%3B%3B%3Bhomeassistant"        # = ";;;homeassistant"
+curl -s "http://127.0.0.1:8081/json.htm?$Q"
+```
+
+**함정 둘 — 둘 다 조용히 실패한다. 치기 전에 읽어라.**
+
+| 함정 | 증상 | 근거 |
+|---|---|---|
+| `Mode1`이 **대문자**이고 비면 거부 | `{"status":"ERR"}`만 나온다. 이유를 안 알려준다 | `main/WebServerCmds.cpp` `ValidateHardware` — MQTT 계열은 `smode1.empty()`면 `return false` |
+| `extra`의 **네 번째 `;` 구획 = discovery prefix** | 하드웨어가 등록되고 브로커에 **연결까지 되는데 기기가 0개**다 | `hardware/MQTTAutoDiscover.cpp:57-76` — `Extra`를 `;`로 쪼개 `[3]`을 prefix로 쓰고, 비면 `"Auto Discovery Topic empty!"` 후 **아무것도 구독하지 않는다** |
+
+두 번째가 특히 「가짜 초록」이다 — `ss`로 보면 domoticz가 1883에 established라 **연결은 성공으로
+보인다.** **판정은 연결이 아니라 기기 수다.**
+
+### 6.4.4 판정 ✅ — 실측 (2026-09-08, 한 유닛)
 
 ```text
 MG24 (/dev/ttyS1) ── z2m 2.13.0 ──→ mosquitto :1883 ──→ domoticz 2026.3 :8081
+```
+
+```sh
+curl -s "http://127.0.0.1:8081/json.htm?type=command&param=getdevices"   # 기기 수 > 0 이어야 한다
 ```
 
 연결 직후 domoticz가 **브리지 엔티티 4개**를 자동 등록했다:
@@ -470,7 +522,7 @@ MG24 (/dev/ttyS1) ── z2m 2.13.0 ──→ mosquitto :1883 ──→ domoticz
 | Zigbee2MQTT Bridge (Permit join) | Off |
 | Zigbee2MQTT Bridge (Restart required) | Off |
 
-**EZSP 좌표(§2.1)가 domoticz 화면까지 올라왔다** = 파이프가 끝까지 통했다는 뜻이다.
+**EZSP 좌표(§2.1)가 domoticz까지 올라왔다** = 파이프가 끝까지 통했다는 뜻이다.
 **단 Zigbee 기기는 0대다** — z2m `bridge/devices`에 Coordinator 자신뿐이라 올라올 게 없다.
 "기기가 보인다"는 페어링 뒤에 다시 판정한다(§7).
 
@@ -513,10 +565,11 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 
 - **domoticz는 싸다.** 23.6 MB / CPU 0.5%. x86 §6.2의 A′(35.0 MB, Z4D 비활성)와 같은 자리이고
   제품 폼에서 오히려 작다. **부담은 domoticz가 아니다.**
-- **비싼 쪽은 Zigbee 호스트다** — RSS로 **3.9배**, CPU로 **23배**. `EP §6.2`가 x86에서 내린
-  "호스트는 싸고 Zigbee 호스트가 비싸다"는 판정이 riscv64 제품 폼에서 그대로 재현됐다.
-- **`EP §6.2`의 빈칸이 채워진다.** 그 표의 `domoticz + Z2M` 행은 RSS 미측정이었다 →
-  **23.6 + 93.0 = 116.6 MB**(같은 기계, 같은 시각). 참고로 x86의 `domoticz + Z4D`는 121 MB였다.
+- **이 스냅샷에서 비싼 쪽은 Zigbee 호스트다** — VmRSS 3.9배, 누적 CPU 23배. x86 Z4D 값
+  (`EP §6.2`)은 **다른 아키텍처·다른 플러그인·다른 조건**이라 방향의 참고이지 **동일 workload의
+  재현이 아니다.**
+- **`EP §6.2`의 빈칸이 채워진다.** `domoticz + Z2M` 행이 미측정이었다 → **116.6 MB**. 단 이건
+  **두 프로세스 VmRSS의 산술합**이라 공유 페이지가 중복 계상될 수 있다.
 - **여유는 있다.** available 263M / 488M. 두 스택을 얹고도 절반이 남는다.
 
 **⚠️ 이건 유휴치다.** 페어링 0대에서 z2m이 이미 CPU 12%를 쓴다. 30~40대에서 어떻게 되는지가

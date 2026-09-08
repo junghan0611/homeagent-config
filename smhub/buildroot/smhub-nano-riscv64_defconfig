@@ -37,8 +37,9 @@ BR2_INSTALL_LIBSTDCPP=y
 BR2_PACKAGE_LUA=y
 BR2_PACKAGE_LUA_5_3=y
 
-# USE_PYTHON=ON is not optional for us: it is what makes Z4D (the Zigbee
-# plugin) possible at all. Links against libpython3.14.so.1.0, present in the
+# USE_PYTHON=ON is retained, not required: Z4D is NOT a supported path in this
+# repo (RAIL 10 -- the Zigbee host is Z2M over MQTT). domoticz dlopens
+# libpython3.14.so.1.0, present in the
 # vendor rootfs.
 BR2_PACKAGE_PYTHON3=y
 

@@ -4,10 +4,9 @@
 #
 # Two reasons this file exists instead of the upstream recipe:
 #
-# 1. VERSION. Buildroot pins 2024.4 (still true on master, 2026-08-27). Zigbee
-#    for Domoticz (Z4D), the plugin that makes this stack a Zigbee hub at all,
-#    requires Domoticz >= 2025.1 and documents >= 2025.2. So the pin does not
-#    clear the gate, and 2026.3 is also exactly what the evidence lane runs.
+# 1. VERSION. Buildroot pins 2024.4 (still true on master, 2026-08-27), which
+#    is years behind and not what the evidence lane runs. 2026.3 is the version
+#    verified and shipped here, and the one the evidence lane runs.
 #
 # 2. DOWNLOAD METHOD. The GitHub tag tarball ships extern/ as five EMPTY
 #    directories, and CMakeLists.txt:151-162 turns that into a fatal error.

@@ -152,10 +152,9 @@ depend() {
 	after mosquitto
 }
 
-# NOTE: this service does NOT touch /dev/ttyS1. The MG24 radio is held by the
-# vendor's zigbee2mqtt, and one radio takes one host stack. Z4D (Domoticz's
-# Zigbee plugin) can only own that port once z2m is stopped -- a deliberate
-# decision, not something this package makes for you.
+# NOTE: this service does NOT touch /dev/ttyS1. The MG24 radio stays with the
+# vendor's zigbee2mqtt and Zigbee reaches domoticz over MQTT instead -- which is
+# domoticz's own native path (hardware/MQTTAutoDiscover.cpp). Do not stop z2m.
 EOS
 chmod 0755 "$WORK/data/etc/init.d/domoticz"
 
@@ -170,9 +169,10 @@ Priority: optional
 Required-OS-Version: $PKG_OS_MIN
 Installed-Size: $INSTALLED_SIZE
 Description: Domoticz $DOMO_VERSION built for SMHUB (riscv64, glibc 2.42).
- Cross-built from upstream Buildroot $(cd "$TREE" && git describe --tags --always) with
- USE_PYTHON=ON so Zigbee for Domoticz can load. Installs to /opt (p7), the only
- surface that survives an OTA.
+ Cross-built from upstream Buildroot $(cd "$TREE" && git describe --tags --always).
+ Zigbee arrives over MQTT from the vendor's zigbee2mqtt; this package never opens
+ the radio. USE_PYTHON is on for optional plugins (dlopen; unused costs nothing).
+ Installs to /opt (p7), the only surface that survives an OTA.
 EOS
 
 mkdir -p "$OUT_DIR"

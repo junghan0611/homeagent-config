@@ -77,9 +77,18 @@ DOMOTICZ_DEPENDENCIES += openzwave
 DOMOTICZ_CONF_OPTS += -DUSE_STATIC_OPENZWAVE=OFF
 endif
 
+# 2026.3 replaced the old PythonLibs probe with
+# `find_package(Python3 3.4 COMPONENTS Development)` (CMakeLists.txt:508).
+# FindPython3 drives its search from a *target* interpreter, which a cross
+# build does not have, so it reports Development as missing even though the
+# sysroot holds both halves. Handing it the two cache variables directly is
+# the documented way out; the paths are the ones python3 staged.
 ifeq ($(BR2_PACKAGE_PYTHON3),y)
 DOMOTICZ_DEPENDENCIES += python3
-DOMOTICZ_CONF_OPTS += -DUSE_PYTHON=ON
+DOMOTICZ_CONF_OPTS += \
+	-DUSE_PYTHON=ON \
+	-DPython3_INCLUDE_DIR=$(STAGING_DIR)/usr/include/python$(PYTHON3_VERSION_MAJOR) \
+	-DPython3_LIBRARY=$(STAGING_DIR)/usr/lib/libpython$(PYTHON3_VERSION_MAJOR).so
 else
 DOMOTICZ_CONF_OPTS += -DUSE_PYTHON=OFF
 endif

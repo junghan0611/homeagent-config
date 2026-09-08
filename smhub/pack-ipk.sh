@@ -34,7 +34,13 @@ SMHUB_SSH_KEY="${SMHUB_SSH_KEY:-$REPO_DIR/.sshkey/id_ed25519}"
 PKG_NAME="domoticz"
 PKG_REV="${HOMEAGENT_SMHUB_PKG_REV:-1}"
 PKG_ARCH="riscv64"
-PKG_OS_MIN="${HOMEAGENT_SMHUB_OS_MIN:-1.0.0}"
+# The binary is pinned to the ABI we MEASURED (§3), so the floor is the profile
+# we actually built against -- not the oldest OS that would accept the file.
+PKG_OS_MIN="${HOMEAGENT_SMHUB_OS_MIN:-1.0.2}"
+# HTTP port is a build-time input, not something to hand-edit on the device:
+# a device-side edit is silently reverted by the next ipk. 8080 is taken by the
+# vendor's zigbee2mqtt frontend, so the default is 8081. Verify per unit (§3.5).
+HTTP_PORT="${HOMEAGENT_SMHUB_HTTP_PORT:-8081}"
 
 STAGING="$TREE/output/target"
 BIN="$STAGING/opt/domoticz/domoticz"
@@ -76,6 +82,27 @@ if [ -z "$SMHUB_SSH" ]; then
 EOS
   exit 1
 fi
+# Capture the profile this .ipk is being cut against. The bundle list is a
+# function of THIS device, so the artifact is only valid for a device that
+# reports the same ABI -- record it or the ipk is unfalsifiable later.
+echo "[pack] capturing device profile from $SMHUB_SSH"
+DEVICE_PROFILE="$(ssh -i "$SMHUB_SSH_KEY" -o BatchMode=yes "$SMHUB_SSH" '
+  . /etc/os-release 2>/dev/null
+  echo "os_version=$VERSION_ID"
+  echo "buildroot=$VERSION"
+  echo "arch=$(uname -m)"
+  echo "glibc=$(/lib/libc.so.6 2>/dev/null | head -1 | sed "s/.*version //; s/\.$//")"
+  echo "libstdcxx=$(readlink -f /usr/lib/libstdc++.so.6 2>/dev/null | xargs -r basename)"
+  echo "python=$(python3 -V 2>&1)"
+  echo "nproc=$(nproc)"
+')"
+echo "$DEVICE_PROFILE" | sed 's/^/  /'
+DEV_OS_VERSION="$(printf '%s\n' "$DEVICE_PROFILE" | sed -n 's/^os_version=//p')"
+if [ -n "$DEV_OS_VERSION" ] && [ "$DEV_OS_VERSION" != "$PKG_OS_MIN" ]; then
+  echo "[pack] WARNING: device runs OS '$DEV_OS_VERSION' but Required-OS-Version is '$PKG_OS_MIN'." >&2
+  echo "[pack]          Set HOMEAGENT_SMHUB_OS_MIN deliberately if that is intended." >&2
+fi
+
 echo "[pack] asking $SMHUB_SSH which sonames the rootfs already provides"
 DEVICE_LIBS="$(printf '%s\n' "${CLOSURE[@]}" | ssh -i "$SMHUB_SSH_KEY" -o BatchMode=yes "$SMHUB_SSH" \
   'while read -r so; do [ -e "/usr/lib/$so" ] || [ -e "/lib/$so" ] && echo "$so"; done')"
@@ -102,7 +129,7 @@ if [ ${#BUNDLE[@]} -gt 0 ]; then
   for p in "${BUNDLE[@]}"; do cp -aL "$p" "$WORK/data/opt/domoticz/lib/"; done
 fi
 
-cat > "$WORK/data/etc/init.d/domoticz" <<'EOS'
+cat > "$WORK/data/etc/init.d/domoticz" <<EOS
 #!/sbin/openrc-run
 
 description="Domoticz home automation server"
@@ -110,7 +137,10 @@ description="Domoticz home automation server"
 # /opt/bin is not on PATH on this OS and the vendor's own services use absolute
 # paths, so we do too.
 command="/opt/domoticz/domoticz"
-command_args="-www 8080 -sslwww 0 -userdata /opt/domoticz -wwwroot /opt/domoticz/www"
+# Port 8080 is NOT free: the vendor's own zigbee2mqtt frontend listens there
+# (measured 2026-09-08, \`/opt/bin/node /opt/bin/zigbee2mqtt\`). Set with
+# HOMEAGENT_SMHUB_HTTP_PORT at pack time, never by editing this file on the box.
+command_args="-www $HTTP_PORT -sslwww 0 -userdata /opt/domoticz -wwwroot /opt/domoticz/www"
 command_background=yes
 pidfile="/run/domoticz.pid"
 directory="/opt/domoticz"
@@ -121,6 +151,11 @@ depend() {
 	need net
 	after mosquitto
 }
+
+# NOTE: this service does NOT touch /dev/ttyS1. The MG24 radio is held by the
+# vendor's zigbee2mqtt, and one radio takes one host stack. Z4D (Domoticz's
+# Zigbee plugin) can only own that port once z2m is stopped -- a deliberate
+# decision, not something this package makes for you.
 EOS
 chmod 0755 "$WORK/data/etc/init.d/domoticz"
 
@@ -154,6 +189,17 @@ echo "[pack] wrote $IPK ($(du -h "$IPK" | cut -f1))"
   echo "domoticz: $DOMO_VERSION"
   echo "buildroot: $(cd "$TREE" && git describe --tags --always)"
   echo "repo:     $(cd "$REPO_DIR" && git describe --always --dirty)"
+  echo "br-commit: $(cd "$TREE" && git rev-parse HEAD)"
+  # Buildroot caches a git checkout as a tarball, so the build tree has no .git
+  # and the tag name alone is not provenance. The archive hash is: it covers the
+  # superproject AND the five submodule revisions the gitlinks pinned.
+  echo "domoticz-src: $(sha256sum "$TREE/dl/domoticz/domoticz-$DOMO_VERSION-git"*.tar.gz 2>/dev/null | head -1 | cut -d" " -f1 || echo unknown)"
+  echo "build-image: ${HOMEAGENT_SMHUB_IMAGE:-milkvtech/milkv-duo:latest}"
+  echo "build-image-digest: $(docker image inspect --format '{{index .RepoDigests 0}}' "${HOMEAGENT_SMHUB_IMAGE:-milkvtech/milkv-duo:latest}" 2>/dev/null || echo unknown)"
+  echo "http-port: $HTTP_PORT"
+  echo "required-os: $PKG_OS_MIN"
   echo "bundled:  ${BUNDLE[*]##*/}"
   echo "from-rootfs: $(printf '%s\n' "$DEVICE_LIBS" | tr '\n' ' ')"
+  echo "--- device profile this ipk was cut against ---"
+  printf '%s\n' "$DEVICE_PROFILE"
 } | tee "$OUT_DIR/$(basename "$IPK").manifest.txt"

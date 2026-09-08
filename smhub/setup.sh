@@ -37,6 +37,38 @@ cd "$TREE"
 HEAD_DESC="$(git describe --tags --always 2>/dev/null || echo unknown)"
 echo "[smhub] tree at: $HEAD_DESC"
 
+# An EXISTING tree is not automatically the right tree. Until 2026-09-08 this
+# script only checked the glibc pin here, so any drifted HEAD would have passed
+# and the README's "verifies the pin and stops" was an overstatement. Pin the
+# commit itself. Note the ^{commit} peel: BR_TAG is an ANNOTATED tag, so bare
+# `rev-parse 2026.02` yields the tag OBJECT sha, not the commit -- comparing
+# the wrong one of those two is how a correct tree gets misread as drifted.
+WANT_COMMIT="$(git rev-parse --verify --quiet "refs/tags/$BR_TAG^{commit}" || true)"
+HAVE_COMMIT="$(git rev-parse HEAD)"
+if [ -z "$WANT_COMMIT" ]; then
+  echo "[smhub] ERROR: tag '$BR_TAG' not present in $TREE (shallow clone without tags?)." >&2
+  echo "[smhub]        git -C $TREE fetch --tags --depth 1 origin tag $BR_TAG" >&2
+  exit 1
+fi
+if [ "$HAVE_COMMIT" != "$WANT_COMMIT" ]; then
+  echo "[smhub] ERROR: tree HEAD is not $BR_TAG." >&2
+  echo "[smhub]        want $WANT_COMMIT ($BR_TAG)" >&2
+  echo "[smhub]        have $HAVE_COMMIT" >&2
+  echo "[smhub]        git -C $TREE fetch --tags && git -C $TREE checkout --detach $WANT_COMMIT" >&2
+  exit 1
+fi
+echo "[smhub] commit pin OK: $HAVE_COMMIT ($BR_TAG)"
+
+# build.sh injects our defconfig/recipe into this tree, so a dirty worktree is
+# EXPECTED -- but only in those known paths. Anything else is an unrecorded
+# local edit that would not survive a re-clone, i.e. not reproducible.
+UNEXPECTED="$(git status --porcelain | grep -vE ' (configs/smhub-nano-riscv64_defconfig|package/domoticz/domoticz\.(mk|hash))$|^\?\? (\.config\.smhub-stamp|configs/smhub-nano-riscv64_defconfig|output/|dl/)' || true)"
+if [ -n "$UNEXPECTED" ]; then
+  echo "[smhub] WARNING: tree carries edits outside the injected inputs --" >&2
+  echo "$UNEXPECTED" >&2
+  echo "[smhub]        these will NOT reproduce from a fresh clone. Move them into smhub/." >&2
+fi
+
 # Fail loudly if the pin drifted: this tree's whole job is to be glibc 2.42.
 GLIBC_PIN="$(sed -n 's/^GLIBC_VERSION = //p' package/glibc/glibc.mk)"
 case "$GLIBC_PIN" in

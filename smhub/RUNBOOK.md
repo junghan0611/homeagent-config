@@ -594,9 +594,34 @@ termios: -crtscts / ixon ixoff
 |---|---|
 | **DT에 `dmas` 없음** → `failed to request DMA` | **UART가 PIO로 돈다.** 바이트마다 인터럽트고, **1코어**에서 node가 인터뷰를 돌리는 동안 RX FIFO를 못 비우면 오버런이다 |
 | **DT에 `uart-has-rtscts` 없음 + 포트가 `16550A`** | **하드웨어 자동 RTS 경로가 없다**(AFE 있는 `16750`/`U6_16550A`가 아니다). `rtscts: true`는 **핀 배선을 따지기 전에 드라이버에서 막힌다** → `docs/SMHUB.md` §5.5 Q5의 "배선 미검증"이 여기로 좁혀졌다 |
-| `/proc/tty/driver/serial`에 **`oe:`/`bo:` 없음** | 이 커널 빌드는 `tx:`/`rx:`만 낸다 → **오버런을 직접 세는 길이 막혔다** |
+| `/proc/tty/driver/serial`에 `oe:`/`bo:`가 **안 보임** | ⚠️ **"필드가 없다"가 아니라 "0이다"** — `serial_core.c:1871-1874`는 카운터가 **0이 아닐 때만** 출력한다. 즉 **하드웨어 오버런이 실제로 0**이었다 |
 
-### 6.5.2 대응 — `adapter_concurrent`를 내린다 ✅ 적용됨
+### 6.5.2 원인 확정 — 바이트를 흘린 게 아니라 CPU에 굶었다 [측정 2026-09-08 08:06]
+
+크래시 순간 ASH가 카운터를 통째로 찍는다. **그게 사실원이다:**
+
+```text
+CRC errors : RX=0    Comm errors : RX=0    Bad lengths : RX=0    Out of buffers : RX=0
+ACK frames : RX=0, TX=858        Retry dupes : RX=20        ACK timeouts : RX=2
+DATA frames: RX=837, TX=234      Last Frame: [FRAME: ID=52:"SEND_UNICAST" Seq=232]
+```
+
+**깨진 바이트가 하나도 없다.** 호스트는 깨끗하게 받았고 ACK를 858개 보냈는데, NCP는 못 받았다고
+20번 재전송한 뒤 포기했다. 같은 시각:
+
+```text
+%Cpu0 : 74.5/25.5  100[████]   load 1.92 (1코어)
+node 78.2% CPU · smhub-services 1.6% · domoticz 0.7%
+```
+
+→ **단일 코어 포화. 호스트의 ACK가 제때 못 나간 것이다.** 하드웨어 드롭이 아니라 **CPU 굶음**이고,
+`oe:`/`bo:`가 0인 것과 정합한다.
+
+그리고 이건 **V8 이야기와 같은 뿌리다** — [측정] 이 보드에서 V8이 스스로 잡는 old generation
+상한이 **259 MB**(`heap_size_limit`, MemTotal 488M의 53%)다. 압박이 없어 GC를 미루다가, 1코어에서
+한 번 돌 때 ASH 타이머가 밀린다.
+
+### 6.5.3 대응 — `adapter_concurrent`를 내린다 ✅ 적용됨 (⚠️ 불충분)
 
 ember 어댑터의 in-flight 기본이 **16**이다 [읽음 `zigbee-herdsman/src/adapter/ember/adapter/emberAdapter.ts:278`
 `new Queue(this.adapterOptions.concurrent || 16)`], 그리고 z2m 설정 한 줄로 내려간다
@@ -626,6 +651,9 @@ $SSH "mosquitto_sub -h 127.0.0.1 -t zigbee2mqtt/bridge/info -C 1 -W 8" \
 
 - **손으로 간격 두고 붙이는 것보다 이쪽이 낫다.** 손 회피는 페어링 국면만 막지만, 이 값은
   **정상 보고 주기에도 계속 적용된다** — §7이 묻는 게 상시 트래픽이다.
+- ⚠️ **그러나 이것만으로는 안 막힌다.** [측정 2026-09-08] 적용 후에도 페어링을 이어가자
+  `Adapter disconnected` **3 → 8회**, z2m 재시작 **9 → 13회**. in-flight를 줄여도 **CPU가
+  포화면 ACK가 밀린다**(§6.5.2). CPU 쪽 대응이 함께 필요하다.
 - ⚠️ **보율을 낮추지 마라(115200→57600).** NCP 보율은 플래시된 값이라 호스트만 바꾸면 안 맞고,
   맞추려면 리플래시인데 **벤더 원본 `.gbl`이 우리에게 없다**(`docs/SMHUB.md` §6-6) — 편도 문이다.
   게다가 프레임 전송시간이 늘어 `CONFIG_ACK_TIME_MAX 2400ms` 여유가 **줄어든다**;
@@ -633,7 +661,7 @@ $SSH "mosquitto_sub -h 127.0.0.1 -t zigbee2mqtt/bridge/info -C 1 -W 8" \
 - ASH 파라미터(`ASH_MAX_TIMEOUTS 6`, `CONFIG_TX_K 3` 등)는 [읽음 `ash.ts:143-149`,
   `consts.ts:29`] **전부 모듈 상수라 설정으로 못 만진다.** 소스 패치는 downstream budget 위반.
 
-### 6.5.3 §7에 미리 걸리는 값
+### 6.5.4 §7에 미리 걸리는 값
 
 [읽음 `emberAdapter.ts:185-197`] `DEFAULT_STACK_CONFIG`:
 

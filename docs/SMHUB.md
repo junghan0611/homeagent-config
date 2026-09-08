@@ -562,6 +562,25 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
    ESPHome GPLv3 C++ 코어와 static-link → 파생저작물이면 소스 제공 의무. 선례=`slzb-esphome` GPL 공개.
    전수 조사(2026-06-30) 결과 SG2000/C906L ESPHome 포트 **공개분 없음** — GPL 근거 직접 요청이 유일 경로. (재조사 불필요.)
 6. **MG24 코디네이터 펌웨어 `.gbl`** — 이미지에 .gbl 없음. flash 툴 공개(`universal-silabs-flasher`+`bellows`/EZSP).
+  - ✅ **[정정 2026-09-08] 정보 벽이 아니다 — 이미지에 없을 뿐 벤더가 공개 배포한다.**
+    [측정, curl 200] `updates.smlight.tech/firmware/slzb-07/ncp-uart-hw-v7.4.1.0-slzb-07-115200.gbl`
+    (239,520 B, **coordinator**) · `slzb07_zigbee_router_8.0.2.0_115200.gbl` (284,760 B, **router**) ·
+    `ot-rcp-v2.4.5.0-slzb-07-460800.gbl` · `…/smhub/utils/{flash-efr.sh,efr_btl_enabler.sh}`.
+    **벤더가 SMHub의 EFR32를 SLZB-07 호환으로 취급한다**(`flash-efr.sh`가 위 이미지를 가리킨다);
+    `firmware/nano/`·`firmware/smhub-nano/`는 404.
+  - ✅ **벽돌이 아니다 — 부트로더 진입이 GPIO다.** `efr_btl_enabler.sh`: `GPIO_RST_EFR32=423`,
+    `GPIO_FLSH_EFR32=422`를 토글해 진입한다. **앱 펌웨어가 무엇이든, 안 떠도 다시 구울 수 있다.**
+    이 리포 불변식 *"Own the box: bootloader/recovery must be inspectable"*이 라디오 축에서도 성립한다.
+    ⚠️ 단 `flash-efr.sh`는 `/dev/ttyS2`(상위 모델)를 쓴다 — **Nano Mg24는 `/dev/ttyS1`**이고
+    GPIO 번호도 §3.8 실측 맵과 대조해야 한다.
+  - ⚠️ **[실기 2026-09-08] 라벨과 이미지가 어긋날 수 있다.** 웹 UI가
+    `Factory coordinator firmware (v8.0.2.0)`이라 표시한 것을 구운 뒤 **NCP가 EZSP를 말하지 않는다**
+    (`HOST_FATAL_ERROR`, `ASH starting → Adapter reset` 무한, `RSTACK` 없음). 8.0.2.0으로 공개
+    배포되는 건 **router**이고 coordinator는 **7.4.1.0**이다. **굽기 전에 되돌릴 이미지를 먼저
+    받아 두어라.** 복구 절차는 `NEXT.md` RAIL 12.
+  - ⚠️ **프로파일 제약**: 이 보드는 `rtscts:false` @115200이므로 **`sw_flow`/`no_flow` + `115200`**
+    이미지여야 한다. 3rd-party(Nerivec) slzb-07 빌드는 **전부 `hw_flow`**라 쓸 수 없다
+    (§5.5 Q5의 배선 부재와 같은 뿌리).
    **EmberZNet 펌웨어 = `7.4.2 [GA]`, ezsp13 라이브 grounded**(`bridge/info`). `.gbl` 원본 파일만 남음(재플래시용).
 7. **matter.js(`@matter/*`) 정확 버전** — matterbridge 미설치 → npm 또는 라이브 필요.
 

@@ -1,18 +1,122 @@
 # RAIL — 현재 좌표
 
-- [x] **1. flash-and-go 재현 + gecko 패키징 표면 인계** — v2026.7.24 → 2026-08-30. `.164` 플래시는 gecko가 몬다, 우리 손 없음
-- [x] **2. 크로스호스트 재현 대조** — gpu1i·랩탑 클린 minimal이 **600바이트 차**로 일치(2026-08-30)
-- [x] **3. 프로파일 가드를 `target/`까지 확장** — `.config`만 보던 구멍을 닫음(2026-08-30)
-- [x] **4. gecko WiFi 소유 원칙 조사 회신** — S99wpa_supplicant 출처/dhcpcd wlan0 관리/wlan0 up 주체 세 질문, 실기 없이 소스로 닫아 gecko RAIL 6 담당에게 회신(2026-08-31)
-- [x] **5. 홈오토메이션 스택 랜드스케이프 조사** — 작은 폼팩터에 무엇을 밀어넣을 수 있나. `docs/ECOSYSTEM-PORTFOLIO.md` 신설(2026-09-01). 실증은 회사 레인이 가져갔다
-- [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← **DEPRIORITIZED (GLG 2026-09-07: "당장 필요 없다")**. Duo S/이미지 축 검증은 끝났고 틀이 바뀌었다. 지시 오면 재개
-- [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
-- [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
-- [x] **9. SMHub(통합보드)에 domoticz 올리기 — 돈다 (2026-09-08)**. 9-1 버전 좌표 ✅ → 9-2 OTA+SSH ✅ → 9-3 크로스빌드+ipk ✅ → **9-4 설치·기동·리부트 생존·유휴 실측 ✅**. 남은 것은 **부하 등급 판정 하나**(→ 11). **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**
-- [ ] **11. 부하 등급 판정** ← **NEXT**. 유휴는 쟀다(domoticz 23.6M/0.5% · z2m 93.0M/12%, available 263M). **30~40대 페어링에서 1코어가 받는가**는 미측정 — 기기가 있어야 한다
-- [x] **10. Zigbee 호스트 결정 — `domoticz + Z2M`, Z4D는 안 쓴다 (GLG 2026-09-08)**. 아래 「RAIL 10 결정」 참조. riscv64 Rust/PyO3 크로스빌드 벽이 통째로 사라졌다
+- [x] **1~5** — flash-and-go 재현 · 크로스호스트 대조 · 프로파일 가드 · gecko 회신 · 스택 랜드스케이프 (2026-08-30~09-01)
+- [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← DEPRIORITIZED (GLG 2026-09-07)
+- [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음
+- [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED
+- [x] **9. SMHub에 domoticz 올리기 — 돈다 (2026-09-08)**. 크로스빌드 → ipk → 설치 → 기동 → 리부트 생존 → z2m MQTT 연결 → **기기 12대 페어링, domoticz 엔티티 112개**
+- [x] **10. Zigbee 호스트 결정 — `domoticz + Z2M`, Z4D 비채택 (GLG 2026-09-08)**
+- [ ] **11. 부하 등급 판정** ← 진행 중. RAM은 병목 아님이 밝혀졌고, **병목은 시리얼**로 드러났다
+- [ ] **12. 라디오 펌웨어 복구** ← **NOW / BLOCKING**. 8.0.2.0 플래시 후 NCP가 EZSP를 말하지 않는다
 
-현재 좌표: 1·2·3·4·5·**9·10** 완료 → **11(부하 등급) 이 다음** → 6 보류(GLG 판단) · 7·8 보류
+현재 좌표: 1~5·9·10 완료 → **12가 11을 막고 있다** → 6·7·8 보류
+
+---
+
+# NOW — 이어받는 자리 (2026-09-08 퇴근 시점)
+
+> **한 줄**: **라디오가 EZSP를 말하지 않는다.** 8.0.2.0을 굽고 나서 z2m이 못 뜬다.
+> 벽돌은 아니고 복구 경로도 확보돼 있다. **내일 첫 일은 coordinator NCP를 다시 굽는 것**이고,
+> 웹 UI가 아니라 **우리가 아는 방식**으로 한다.
+
+## 지금 기기 상태
+
+| | |
+|---|---|
+| **z2m** | ❌ 못 뜬다. `Failed to start EZSP layer with status=HOST_FATAL_ERROR` 반복 |
+| **라디오** | `ASH starting → ASH Adapter reset → ASH starting` 무한. **`RSTACK` 응답 없음** |
+| **domoticz** | ✅ 정상. 8081, 엔티티 **112개** (z2m이 죽어도 안 죽는다) |
+| 설정 | `adapter: ember` · `115200` · `rtscts: false` · `log_level: info` |
+| `NODE_OPTIONS` | `--v8-pool-size=0 --max-old-space-size=128 --max-semi-space-size=2` (`/etc/conf.d/zigbee2mqtt`) |
+
+**리셋은 먹는다** — 로그의 `ASH Adapter reset`이 GPIO 리셋이 살아 있다는 증거다.
+**응답만 없다** → 보율·플로우컨트롤 문제가 아니라 **지금 칩에 NCP가 아닌 펌웨어가 올라가 있다.**
+
+## 내일 첫 일 — 12. 라디오 복구
+
+**웹 UI로 하지 않는다 (GLG 2026-09-08).** 동글에서 이미 여러 번 해 본 방식으로 간다:
+`~/repos/work/hejhub-nano/firmware/zbdongle-e/` · 우리 `firmware/zbdonglee/`.
+
+**짐작**: 벤더 UI가 `Factory coordinator firmware (v8.0.2.0)`이라 표시했지만 **실제로는 라우터
+이미지를 구웠을 가능성**이 크다. 공개 URL에서 8.0.2.0으로 배포되는 건 **router**이고,
+coordinator(NCP)는 **7.4.1.0**이다.
+
+```text
+updates.smlight.tech/firmware/slzb-07/
+  ncp-uart-hw-v7.4.1.0-slzb-07-115200.gbl      239,520 B   ← coordinator (이걸 구워야 한다)
+  slzb07_zigbee_router_8.0.2.0_115200.gbl      284,760 B   ← router (아마 이게 들어갔다)
+  ot-rcp-v2.4.5.0-slzb-07-460800.gbl           109,068 B
+updates.smlight.tech/firmware/smhub/utils/
+  flash-efr.sh · efr_btl_enabler.sh
+```
+
+**벤더가 SMHub의 EFR32를 SLZB-07 호환으로 취급한다** — `flash-efr.sh`가 위 slzb-07 이미지를
+가리킨다. `firmware/nano/`·`firmware/smhub-nano/`는 404다.
+
+**⚠️ 이 보드 프로파일에 맞는 것을 골라야 한다**: 우리는 `rtscts:false` @115200이므로
+**`sw_flow`/`no_flow` + `115200`** 이어야 한다. 3rd-party(Nerivec) slzb-07 빌드는 **전부
+`hw_flow`**라 쓰면 안 된다. 참고로 우리 리포에 같은 규칙의 파일이 이미 있다:
+`firmware/zbdonglee/zbdonglee_zigbee_ncp_8.0.3.0_sw_flow_115200.gbl`(칩이 달라 그대로는 못 쓴다).
+
+**부트로더 진입은 GPIO다** — `efr_btl_enabler.sh`:
+
+```sh
+GPIO_RST_EFR32=423 ; GPIO_FLSH_EFR32=422
+# rst=0, flsh=0 → 0.1s → rst=1 → 0.5s → flsh=1
+```
+
+앱 펌웨어가 무엇이든 호스트가 부트로더를 부를 수 있다 → **벽돌이 아니다.**
+⚠️ 단 `flash-efr.sh`는 `/dev/ttyS2`(상위 모델)를 쓴다. **우리 Nano Mg24는 `/dev/ttyS1`**이고
+GPIO 422/423도 이 모델에서 재확인이 필요하다(`docs/SMHUB.md` §3.8 실측 맵과 대조).
+
+## 안전망 (복구용, 리포 밖)
+
+```text
+~/smhub-safety/20260908-1805/
+  coordinator_backup.json   network_key · pan_id e760 · channel 11 · ext_pan 41492c8588524cda
+  database.db               기기 12대
+  configuration.yaml · state.json
+```
+
+**커밋 금지** — `network_key`가 들어 있다. 라디오가 살아나면 z2m이 이 백업으로 네트워크를
+복원한다. 안 되면 12대 재페어링(GLG "괜찮다").
+
+## 12가 풀리면 바로 11
+
+**RAIL 11 = 1코어 488M이 30~40대를 받는가.** 오늘 두 축이 갈렸다:
+
+**RAM은 병목이 아니다.** 곡선이 허수였다 — 같은 5대인데 z2m 재시작만으로 139.8 → 122.4 MB
+(−17.5). 0대 93.0 → 5대 122.4 = **+29.4 MB**이고 이건 zhc가 `TS011F` 정의 모듈 12개(소스 2.03 MB)를
+지연 로드하는 **일회성 계단**이다. 47대여도 그대로다. 초기의 "4.45 MB/기기 → 47대 359 MB"는 폐기.
+원인: [측정] 이 보드에서 V8이 `heap_size_limit`을 **259 MB**(MemTotal의 53%)로 스스로 잡아
+압박을 못 느낀다 → GC를 미룬다.
+
+**병목은 시리얼이다.** 크래시 순간 ASH 카운터가 갈랐다 — CRC 0 · comm 0 · out-of-buffers 0,
+그런데 `ACK frames RX=0/TX=858` + `Retry dupes 20`. **바이트를 흘린 게 아니라 CPU에 굶었다**
+(같은 시각 CPU0 100%, node 78%). `smhub/RUNBOOK.md` §6.5.
+
+**튜닝은 완화지 해결이 아니었다** — `adapter_concurrent:2` + `log_level:warning` +
+`NODE_OPTIONS` 셋을 다 넣고도 페어링 버스트에서 계속 끊겼다. 재현 가능한 형태로
+**`smhub/tune.sh`**에 넣어 뒀다(`--revert`/`--show`, 리부트 생존 확인).
+
+⚠️ **`log_level: warning`은 진단을 가린다** — ASH 카운터 덤프가 `info` 레벨이다. 이 문제를 더
+팔 거면 `info`로 두어라(지금 `info`다).
+
+## 남은 미측정 (11의 실제 질문)
+
+- **부하가 꽂힌 뒤의 msg/s** — [측정] 지금 유휴 8대에서 **0.2 msg/s**다. 플러그가 전부 0 W라
+  리포팅 임계(`change`)가 안 걸린다. 상한은 `min=5s` 기준 47대 **37.6 msg/s**이고, 실제 값은
+  **부하가 정한다.** 그때 `min` 5초 → 300초 재설정이 업스트림 처방이다(끈적하지 않아 재인터뷰마다
+  되돌아간다 → **운영 스크립트가 필요하다**).
+- **10대·20대 곡선 점** — 오늘 12대까지 갔으나 크래시로 오염됐다. 재측정 필요.
+- 샘플러: `smhub/logs/rail11-curve.csv` (60초 간격, 읽기 전용)
+
+## 그다음 — x86 미니PC (GLG 2026-09-08)
+
+이 보드의 값은 나왔다: **"1코어 488M에 얹히긴 하는데 온보드 MG24의 시리얼 경로가 상한을 만든다."**
+다음은 x86이고, 거기선 USB CDC라 이 문제가 성립하지 않는다.
+`works-nixos-zigbee`가 같은 방법으로 **paired 0/1/N 세 점**을 재기로 했다
+(그쪽 Z4D 기준선: 47대에서 **140.6 MB 단일 프로세스**, CPU 8.8%, 2코어).
 
 ---
 

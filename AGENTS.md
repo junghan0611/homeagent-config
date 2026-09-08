@@ -25,6 +25,7 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 | 다음에 뭘 할지 (실작업 핸드오프) | `NEXT.md` → **Phase F** |
 | 왜 / 방향 / 제품화 틀 (North star, 페이즈 그리드) | `ROADMAP.md` |
 | Buildroot 경험·전략 / 운영 how-to | `docs/BUILDROOT.md` / `bsp/README.md` |
+| **새 SMHub 기기를 받았다 — 무엇을 어떤 순서로** | **`smhub/RUNBOOK.md`** (절차) ← `smhub/README.md`(왜) ← `docs/SMHUB.md`(기기 사실) |
 | **밖의 스택을 얹을까 말을 걸까** (랜드스케이프 + 통합 실사) | `docs/ECOSYSTEM-PORTFOLIO.md` → `docs/INTEGRATION-SURFACE.md` |
 | SMHub 실측 버전·설치면 (참고 근거, 벤더 비공개분 포함 좌표) | `docs/SMHUB.md` |
 | Duo S 라디오 펌웨어 (보드 정렬 7.4.2) | `firmware/zbdonglee/` |
@@ -154,6 +155,8 @@ Do not say:
 
 ## First Read Order
 
+0. **작업이 SMHub 기기 자체면(새 기기 수령·빌드·패키징·설치) → `smhub/RUNBOOK.md` 먼저.**
+   그다음 `smhub/README.md`(왜), `docs/SMHUB.md` §3.6/§3.7/§4.1(기기 사실). 아래 1~8은 그 밖의 작업 순서다.
 1. `NEXT.md`
 2. `README.md`
 3. `ROADMAP.md`

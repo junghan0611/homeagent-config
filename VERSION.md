@@ -27,7 +27,7 @@
 | Device | SoC | RAM | BSP / OS path | Radio | Role | State |
 |--------|-----|-----|---------------|-------|------|-------|
 | **Milk-V Duo S / SDK v2 family** | SOPHGO SG2000 (RISC-V C906 boot + C906L RTOS) | 512MB (323MB usable pre-ION-reclaim) | own `bsp/` RISC-V Buildroot (SDK v2 lineage) | USB ZBDongle-E | **core lane** — full-stack build board | **in hand, RISC-V boot verified 2026-07-14** |
-| **SMHUB Nano MG24** | SOPHGO SG2000 (RISC-V C906 boot + C906L RTOS) | 512MB / 8GB eMMC | vendor SMHUB OS (mainline 6.18 + RAUC A/B); system-app approach | onboard EFR32MG24 (ember, EmberZNet 7.4.2 / EZSP 13) | commercial reference | **in hand, OTA beta5 verified** |
+| **SMHUB Nano MG24** | SOPHGO SG2000 (RISC-V C906 boot + C906L RTOS) | 512MB / 8GB eMMC | vendor SMHUB OS (mainline 6.18 + RAUC A/B); system-app approach | onboard EFR32MG24 (ember, EmberZNet 7.4.2 / EZSP 13) | commercial reference | **in hand, OS 1.0.2 + ABI 측정 완료; domoticz ipk 빌드됨, deploy 미검증** |
 | **Tuya THP23-ZB-X** | Sigmastar SSD202D | 128MB | linux-chenxing/OpenWrt/Buildroot research (parked) | EFR32/Gecko-class | parked 128MB lower-bound evidence (not active) | in hand |
 | RPi5 + Hailo-8 | BCM2712 | 8GB | Yocto Scarthgap | USB EFR32 proof | high-spec origin | verified |
 | OPi5 | RK3588S | 4GB | Yocto Scarthgap, mainline 6.14 | USB EFR32 proof | lab target | SSH/GPU/HDMI verified, NPU parked |

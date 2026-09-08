@@ -5,6 +5,8 @@
 돌고, 우리가 소유할 수 있는 건 **p7의 설치면과 `.ipk` 하나**다. 그래서 이 트리의 산출물은
 이미지가 아니라 **그 벤더 rootfs에서 무수정으로 도는 riscv64 바이너리**다.
 
+- **처음 왔다면 → [`RUNBOOK.md`](RUNBOOK.md)** — 새 기기 개봉부터 domoticz 기동까지의 순서.
+  이 README는 **왜**를 말하고, RUNBOOK은 **무엇을 어떤 순서로**를 말한다.
 - 판(왜/무엇을): [#10](https://github.com/junghan0611/homeagent-config/issues/10)
 - 기기 사실(SSOT): `docs/SMHUB.md` — §4.1(플랫폼·ABI) · §3.7(설치면) · §3.6(SSH)
 - 현재 좌표: `NEXT.md` RAIL 9
@@ -18,13 +20,17 @@
 | **domoticz** | **최신 `2026.3`** | Buildroot 핀 `2024.4`는 Z4D 게이트(≥2025.1, 권장 2025.2)를 못 넘는다. 실증 레인이 도는 버전과도 같다 |
 | **툴체인** | **기기와 동일 (`2026.02`)** | 기기 glibc **2.42**. 최신 master(2.44)로 빌드하면 심볼이 없어 **아예 시작하지 않는다** |
 
-기기 실측(2026-09-07, SSH): Buildroot `2026.02-1281-g9407f694e5` · 커널 6.18.17-patch21 ·
+기기 실측(2026-09-08, SSH): Buildroot `2026.02-1281-g9407f694e5` · 커널 6.18.17-patch21 ·
 **glibc 2.42** · **GCC 15.2.0** · `libstdc++.so.6.0.34` · **Python 3.14.6** · ISA `rv64imafdc` ·
 **`nproc` 1** · MemTotal 488M.
 
 벤더 rev의 `-1281`은 upstream에 없는 벤더 커밋이라 bit-identical 재현은 불가하다. **재현 가능한
 base는 upstream 태그 `2026.02`**이고(glibc `2.42-51-gcbf39c2`, GCC 15.2.0 선택 가능),
-`setup.sh`가 그 핀을 **검증하고 아니면 멈춘다**.
+`setup.sh`가 **커밋 SHA와 glibc 핀 둘 다** 검증하고 어긋나면 멈춘다.
+
+> 2026-09-08까지 이 검사는 **glibc만** 봤고, 기존 트리는 HEAD가 밀려 있어도 통과했다.
+> (교차검토에서 잡힘.) 지금은 `refs/tags/2026.02^{commit}`과 대조한다 — annotated tag이므로
+> `^{commit}` 피일링이 필요하고, 그걸 빼면 tag object SHA와 비교해 **맞는 트리를 틀렸다고 읽는다.**
 
 ## 쓰는 법
 
@@ -48,25 +54,42 @@ base는 upstream 태그 `2026.02`**이고(glibc `2.42-51-gcbf39c2`, GCC 15.2.0 �
 - **중단은 안전하고, 이어굽기가 기본이다.** Buildroot는 `output/build/*/.stamp_*`로 단계를 기억하므로
   랩탑이 잠들거나 빌드를 죽여도 `./smhub/build.sh` 한 번이면 **그 패키지부터** 이어간다
   (지운 것만 다시 굽는다 — `rm -rf output`은 툴체인부터 전부 다시라는 뜻).
-- **첫 빌드 소요 (실측 기준선, 랩탑 16코어)**: 호스트 툴 8개 ≈13분 → 크로스 툴체인
-  (binutils 2.44 · GCC 15.2 · **glibc 2.42**) → boost 1.83 + python3 → domoticz.
-  **합계 50~90분** 예상. 진행 확인은 `tail smhub/sdk/output/build/build-time.log` 또는
-  `ls smhub/sdk/output/build/*/.stamp_built | wc -l`.
+- **첫 빌드 소요 (실측, 랩탑 16코어, 2026-09-08)**: 호스트 툴 8개 ≈13분 → 크로스 툴체인
+  (binutils 2.44 · GCC 15.2 · **glibc 2.42**) + boost 1.83 + python3 ≈1시간 →
+  **domoticz 다운로드 3시간 28분** → **컴파일+설치 2분 55초**.
+  ⚠️ **다운로드가 컴파일의 70배다** — git+서브모듈이라 그렇고, `dl/`에 캐시되므로 두 번째부터는
+  안 문다. 호스트를 옮길 땐 `smhub/sdk/dl/`을 같이 옮겨라. 진행 확인은
+  `tail smhub/sdk/output/build/build-time.log` 또는 `ls smhub/sdk/output/build/*/.stamp_built | wc -l`.
 
 ## 조달 판정 — 무엇을 싣고 무엇을 안 싣나
 
 벤더 opkg 피드(`pkg.smlight.tech/v1`)에 **domoticz는 없다**(45 stanza / 17 앱, 라이브러리 패키지 0).
 그래서 우리가 만든다. rootfs가 이미 지불한 것은 다시 싣지 않는다:
 
-| rootfs에 있다 (쓴다) | 없다 (우리가 해결) |
-|---|---|
-| `libcurl.so.4` · `libsqlite3.so.3.51.2` · `libssl.so.3` · **`libmosquitto.so.1`** · `libjsoncpp.so.26` · `libz` · **`libpython3.14.so.1.0`** · `libstdc++.so.6.0.34` | **boost**(동봉) · **lua 5.3** · **minizip**(정적 내장) · jwt-cpp·libwebem·jsoncpp(정적 내장) |
+**실측으로 확정됐다 (2026-09-08, `pack-ipk.sh`가 기기에 직접 물어 도출)**: NEEDED 폐포 15개 중
+**기기가 13개를 제공**하고 **동봉은 2개뿐**이다.
+
+| rootfs에 있다 (쓴다) — 13 | 동봉 — 2 | 정적 내장 |
+|---|---|---|
+| `libsqlite3.so.0` · `libssl.so.3` · `libcrypto.so.3` · `libcurl.so.4` · **`libmosquitto.so.1`** · `libz.so.1` · `libresolv.so.2` · `libm.so.6` · `libatomic.so.1` · `libc.so.6` · `libstdc++.so.6` · `libgcc_s.so.1` · `ld-linux-riscv64-lp64d.so.1` | **`libboost_thread.so.1.83.0`** · **`liblua.so.5.3.6`** | jsoncpp · minizip · jwt-cpp · libwebem |
+
+- **boost는 4개가 아니라 1개였다.** 계획은 `thread`·`system`·`date_time`·`atomic` 넷을 동봉하는
+  것이었는데, 실제 링크된 것은 **`thread` 하나**다. ipk가 그만큼 가볍다.
+- **`libsqlite3`**: 기기 실물은 `libsqlite3.so.3.53.2`(1.0.2에서 3.51.2→3.53.2로 올랐다)지만
+  **`.so.0` 심링크가 있어** soname이 맞는다 → 동봉 불필요.
+- **`libpython3.14.so.1.0`은 NEEDED에 없다 — dlopen이기 때문이다.** 기기에 존재하므로 Z4D 전제는
+  충족된다. NEEDED에 없다고 Python이 꺼진 게 아니라는 뜻이고, 판정은 configure 로그로 한다
+  (`RUNBOOK.md` §4.4).
 
 - **서브모듈은 회피 불가**: 태그 타르볼의 `extern/` 5개는 빈 디렉터리이고, `extern/libwebem`은
   `add_subdirectory`가 **무조건** 걸려 있다 → `SITE_METHOD=git` + `GIT_SUBMODULES=YES`.
-  리비전은 태그의 gitlink가 고정하므로 재현성이 유지된다. **새 Buildroot 패키지는 0개.**
+  **새 Buildroot 패키지는 0개.**
+  - ⚠️ **태그 이름은 provenance가 아니다.** 리비전을 태그의 gitlink가 고정하는 건 맞지만, 그
+    사실이 아티팩트에 기록되지는 않는다. 그래서 `pack-ipk.sh`가 Buildroot가 만든 소스
+    타르볼의 **sha256을 매니페스트에 `domoticz-src`로 적는다** — 그 해시가 superproject와
+    서브모듈 5개를 함께 덮는 실제 영수증이다.
 - **boost는 정적이 안 된다**: Buildroot boost는 `link=shared` 고정이고, 전역 `BR2_STATIC_LIBS`는
-  domoticz가 금지한다 → boost 4개(`thread`·`system`·`date_time`·`atomic`)는 `.ipk`에 동봉.
+  domoticz가 금지한다 → boost는 `.ipk`에 동봉한다(실측 결과 `thread` 하나면 된다).
 
 ## 설치 계약 (§3.7 패턴 (a))
 
@@ -75,6 +98,10 @@ base는 upstream 태그 `2026.02`**이고(glibc `2.42-51-gcbf39c2`, GCC 15.2.0 �
 - 서비스는 **OpenRC**(`/etc/init.d`, overlay upper가 p7), ipk 메타는 벤더 형식을 모사:
   `Architecture: riscv64`, `Required-OS-Version`.
 - `PATH`에 `/opt/bin`이 없다 → **절대경로로 실행**한다(벤더도 그렇게 한다).
+- ⚠️ **8080은 비어 있지 않다**: 벤더 z2m 프론트엔드가 쓴다(실측 2026-09-08,
+  `/opt/bin/node /opt/bin/zigbee2mqtt`) → 우리는 **8081**.
+- ⚠️ **라디오는 하나다**: `/dev/ttyS1`(MG24)을 z2m이 점유 중이다. 우리 패키지는 그 포트를
+  건드리지 않는다. Z4D를 쓰려면 z2m을 **의식적으로** 내려야 한다.
 
 ## 판정 규칙 — 「가짜 초록」을 먼저 의심한다
 

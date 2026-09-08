@@ -3,7 +3,10 @@
 이 문서는 SMHub Nano Mg24 제품 검수 레인의 **단일 SSOT**다. 이전에 나뉘어 있던
 `PRODUCT-CONFIG-MODEL` · `SMHUB-CONTROL-MAP` · `SMHUB-MANUAL-REVIEW` 를 하나로 합쳤다.
 
-- **분석 대상**: 출고 **0.9.8** (무변형 SSH 실측, §4) + **1.0.0.beta5** (fastboot 정적 추출 §5 + **OTA 후 라이브 실측 §5.4**). **현재 기기 = beta5 부팅(슬롯 B)**.
+- **현재 지원 프로파일: `1.0.2` (2026-09-08 실측, §4.1).** 슬롯 A 부팅, RAUC boot status `good`.
+  **표마다 날짜를 따르라** — 아래 §4·§5는 이전 프로파일의 관측이고, 현재값이 아니다.
+- **분석 대상(역사)**: 출고 **0.9.8** (무변형 SSH 실측, §4) + **1.0.0.beta5** (fastboot 정적 추출 §5
+  + OTA 후 라이브 실측 §5.4). beta5는 **역사 관측**이며 현재 기기 상태가 아니다.
 - **좌표/크레덴셜**은 `PRIVATE.md`, 원본 아티팩트는 `captures/`(gitignored). **이 문서엔 secret 없음.**
 - **재현 등급**: ✅ 완전(공개 repo+정확 버전, 직접 빌드/교체 가능) / ⚠️ 부분(upstream 공개, 벤더
   defconfig·patch·DT diff 비공개 → bit-identical 아님) / ❌ 불가(바이너리만, 역설계 또는 SMLIGHT 협조).
@@ -376,8 +379,12 @@ beta5 측정 → 같은 날 **`1.0.2` OTA(GLG 실행)** → 재측정한 값이 
   → **`domoticz` 0건.** 라이브러리 패키지(boost/lua/mosquitto/…)도 피드에 **없다** — 앱 ipk만 있는 피드다.
 - 설치본 9개: `esphome-bin 2026.5.3-3 · nodejs 22.22.0-2 · nodered 4.1.5-1 · python3 3.14 ·
   smhub-broker 1.0.3-3 · smhub-services 1.0.4-1 · smhub-ui 1.0.3-1 · smhub-web 0.3.1-1 ·
-  zigbee2mqtt 2.10.1-2`. **z2m는 설치돼 있으나 `rc-status default`에 안 뜬다** → 지금 `/dev/ttyS1`은
-  비어 있다(`mosquitto`만 started). 라디오를 다른 host 스택이 잡을 자리가 **열려 있는 상태**.
+  zigbee2mqtt 2.10.1-2`. **[beta5 시점] z2m는 설치돼 있으나 `rc-status default`에 안 뜬다** → 그때
+  `/dev/ttyS1`은 비어 있었다(`mosquitto`만 started).
+  - ⚠️ **[1.0.2에서 뒤집혔다 — 2026-09-08 SSH 실측]** OTA가 z2m을 **`2.13.0-1`로 올리고 기동시켰다.**
+    `/opt/bin/node /opt/bin/zigbee2mqtt`(pid 3950)가 **`/dev/ttyS1`을 점유**하고 **:8080도 쓴다**.
+    라디오 자리는 더 이상 비어 있지 않다 → 다른 host 스택(Z4D 등)은 z2m을 내려야 잡는다.
+    **새 기기에서 이 값을 문서로 가정하지 말고 직접 재라** (`smhub/RUNBOOK.md` §3.5).
 - ipk 메타데이터 실제 필드명은 **`Required-OS-Version: 1.0.0`** (릴노트 표기 `Require-OS-Version`과
   다르다). `Architecture: riscv64`, `Maintainer: tl@smlight`. 우리 ipk도 이 형식을 따른다.
 

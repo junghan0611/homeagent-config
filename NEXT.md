@@ -8,36 +8,55 @@
 - [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← **DEPRIORITIZED (GLG 2026-09-07: "당장 필요 없다")**. Duo S/이미지 축 검증은 끝났고 틀이 바뀌었다. 지시 오면 재개
 - [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음. 이미지 축이면 돌아온다
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED: gecko 요청 없음, Matter는 준비 완료·착수 보류
-- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT (GLG 2026-09-07 틀 변경)**. Milk-V는 되는 걸 검증했으니, 이제 **제품 폼(SMHub Nano, riscv64)** 에 domoticz를 얹는다. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**. 9-1 버전 좌표 ✅ → 9-2 OS `1.0.2` OTA ✅ + SSH 영구 복구 ✅ → **9-3 크로스빌드 진행 중** → 9-4 패키징·기동·CPU/RSS 실측
+- [ ] **9. SMHub(통합보드)에 domoticz 올리기** ← **CURRENT (GLG 2026-09-07 틀 변경)**. Milk-V는 되는 걸 검증했으니, 이제 **제품 폼(SMHub Nano, riscv64)** 에 domoticz를 얹는다. **판 = [#10](https://github.com/junghan0611/homeagent-config/issues/10)**. 9-1 버전 좌표 ✅ → 9-2 OS `1.0.2` OTA ✅ + SSH 복구 ✅ → **9-3 크로스빌드 + ipk ✅ (2026-09-08)** → **9-4 설치·기동·CPU/RSS 실측 ← 여기**
+- [ ] **10. domoticz가 필요한가** ← **OPEN (GLG 2026-09-08)**. SMHub는 z2m이 이미 돈다. z2m만으로 묶을 수 있다면 domoticz/Z4D는 불필요할 수 있다. 별동대 조사 진행 중 — 결과가 9-4의 의미를 바꾼다
 
-현재 좌표: 1·2·3·4·5 완료 → **9 진행 중 (9-1·9-2 닫힘, 9-3 빌드 굽는 중)** → 6 보류(GLG 판단) · 7·8 보류
+현재 좌표: 1·2·3·4·5 완료 → **9 진행 중 (9-1·9-2·9-3 닫힘, 9-4가 다음)** → 10 조사 대기 → 6 보류(GLG 판단) · 7·8 보류
 
-# NOW — 이어받는 자리 (2026-09-07 퇴근 시점 상태)
+# NOW — 이어받는 자리 (2026-09-08)
 
-> **한 줄**: 막고 있던 미지값 셋(ABI · 조달 경로 · 셸 접근)이 전부 닫혔고, **domoticz 2026.3
-> riscv64 크로스빌드가 돌고 있다.** 남은 건 빌드 결과 → 패키징 → 기동 → **1코어 CPU 실측**.
+> **한 줄**: **riscv64 domoticz 2026.3 ipk가 나왔다.** 남은 건 **기기에 설치 → 기동 → 리부트를
+> 건너는지 → 1코어 CPU/RSS 실측**. 다만 그 앞에 **"domoticz가 필요한가"(RAIL 10)** 가 열려 있다.
 
-**돌아와서 첫 명령 (순서대로)**
+**절차는 이제 문서가 진다 → [`smhub/RUNBOOK.md`](smhub/RUNBOOK.md)**. 새 기기를 받았을 때
+개봉부터 기동까지의 순서, 함정, 판정이 거기 있다. 이 파일은 **현재 작업자 handoff**일 뿐이다.
+
+**돌아와서 첫 명령**
 
 ```bash
-docker ps --filter ancestor=milkvtech/milkv-duo:latest   # 살아 있나 / 두 개면 하나 kill
-ls smhub/sdk/output/build/*/.stamp_built | wc -l         # 진행 stamp 수
-tail -20 smhub/sdk/output/build/build-time.log           # 마지막 단계
-./smhub/build.sh                                         # 죽어 있으면 이어굽기(증분, 안전)
-ls -l smhub/sdk/output/target/opt/domoticz/domoticz      # 나왔나 = 판정
-SMHUB_SSH=smlight@<기기> ./smhub/pack-ipk.sh              # 좌표는 PRIVATE.md
+cat smhub/out/domoticz_2026.3-1_riscv64.ipk.manifest.txt   # 뭘 만들었나
+ssh -i .sshkey/id_ed25519 smlight@<기기> 'ss -ltn; pgrep -af zigbee2mqtt'   # RUNBOOK §3.5 preflight
+# 그리고 RUNBOOK §6 (설치·기동·리부트 판정) — 여기가 아직 ❓ 미검증이다
 ```
 
-- **빌드**: `2026-09-07 17:18` 시작(랩탑 16코어, 컨테이너 `milkvtech/milkv-duo:latest`).
-  호스트 툴 8개 ≈13분 → 크로스 툴체인(binutils 2.44 · GCC 15.2 · glibc 2.42) → boost·python3 →
-  domoticz. **첫 빌드 50~90분 예상.** 랩탑이 잠들면 그 패키지만 다시 → `./smhub/build.sh` 한 번.
-- **접근**: `ssh -i .sshkey/id_ed25519 smlight@<기기>` — **웹 콘솔 필요 없다**(오늘 영구 복구).
-  sudo pw는 벤더 기본값(`PRIVATE.md`).
-- **손 안 댄 것**: 기기의 z2m(설치돼 있으나 미기동) · MG24 라디오 · 벤더 설정 · backend.db.
-  **백업 안 했다**(GLG "날것으로 간다") — 그게 의도다.
-- **보고**: 오늘 작업을 cos 비서실장(`20260907T143610-c31ef8`)에 전송 완료 —
-  프레이밍은 **works-nixos-zigbee 서포트**(같은 스택을 512MB급 보드에 올려 "미니PC 축"의 열린
-  결정에 값을 준다). 그쪽에 회신할 첫 값 = **1코어가 세트 하나(30~40대)를 받는가**.
+**9-3에서 나온 것 (닫힘)**
+
+| 항목 | 값 |
+|---|---|
+| 산출물 | `smhub/out/domoticz_2026.3-1_riscv64.ipk` **15M** |
+| 바이너리 | `ELF 64-bit LSB pie, UCB RISC-V, RVC, double-float ABI`, 14.9M |
+| 동봉 | **`libboost_thread` · `liblua5.3` 둘뿐** (계획은 boost 4개였다) |
+| rootfs 사용 | 13개 — `libsqlite3.so.0` 포함(**어제의 미검증 값, OK로 닫힘**) |
+| Python | **dlopen이라 NEEDED에 없다.** `libpython3.14.so.1.0` 기기에 있음 → Z4D 전제 충족 |
+| 영수증 | 매니페스트에 `br-commit`·`domoticz-src`(tarball sha256)·`build-image-digest`·device profile |
+
+**오늘 걸린 함정 셋 (RUNBOOK에 박았다)**
+
+1. **cmake가 Python3를 못 찾아 죽었다** — 어제 빌드가 멈춘 진짜 원인. 랩탑 sleep이 아니었다.
+   2026.3이 `find_package(Python3 COMPONENTS Development)`로 바뀌었고 크로스엔 타깃 인터프리터가
+   없다. `USE_PYTHON=NO`는 답이 아니다(Z4D가 사라진다) → 캐시 변수 2개로 해결(`domoticz.mk`).
+2. **8080은 z2m이 쓴다** — 그대로 설치했으면 충돌. 포트는 이제 build-time 입력(`8081` 기본).
+3. **`setup.sh`가 commit pin을 강제하지 않았다** — 교차검토(terra)에서 잡힘. 문서는 "검증하고
+   멈춘다"고 썼는데 실제로는 glibc만 봤다. 고쳤다.
+
+**기기 상태가 어제와 다르다** — OTA가 **z2m을 2.13.0으로 올리고 켰다**(어제 기록은 "미기동
+2.10.1"). `/dev/ttyS1`과 :8080을 z2m이 쥐고 있다. **SSH는 살아났다**(`:22` 열림, 키 로그인,
+p7 캐시에 정상 키). 단 **리부트를 건넌 실증은 아직 없다** — RUNBOOK §6의 리부트 판정으로 닫는다.
+
+**⚠️ 9-4를 시작하기 전에 RAIL 10을 본다.** SMHub에서 z2m이 이미 돌고 있고, z2m만으로 묶을 수
+있다면 domoticz는 불필요한 런타임 하나일 수 있다("런타임을 하나 더 들이는 선택은 기능이 아니라
+등급을 한 칸 올리는 비용"). 별동대가 조사 중이고, 그 답이 9-4를 **실측으로 끝낼지 / 참고 자료로
+남길지**를 정한다. ipk는 이미 있으니 어느 쪽이든 버려지지 않는다.
 
 ## 9-1~9-2 배경 — 틀 변경과 버전 좌표 (닫힘)
 

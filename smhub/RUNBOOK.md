@@ -256,7 +256,9 @@ domoticz 2026.3은 `find_package(Python3 3.4 COMPONENTS Development)`를 쓴다
 CMake Error: Python3 not found on your system, use USE_PYTHON=NO or sudo apt-get install python3-dev
 ```
 
-**`USE_PYTHON=NO`로 끄지 마라** — 그게 Z4D(Zigbee 플러그인)를 가능하게 하는 유일한 스위치다.
+**`USE_PYTHON=NO`로 끄지 말고 우회해라.** (Z4D를 안 쓰기로 한 지금은 Python 플러그인이 필수가
+아니지만, dlopen이라 **안 쓰면 비용이 0**이고 — 플러그인을 안 띄우면 CPython 인스턴스가 아예
+안 뜬다 — 끄자고 4시간을 다시 구울 값이 아니다. 열어 둔다.)
 해법은 캐시 변수를 직접 물려주는 것이고, **이미 `smhub/package/domoticz/domoticz.mk`에 들어
 있다**(`Python3_INCLUDE_DIR` / `Python3_LIBRARY`). 성공하면 configure 로그에 이 줄이 뜬다:
 
@@ -361,13 +363,23 @@ ssh ... 'logread | tail -50'     # 또는 /var/log
 
 ### 6.2 ⚠️ 라디오는 하나뿐이다
 
-`/dev/ttyS1`(MG24, EmberZNet 7.4.2 / EZSP 13)을 **z2m이 잡고 있다**. 우리 패키지는 그 포트를
-건드리지 않는다. Z4D로 Zigbee를 하려면 **z2m을 먼저 내려야 하고**, 그건 이 패키지가 대신
-결정하지 않는다 — 한 라디오, 한 호스트 스택.
+`/dev/ttyS1`(MG24, EmberZNet 7.4.2 / EZSP 13)을 **z2m이 잡고 있다. 그대로 둔다.**
 
-```bash
-ssh ... 'sudo rc-service zigbee2mqtt stop'    # 필요할 때, 의식적으로
+**Zigbee 호스트는 Z2M이다 (GLG 결정 2026-09-08, RAIL 10).** domoticz는 Zigbee를 직접 물지 않고
+**MQTT로 받는다** — 그게 domoticz의 표준 경로다(`hardware/MQTTAutoDiscover.cpp`가 유일한
+Zigbee 입구). 그래서 이 배치는 경쟁이 아니라 **분업**이다:
+
+```text
+MG24 (/dev/ttyS1) ── z2m ──→ mosquitto :1883 ──→ domoticz :8081
+                     라디오        브로커            UI·DB·자동화
+                   (벤더 제공)   (벤더 제공)         (우리 ipk)
 ```
+
+셋 다 이미 있거나 나왔다. **z2m을 내리지 마라** — 내리면 Zigbee가 사라진다.
+
+> Z4D(domoticz의 Zigbee 플러그인)는 **쓰지 않는다.** 그걸 쓰면 z2m을 내리고 같은 라디오를
+> 뺏어야 하는데, 그 경로는 riscv64에서 Rust/PyO3 크로스빌드 벽에 걸리고 이득도 없다.
+> 근거는 `docs/ECOSYSTEM-PORTFOLIO.md` §6 배너와 `NEXT.md`「RAIL 10 결정」.
 
 ### 6.3 설치면
 
@@ -386,6 +398,17 @@ ssh ... 'top -bn2 | grep -E "domoticz|Mem"; cat /proc/$(pgrep domoticz)/status |
 
 답해야 할 값: **1코어가 세트 하나(30~40대)를 받는가.** 이게 works-nixos-zigbee 레인(x86 실증,
 4스레드를 잠정 하한으로 적었다)에 돌려줄 값이다.
+
+**같은 기기에서 둘을 나란히 재라.** z2m은 이미 돌고 있고 domoticz는 방금 올렸으니, 이 보드가
+`Zigbee 호스트 + 플랫폼` 한 세트를 받는지가 한 번에 나온다:
+
+```bash
+ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
+  echo "--- $(tr "\0" " " < /proc/$p/cmdline)"; grep -E "VmRSS|Threads" /proc/$p/status; done
+  free -m | head -2; uptime'
+```
+
+이 값이 `docs/ECOSYSTEM-PORTFOLIO.md` §6.2가 x86에서만 갖고 있던 대조를 **제품 폼으로** 옮긴다.
 
 ---
 

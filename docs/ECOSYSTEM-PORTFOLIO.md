@@ -143,8 +143,8 @@ fetch 직전에 찍어둔 파일 크기와 대조했다.)
 
 | 경로 | Zigbee 호스트 | 런타임 | 온박스 비용 | 우리가 짜나 |
 |---|---|---|---|---|
-| 현재 | Zigbee2MQTT | **Node 22** | **141M** (node 49.5M + node_modules 92M) | 아니오 |
-| **domoticz + Z4D** | zigpy/bellows | **Python 3.12** | 플러그인 14M + zigpy 계열 + domoticz | 아니오 |
+| **현재 · 채택 ✅** | Zigbee2MQTT | **Node 22** | **141M** (node 49.5M + node_modules 92M) | 아니오 |
+| ~~domoticz + Z4D~~ 🚫 | zigpy/bellows | **Python 3.12** | 플러그인 14M + zigpy 계열 + domoticz | 아니오 |
 | 자체 게이트웨이 | EZSP 직결 | Zig | 최소 | **예** |
 | **A⁰ `ser2net`** | 없음(남의 기계) | — | **0** | 아니오 |
 
@@ -207,6 +207,17 @@ OpenZWave · Evohome · KMTronic · USBtin · RAVEn · MySensors 등이 **네이
 ---
 
 ## 6. Zigbee for Domoticz (Z4D) — Node 없이 Zigbee를 무는 경로
+
+> 🚫 **채택하지 않는다 (GLG 결정 2026-09-08).** Zigbee 호스트는 **Z2M**이고, domoticz는
+> 그 표준 입구(`hardware/MQTTAutoDiscover.cpp`, §5)로 받는다. 아래 실사는 **조사 기록으로
+> 보존**하며 착수 계획이 아니다.
+>
+> **왜 갈렸나**: Z4D의 존재 이유는 "Node를 뺀다" 하나였는데(§4 판정), §6.2 실측이 Node 49.5M
+> 자리에 **CPython+zigpy 86M**이 들어온다는 걸 보였고, GLG가 ① 듀얼 동글 안 함 ② 풋프린트는
+> 판정 축 아님 ③ domoticz는 Z2M으로 됨 — 셋을 고정하면서 **남은 이유가 0이 됐다.**
+> 반대편 비용(riscv64 Rust/PyO3 벽 · 가짜 초록 · 컨버터 DB · 아웃바운드 · 비표준 경로)은 그대로다.
+> **Node를 빼고 싶어지면 목적지는 Z4D가 아니라 자체 Zig 게이트웨이**(§4 표 3행)다.
+> 전체 근거: `NEXT.md`「RAIL 10 결정」.
 
 [측정] 업스트림 `zigbeefordomoticz/Domoticz-Zigbee`, `stable9.9.1.004` (2026-08-27).
 
@@ -540,7 +551,9 @@ MQTT: `mosquitto` 2.0.20(우리 이미지에 이미 `=y`) · `paho-mqtt-c` · `p
 5. **Z4D의 아웃바운드 셋을 끌 수 있는가** (§6.3) — `is_internet_available()`의 google.com 조회 ·
    Matomo 텔레메트리(기본 ON) · 런타임 pip 업그레이드. 설정으로 끄면 무엇이 같이 죽는지까지가
    질문이다. **오프라인 제품 허브의 가부가 여기 달렸다.**
-6. **riscv64/musl 가부** — 제품 ISA 레인. domoticz·zigpy 양쪽 다 미측정.
+6. **riscv64/musl 가부** — 제품 ISA 레인. **domoticz는 riscv64/glibc에서 빌드·패키징 완료**
+   (2026-09-08, `smhub/`). **zigpy 축은 닫혔다 — Z4D를 안 쓰기로 했으므로 잴 필요가 없다**
+   (RAIL 10). musl은 여전히 미측정.
 7. **`ser2net`로 EZSP 원격 구동 시 지연·안정성** — A⁰의 유일한 미지수.
 8. **SMHUB v1.0.0 실기** — 우리 기기는 아직 beta5 슬롯이다(`docs/SMHUB.md`). §2.2는
    전부 릴리즈노트 문서지 실측이 아니다.

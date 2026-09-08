@@ -423,6 +423,7 @@ RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받�
 > | `homeassistant.enabled: true` | 벤더 `configuration.yaml` | **없음 — 손수정** |
 > | `Preferences.WebLocalNetworks` | `domoticz.db` | **없음 — 손수정** |
 > | `Hardware` 행 (MQTT Auto Discovery) | `domoticz.db` | **없음 — 손수정** |
+> | `WebLocalNetworks`에 LAN 대역 | `domoticz.db` | **없음 — 손수정** (브라우저로 UI를 쓰려면 필요) |
 >
 > 제품이라면 **idempotent postinst 또는 이미지 시드**가 이 셋을 소유해야 한다
 > ([#8](https://github.com/junghan0611/homeagent-config/issues/8) 축). 지금은 손으로 넣은 상태임을 알고 쓴다.
@@ -432,18 +433,21 @@ RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받�
 [측정 2026-09-08] 벤더 기본값은 **`homeassistant: enabled: false`**다. 이대로면 `homeassistant/`
 토픽이 **하나도 안 나오고**, domoticz는 붙어도 **아무것도 못 본다**.
 
+⚠️ **소유자를 반드시 보존해라.** 이 파일은 z2m 프로세스(`smlight`)가 **쓴다** — 페어링하면
+기기를 여기에 기록한다. `>` 리다이렉트나 `mv`로 새 파일을 만들면 소유자가 `root`가 되고,
+z2m은 조인하는 순간 `EACCES: permission denied`로 **죽는다**(실제로 밟았다, 2026-09-08).
+그래서 **제자리 편집(`sed -i`)** 을 쓴다:
+
 ```sh
 C=/opt/zigbee2mqtt/data/configuration.yaml
-sudo cp -a "$C" "$C.bak-$(date +%Y%m%d%H%M%S)"
-sudo awk '
-  /^homeassistant:/ {inblk=1; print; next}
-  /^[a-z]/ && !/^  / {inblk=0}
-  inblk && /^  enabled:/ {sub(/false/,"true")}
-  {print}
-' "$C" > /tmp/z2m.new && sudo mv /tmp/z2m.new "$C"
+sudo cp -a "$C" "$C.bak-$(date +%Y%m%d%H%M%S)"       # cp -a 라 백업은 소유자를 보존한다
+sudo sed -i '/^homeassistant:/,/^[a-z]/ s/^  enabled: false/  enabled: true/' "$C"
+ls -l "$C"                               # smlight:smlight 인지 확인 ← 이 줄을 건너뛰지 마라
 grep -A1 '^homeassistant:' "$C"          # enabled: true 인지 restart 전에 확인
 sudo rc-service zigbee2mqtt restart
 ```
+
+소유자가 어긋났으면 되돌린다: `sudo chown smlight:smlight "$C"`
 
 원래 모습은 이렇고(들여쓰기 2칸, 최상위 블록):
 
@@ -452,13 +456,17 @@ homeassistant:
   enabled: false      # ← true 로
 ```
 
-**판정 — 토픽이 실제로 흐르는지 본다** (`rc-service`가 아니라):
+**판정 — 셋을 본다** (`rc-status`가 아니라):
 
 ```sh
-mosquitto_sub -h 127.0.0.1 -t 'homeassistant/#' -W 8 -v | head -3
+$SSH 'pgrep -f "^/opt/bin/node /opt/bin/zigbee2mqtt"'        # ① 프로세스가 살아 있나
+$SSH 'ss -ltn | grep 8080'                                   # ② 프론트엔드가 듣나
+$SSH "mosquitto_sub -h 127.0.0.1 -t 'homeassistant/#' -W 8 -v | head -3"   # ③ 토픽이 흐르나
 ```
 
-`Timed out`이면 안 켜진 것이다.
+③이 `Timed out`이면 discovery가 안 켜진 것이다. ①②가 비면 **z2m이 죽은 것이고, 그때도
+`rc-status`는 `started`라고 말한다** — supervise-daemon이 재시작을 반복하기 때문이다.
+로그가 사실원이다: `$SSH 'tail -20 /var/log/zigbee2mqtt.log'`
 
 ### 6.4.2 domoticz — 로컬 API 401부터 푼다 ⚠️ 이걸 먼저 안 하면 다음 절이 전부 막힌다
 
@@ -471,6 +479,10 @@ sudo sqlite3 /opt/domoticz/domoticz.db \
   "insert or replace into Preferences (Key,nValue,sValue) values ('WebLocalNetworks',0,'127.0.0.1;::1');"
 sudo rc-service domoticz start
 ```
+
+**브라우저로 UI를 쓸 거면 LAN 대역도 넣어라.** 안 넣으면 페이지는 뜨는데(HTTP 200) 그 안의
+API 호출이 전부 401이라 **화면이 비어 보인다.** 위 값 대신 `'127.0.0.1;::1;192.168.0.*'`
+(자기 대역으로).
 
 **판정 — 다음 절로 넘어가기 전에 이게 200이어야 한다** (기기 안에서):
 
@@ -593,6 +605,8 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | domoticz가 브로커에 붙었는데 기기 0개 | `extra`의 4번째 구획(discovery prefix)이 비었다 | §6.4.2 — **연결은 가짜 초록** |
 | `addhardware`가 `{"status":"ERR"}`만 | `Mode1`(대문자)이 비었다 | §6.4.2 |
 | `homeassistant/` 토픽이 없다 | z2m 기본값이 `enabled: false` | §6.4.1 |
+| z2m이 `EACCES ... configuration.yaml`로 죽는다 | 설정 파일 소유자가 `root`로 바뀌었다 | §6.4.1 — `chown smlight:smlight`. **`rc-status`는 그때도 `started`** |
+| domoticz 페이지는 뜨는데 화면이 빈다 | LAN이 신뢰망에 없어 API가 401 | §6.4.2 |
 | `json.htm`이 전부 401 | 초기 domoticz는 `Users`가 비어 있다 | §6.4.3 |
 | `reboot`를 보냈는데 안 내려간다 | ssh 세션과 함께 죽었다 | `nohup sh -c "sleep 2; reboot"` 후 **:22가 닫히는지 확인** |
 | 리부트 후 domoticz가 안 뜬다 | `rc-update add`를 안 했거나 영속 실패 | §6 판정에 리부트가 있는 이유 |

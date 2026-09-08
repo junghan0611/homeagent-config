@@ -391,6 +391,91 @@ MG24 (/dev/ttyS1) ── z2m ──→ mosquitto :1883 ──→ domoticz :8081
 
 ---
 
+## 6.4 domoticz ↔ z2m 연결 ✅ — 표준 경로를 세운다
+
+RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받는다**. 양쪽에 각각 할 일이 있다.
+
+### 6.4.1 z2m — HA discovery를 켠다 ⚠️ 기본이 꺼져 있다
+
+[측정 2026-09-08] 벤더 기본값은 **`homeassistant: enabled: false`**다. 이대로면 `homeassistant/`
+토픽이 **하나도 안 나오고**, domoticz는 붙어도 **아무것도 못 본다**. 켜야 한다:
+
+```sh
+C=/opt/zigbee2mqtt/data/configuration.yaml
+sudo cp -a "$C" "$C.bak-$(date +%Y%m%d%H%M%S)"
+# homeassistant: 블록의 enabled 를 true 로
+sudo rc-service zigbee2mqtt restart
+```
+
+판정 — 토픽이 실제로 흐르는지 본다(`rc-service`가 아니라):
+
+```sh
+mosquitto_sub -h 127.0.0.1 -t 'homeassistant/#' -W 8 -v | head -3
+```
+
+> ⚠️ **이건 기기 쪽 수정이라 재현되지 않는다.** 우리 `.ipk`가 소유하지 않는 벤더 설정이고,
+> 공장 초기화하면 사라진다. 제품이라면 이미지나 패키지가 이 값을 소유해야 한다
+> ([#8](https://github.com/junghan0611/homeagent-config/issues/8) 축). 지금은 **손으로 켠 상태**임을 알고 쓴다.
+
+### 6.4.2 domoticz — MQTT Auto Discovery 하드웨어 추가
+
+Web UI(`Setup → Hardware`)로도 되지만, API가 재현 가능하다. **`Mode1`과 `extra`가 함정이다.**
+
+```sh
+# 기기 안에서 (domoticz는 기본적으로 127.0.0.1만 신뢰한다 — 6.4.3)
+Q="type=command&param=addhardware&htype=125&name=Zigbee2MQTT&enabled=true"
+Q="$Q&address=127.0.0.1&port=1883&username=&password=&datatimeout=0&loglevel=7"
+Q="$Q&Mode1=0&Mode2=0&Mode3=0&Mode4=0&Mode5=0&Mode6=0"
+Q="$Q&extra=%3B%3B%3Bhomeassistant"        # = ";;;homeassistant"
+curl -s "http://127.0.0.1:8081/json.htm?$Q"
+```
+
+**함정 둘 (둘 다 조용히 실패한다)**
+
+| 함정 | 증상 | 근거 |
+|---|---|---|
+| `Mode1`이 **대문자**이고 비면 거부 | `{"status":"ERR"}`만 나온다. 이유를 안 알려준다 | `main/WebServerCmds.cpp` `ValidateHardware` — MQTT 계열은 `smode1.empty()`면 `return false` |
+| `extra`의 **네 번째 `;` 구획 = discovery prefix** | 하드웨어는 등록되고 브로커에 **연결까지 되는데 기기가 0개**다 | `hardware/MQTTAutoDiscover.cpp:57-76` — `Extra`를 `;`로 쪼개 `[3]`을 prefix로 쓰고, 비면 `"Auto Discovery Topic empty!"` 후 **아무것도 구독하지 않는다** |
+
+두 번째가 특히 「가짜 초록」이다 — `ss`로 보면 domoticz가 1883에 붙어 있어서 **연결은 성공으로
+보인다.** 판정은 연결이 아니라 **기기 수**로 한다.
+
+### 6.4.3 domoticz 인증 — 초기 상태에서 API가 전부 401
+
+[측정] 새로 설치한 domoticz는 `Users` 테이블이 비어 있고, 그 상태에서 `json.htm`이 **401**을
+돌려준다(`getversion`만 열려 있다). 로컬을 신뢰망으로 등록하면 열린다:
+
+```sh
+sudo rc-service domoticz stop
+sudo sqlite3 /opt/domoticz/domoticz.db \
+  "insert or replace into Preferences (Key,nValue,sValue) values ('WebLocalNetworks',0,'127.0.0.1;::1');"
+sudo rc-service domoticz start
+```
+
+> ⚠️ 이것도 **기기 쪽 상태**(`/opt/domoticz/domoticz.db`)다. 제품이라면 패키지가 시드해야 한다.
+> 그리고 **관리자 계정은 아직 아무도 안 만들었다** — 지금은 "로컬은 무인증"이라 도는 것이다.
+
+### 6.4.4 판정 ✅ — 실측 (2026-09-08)
+
+```text
+MG24 (/dev/ttyS1) ── z2m 2.13.0 ──→ mosquitto :1883 ──→ domoticz 2026.3 :8081
+```
+
+연결 직후 domoticz가 **브리지 엔티티 4개**를 자동 등록했다:
+
+| 기기 | 값 |
+|---|---|
+| Zigbee2MQTT Bridge (Coordinator version) | **7.4.2 [GA]** |
+| Zigbee2MQTT Bridge (Version) | **2.13** |
+| Zigbee2MQTT Bridge (Permit join) | Off |
+| Zigbee2MQTT Bridge (Restart required) | Off |
+
+**EZSP 좌표(§2.1)가 domoticz 화면까지 올라왔다** = 파이프가 끝까지 통했다는 뜻이다.
+**단 Zigbee 기기는 0대다** — z2m `bridge/devices`에 Coordinator 자신뿐이라 올라올 게 없다.
+"기기가 보인다"는 페어링 뒤에 다시 판정한다(§7).
+
+---
+
 ## 7. 측정 ❓ — 이 레인이 실제로 답해야 하는 질문
 
 기동이 확인되면 **여기가 목적지다.** `nproc`이 1이고 RAM이 488M인 기기에서:
@@ -452,7 +537,11 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `pack-ipk.sh`가 SMHUB_SSH 없다고 멈춤 | 의도된 것 | 추측 금지, 기기를 붙여라 |
 | `pack` 중 "neither on the device nor in our build" | defconfig에 그 라이브러리가 없다 | defconfig에 추가 후 재빌드 |
 | domoticz가 떠도 8081 응답 없음 | 포트 충돌 | §6.1 |
-| Z4D가 라디오를 못 연다 | z2m이 점유 | §6.2 |
+| domoticz가 브로커에 붙었는데 기기 0개 | `extra`의 4번째 구획(discovery prefix)이 비었다 | §6.4.2 — **연결은 가짜 초록** |
+| `addhardware`가 `{"status":"ERR"}`만 | `Mode1`(대문자)이 비었다 | §6.4.2 |
+| `homeassistant/` 토픽이 없다 | z2m 기본값이 `enabled: false` | §6.4.1 |
+| `json.htm`이 전부 401 | 초기 domoticz는 `Users`가 비어 있다 | §6.4.3 |
+| `reboot`를 보냈는데 안 내려간다 | ssh 세션과 함께 죽었다 | `nohup sh -c "sleep 2; reboot"` 후 **:22가 닫히는지 확인** |
 | 리부트 후 domoticz가 안 뜬다 | `rc-update add`를 안 했거나 영속 실패 | §6 판정에 리부트가 있는 이유 |
 | `setup.sh`가 commit pin에서 멈춤 | 트리 HEAD가 태그와 다름 | 출력의 `git checkout --detach` 한 줄 |
 | ipk가 다른 기기에서 안 뜬다 | device profile 불일치 | 매니페스트의 profile과 대조(§5) |

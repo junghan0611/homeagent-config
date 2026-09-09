@@ -129,3 +129,14 @@ docs/smhub-manual/
 # SMHub .ipk lane: pinned Buildroot tree (cloned by smhub/setup.sh) + artifacts
 smhub/sdk/
 smhub/out/
+
+# Agent working notes — carry device coordinates and raw session findings.
+# Durable facts get promoted to docs/ · NEXT.md · smhub/RUNBOOK.md instead.
+.agent-reports/
+
+# Vendor radio firmware pulled for the SMHub Nano Mg24 lane (2026-09-09).
+# Held out of the public repo on two counts: they are closed vendor blobs
+# (AGENTS.md invariant), and their provenance is unresolved — the vendor index
+# started serving 404 download links the same day, so we cannot tell a routing
+# regression from a withdrawal. See docs/SMHUB.md §5.5 Q5.
+firmware/smhub-mg24/*.gbl

@@ -544,6 +544,54 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
   `ASH_NCP_FATAL_ERROR`로 z2m이 죽었고, 대응은 `advanced.adapter_concurrent: 2`다
   (`smhub/RUNBOOK.md` §6.5). **NCP가 no-flow 빌드인지 stock hw인지는 여전히 미확인**이고,
   `.gbl`이 없어 추출도 안 된다.
+  ✅ **[2026-09-09 실측 — SoC 쪽 절반만 닫혔다]** 원문이 남겨둔 *"`ttyS1` RTS/CTS 배선
+  미검증"* 을 잰다. **SoC 쪽 패드는 할당돼 있다. MG24까지의 PCB 배선은 여전히 미검증이다** —
+  pinmux는 SoC의 출구까지만 말해주고, 넷·극성·pull은 말해주지 않는다.
+  live pinmux(`/sys/kernel/debug/pinctrl/3001000.pinctrl/pinmux-pins`)
+  에서 `4150000.serial`(=`/dev/ttyS1`)이 패드를 **4개** 물고 있고, 그 넷의 정체는 SDK 핀리스트
+  (`duo-buildroot-sdk-v2/linux_5.10/drivers/pinctrl/cvitek/cv181x_pinlist_swconfig.h`)가 준다:
+  `IIC0_SCL__UART1_TX` · `IIC0_SDA__UART1_RX` · `JTAG_CPU_TMS__UART1_RTS` · `JTAG_CPU_TCK__UART1_CTS`.
+  → 위 2026-09-08 항목의 *"하드웨어 자동 RTS 경로 자체가 없다"* 는 **드라이버 얘기지 SoC 패드
+  얘기가 아니다**. 패드는 할당돼 있고, AFE가 없어 커널이 안 쓸 뿐이다. ⚠️ 다만 이것을 "선이
+  MG24까지 닿는다"로 읽지 마라 — **그건 아직 안 쟀다** (회로/PCB 또는 07MG24 board config 대조가
+  필요하다).
+  포트를 열고 잰 modem line: **`RTS out = True`(호스트가 상시 assert), `CTS = False`** — RTS를
+  0↔1로 흔들어도 CTS는 안 변한다. CTS가 계속 deassert라는 건 **지금 칩의 7.4.2가 자기 RTS를 안
+  올린다**는 뜻이고, 원문의 "벤더 flashed 이미지는 no-flow 빌드" 쪽을 지지한다(여전히 직접
+  증거는 아니다 — `.gbl` 추출 불가는 그대로).
+  ✅ **[2026-09-09 실측 — 현재 NCP의 flow control을 비파괴로 판정했다]** 원문·2026-09-08 항목이
+  둘 다 *"NCP가 no-flow 빌드인지 stock hw인지 미확인"* 으로 남겨둔 것을 잰다. 방법은 ASH RST
+  프레임(`1a c0 38 bc 7e`)을 넣고 RSTACK이 돌아오는지를 조건별로 보는 것 — z2m 정지 상태에서
+  포트만 열면 되고 칩을 바꾸지 않는다.
+  | 조건 | 결과 |
+  |---|---|
+  | 호스트 RTS **deassert** | RSTACK 수신 `1a c1 02 0b 0a 52 7e` (3회 재현) |
+  | 호스트 RTS **assert** | 동일하게 수신 |
+  | **XOFF(0x13) 선행** 후 RST | **그래도 즉시 수신** — XOFF 무시 |
+  → **현재 7.4.2는 hw_flow도 sw_flow도 아닌 `no_flow` 빌드다.** 호스트 RTS로도, XON/XOFF로도
+  NCP 송신을 멈출 수 없다. (엄밀히는 "RTS 패드가 MG24 CTS에 실제로 안 닿아 있다"도 같은 관측을
+  낳지만, 어느 쪽이든 **호스트가 NCP를 멈춰 세울 수단이 지금 하나도 없다**는 결론은 같다.)
+  ⚠️ **이걸 `ASH_NCP_FATAL_ERROR`의 원인으로 읽으면 틀린다** (2026-09-09 자기정정). 그 크래시는
+  **바이트를 흘린 게 아니라 CPU에 굶은 것**이고, 이미 어제 측정으로 확정돼 있다 —
+  `smhub/RUNBOOK.md` §6.5.2: ASH 카운터가 `CRC/Comm/Bad length/Out of buffers 전부 RX=0`,
+  `ACK TX=858`, 그리고 `/proc/tty/driver/serial`에 `oe:`/`bo:`가 **0**(카운터는 0이 아닐 때만
+  출력된다). 같은 시각 `CPU0 100%`, `node 78.2%`. 즉 **호스트가 깨끗이 받고도 ACK를 제때 못
+  보낸 것**이다. no_flow는 이 실패의 원인이 아니라 **여유를 못 주는 조건**이고, 부하가 오르면
+  언젠가 물리 오버런으로도 갈 수 있는 열린 문일 뿐이다(현재까지 `oe=0`).
+  ⛔ **그래서 stock `ncp-uart-hw`(hw_flow) 리플래시는 하면 안 된다.** hw_flow NCP는 자기 CTS
+  (=호스트 RTS)로 송신을 게이팅하는데, **그 선이 MG24까지 닿는지 증명된 바 없다**(위 실측이
+  정확히 그 지점에서 갈린다). 닿으면 커널이 RTS를 상시 assert하므로 지금과 **동일**하고(개선
+  없음), 안 닿으면 NCP가 영영 침묵한다 — 그리고 **되돌릴 7.4.2가 공개 배포에 없다.** 즉
+  flow-control 축에서 hw_flow 리플래시는 **상방 0 · 하방 복구불가**다. 공개 벤더 이미지
+  (7.4.4.0 · 8.0.2.0)는 **둘 다 hw_flow**이므로
+  (파일명 규칙 확인: `ncp-uart-hw-v7.4.2.0-zbdonglee-115200.gbl` ≡
+  `zbdonglee_zigbee_ncp_7.4.2.0_hw_flow_115200.gbl`, sha256 `42fcf8a2…` 바이트 동일),
+  버전을 올리려면 **sw_flow 빌드를 우리가 만들어야 한다**. 레시피는
+  `Nerivec/silabs-firmware-builder`의 `manifests/smlight/smlight_slzb07Mg24_zigbee_ncp.yaml`
+  (우리 칩 `EFR32MG24A020F1024IM40`)에 `manifests/sonoff/sonoff_dongle-pmg24_zigbee_ncp.yaml`의
+  `SL_IOSTREAM_EUSART_UART_FLOW_CTRL_SOFT` + CTS/RTS port·pin `0` + `baudrate 115200`을
+  이식하는 4줄 diff다. ⚠️ 미결: 같은 MG24라도 07↔06 매니페스트에서 **TX/RX가 뒤바뀐다**
+  (07 TX=PA6/RX=PA5, 06 TX=PA5/RX=PA6) → SMHub Nano가 어느 쪽인지 확정 필요.
   ⚠️ **원문 (2026-07-03 기록)**: 라이브 동작 정본 = z2m **`rtscts: false`(no-flow)** @115200. 그런데 stock `ncp-uart-hw`는 기본 **RTS/CTS on**(`SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE=usartHwFlowControlCtsAndRts`, `EMBER_SERIAL1_RTSCTS`). → 벤더 flashed 이미지는 **no-flow 빌드**이거나 그렇게 구동 중이며, **stock hw판을 그대로 리플래시 후 no-flow 호스트로 몰면 부하 시 바이트 드롭 가능**. Phase 2 직접구동 전 flow-control 정합(NCP를 no-flow로 빌드 vs 양단 RTS/CTS — `ttyS1` RTS/CTS 배선 미검증) **재조정 항목**. (§6.1 재플래시 경로.)
 
 **derisk 종합**: Q1·Q2 🟢 = **Phase 1(쉘) 실착수 막는 board blocker 없음**. Q3 확인사살 통과, Q4·Q5는 Phase 2 경계 명확.

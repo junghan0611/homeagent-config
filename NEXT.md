@@ -6,82 +6,152 @@
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED
 - [x] **9. SMHub에 domoticz 올리기 — 돈다 (2026-09-08)**. 크로스빌드 → ipk → 설치 → 기동 → 리부트 생존 → z2m MQTT 연결 → **기기 12대 페어링, domoticz 엔티티 112개**
 - [x] **10. Zigbee 호스트 결정 — `domoticz + Z2M`, Z4D 비채택 (GLG 2026-09-08)**
-- [ ] **11. 부하 등급 판정** ← 진행 중. RAM은 병목 아님이 밝혀졌고, **병목은 시리얼**로 드러났다
-- [ ] **12. 라디오 펌웨어 복구** ← **NOW / BLOCKING**. 8.0.2.0 플래시 후 NCP가 EZSP를 말하지 않는다
+- [ ] **11. 부하 등급 판정** ← 진행 중. RAM 아님 · 시리얼 아님 → **호스트 CPU와 크래시 루프**로 좁혀졌다
+- [x] **12. 라디오 "복구" — 복구할 게 없었다 (2026-09-09)**. 칩은 7.4.2 그대로였고 부트로더에 앉아 있었을 뿐이다
+- [ ] **13. 펌웨어 버전업 — 보류**. 벤더 공개 이미지가 전부 hw_flow이고, 벤더 인덱스가 **404 링크**를 배포 중이다
+- [x] **14. 정보면 확보 (2026-09-09)**. `smhub-services` 앱 · UDS API · 라디오 직접 프로브 → `smhub/RUNBOOK.md` §2.5
 
-현재 좌표: 1~5·9·10 완료 → **12가 11을 막고 있다** → 6·7·8 보류
+현재 좌표: 1~5·9·10·12·14 완료 → **11이 열린 축** → 13은 벤더 회신 대기 → 6·7·8 보류
 
 ---
 
-# NOW — 이어받는 자리 (2026-09-08 퇴근 시점)
+# NOW — 이어받는 자리 (2026-09-09)
 
-> **한 줄**: **라디오가 EZSP를 말하지 않는다.** 8.0.2.0을 굽고 나서 z2m이 못 뜬다.
-> 벽돌은 아니고 복구 경로도 확보돼 있다. **내일 첫 일은 coordinator NCP를 다시 굽는 것**이고,
-> 웹 UI가 아니라 **우리가 아는 방식**으로 한다.
+> **한 줄**: 어제 "펌웨어가 죽었다"고 부른 것은 **펌웨어가 아니었다.** 칩엔 7.4.2가 그대로
+> 있었고 부트로더에 앉아 있었을 뿐이다. 오늘 프레임이 세 번 뒤집혔고, 지금 남은 열린 축은
+> **호스트 CPU와 크래시 루프** 하나다.
 
-## 지금 기기 상태
+## 오늘 닫힌 것
+
+| | 값 | 근거 |
+|---|---|---|
+| 라디오 상태 | **EZSP 7.4.2.0 @115200 정상** — 어제 플래시는 칩에 안 써졌다 | `universal-silabs-flasher` 프로브 |
+| 어제 z2m이 못 뜬 이유 | **칩이 부트로더 모드에 앉아 있었다.** GPIO 리셋 한 번으로 앱이 떴다 | `Launched application from bootloader` |
+| 현재 NCP flow control | **`no_flow`** — 호스트 RTS로도, XOFF로도 송신을 못 멈춘다 | ASH RST→RSTACK 비파괴 실측 3종 |
+| UART1 RTS/CTS 배선 | **SoC 쪽 패드 4개 muxed** (TX·RX·RTS·CTS). "경로가 없다"는 드라이버 얘기였다 | live pinmux + SDK 핀리스트 |
+| 12대 네트워크 | **복구 완료** — pan 59232 / ch11, 재페어링 없이 전부 복귀 | `bridge/devices` 13 entries |
+| 정보면 | `smhub-services`(앱) · UDS API(무인증) · 로그 스트림 · 직접 프로브 | `smhub/RUNBOOK.md` §2.5 |
+
+## 오늘 깨진 프레임 세 개 (다시 세우지 마라)
+
+1. **"hw_flow를 구우면 반드시 침묵한다"** — 철회. `rtscts:false`는 호스트 설정이지 MG24의 CTS
+   전기 레벨이 아니다. 위험은 *필연*이 아니라 **미측정 배선/극성에 걸린 도박**이다.
+2. **"no_flow라서 RX 오버런이 난다"** — 철회. `oe:`가 오늘도 계속 **0**이다. 바이트는 한 번도
+   안 흘렸다. flow control·DMA·펌웨어 버전은 이 실패의 자리에 없다.
+3. **"14대 부하 / 인터뷰 버스트가 CPU를 굶긴다"** — 절반 철회. 부하 0인 `GET_EUI64` 초기화
+   지점에서도 죽었다. 진짜 모양은 **크래시 루프가 스스로를 먹이는 것**이다:
+   `크래시 → 50초 주기 재시작 → node 기동이 1코어를 태움 → ASH ACK 지연 → NCP가 ACK_TIMEOUT → 크래시`.
+   **완전 파워사이클이 루프를 끊었다** (load 1.7 상시 → **0.09**).
+
+## 13. 펌웨어 버전업이 왜 보류인가
+
+- 어제의 근거는 z2m 문서 한 줄이었다: *"Spammy devices (particularly Tuya & co) — use coordinator
+  firmware **8.0.2 and later** from darkxst or Nerivec, and **7.4.4.5 or later** from Nabu Casa."*
+  → **SMLIGHT의 `7.4.4.0`은 두 문턱 어디에도 못 미친다.**
+- 그런데 우리가 본 크래시는 spammy reporting이 아니라 **페어링/인터뷰 + 크래시 루프**였다.
+  처방과 증상이 다른 축이다.
+- 벤더가 이 유닛(`device=67`, `SMHUB-MG24`)에 주는 이미지는 **8.0.2.0 · 7.4.4.0 둘뿐이고 전부
+  hw_flow**다. 출하된 7.4.2는 목록에 없다 = **롤백 이미지가 없다.**
+- ⛔ **벤더 인덱스가 지금 404 링크를 배포 중이다.** 2026-09-09 14:45엔
+  `services/api/fw-dl.php?...`(200)였는데 그 뒤 `firmware/slzb-07mg24/dl.php?...`(**404**)로 바뀌었다.
+  Web UI 플래시가 이것 때문에 실패한다. 기기 UDS로도 확인된다:
+  `curl --unix-socket /run/smhub-backend.sock 'http://localhost/api/v1/radio/0/firmware_list?type=0'`
+- 자산은 확보돼 있다: `firmware/smhub-mg24/`(두 이미지 + 인덱스 원본 + `flash-mg24.py` CLI 경로).
+  **provenance hold** 상태다 — 벤더에 파일 유효성·회수 여부·배선을 확인받기 전엔 굽지 않는다.
+  티켓 초안: `.agent-reports/2026-09-09-smlight-support-ticket-draft.md`
+
+## 지금 기기 상태 (2026-09-09 16:30 기준)
 
 | | |
 |---|---|
-| **z2m** | ❌ 못 뜬다. `Failed to start EZSP layer with status=HOST_FATAL_ERROR` 반복 |
-| **라디오** | `ASH starting → ASH Adapter reset → ASH starting` 무한. **`RSTACK` 응답 없음** |
-| **domoticz** | ✅ 정상. 8081, 엔티티 **112개** (z2m이 죽어도 안 죽는다) |
-| 설정 | `adapter: ember` · `115200` · `rtscts: false` · `log_level: info` |
-| `NODE_OPTIONS` | `--v8-pool-size=0 --max-old-space-size=128 --max-semi-space-size=2` (`/etc/conf.d/zigbee2mqtt`) |
+| 라디오 | EmberZNet **7.4.2 [GA]**, ezsp13, `no_flow` |
+| z2m | **online**, 14대 (12대 복구 + 오늘 2대 신규) |
+| 설정 | `adapter_concurrent: 1`(2에서 내림) · `log_level: warning` · `rtscts:false` @115200 |
+| 전원 | GLG가 10W → **18W**로 교체 + 파워사이클 |
+| 안정성 | ⚠️ **한 대는 견디고, 한 대 더에서 죽는다** (아래 시험 결과) |
+| 되돌리기 | `configuration.yaml.bak-*` · `/home/smlight/z2m-data-before-restore-20260909-065751.tar.gz` |
 
-**리셋은 먹는다** — 로그의 `ASH Adapter reset`이 GPIO 리셋이 살아 있다는 증거다.
-**응답만 없다** → 보율·플로우컨트롤 문제가 아니라 **지금 칩에 NCP가 아닌 펌웨어가 올라가 있다.**
+⚠️ **안정의 원인이 아직 안 갈렸다** — 파워사이클 · 18W PSU · `adapter_concurrent:1` 세 변수가
+동시에 걸렸다. 하나씩 되돌려야 무엇이 듣는지 안다.
 
-## 내일 첫 일 — 12. 라디오 복구
+### 시험 결과 [측정 2026-09-09 저녁]
 
-**웹 UI로 하지 않는다 (GLG 2026-09-08).** 동글에서 이미 여러 번 해 본 방식으로 간다:
-`~/repos/work/hejhub-nano/firmware/zbdongle-e/` · 우리 `firmware/zbdonglee/`.
+| 시험 | 결과 |
+|---|---|
+| 파워사이클 후 39분 유휴 | ✅ 무크래시, load 0.09~0.13 |
+| **한 대 페어링** (→ 16대) | ✅ 견뎠다. load 0.38 잔물결 후 0.12로 복귀 |
+| **한 대 더** (→ 17대) | ❌ **죽었다** — `08:11:34 SEND_UNICAST`(인터뷰 중) → `08:12:13 GET_EUI64`(초기화 중 = 루프 시작) |
 
-**짐작**: 벤더 UI가 `Factory coordinator firmware (v8.0.2.0)`이라 표시했지만 **실제로는 라우터
-이미지를 구웠을 가능성**이 크다. 공개 URL에서 8.0.2.0으로 배포되는 건 **router**이고,
-coordinator(NCP)는 **7.4.1.0**이다.
+→ **"손 안 대고 된다"는 아니다.** 견디는 구간이 있을 뿐이고 한 대 더에서 넘어간다.
+`adapter_concurrent:1` + 18W + 파워사이클을 **다 넣고도** 그렇다.
+17번째 `0xa4c1384ba14f2a08`은 **인터뷰 미완**으로 남았다(`interview_completed:false`, definition 없음).
+루프 차단을 위해 **z2m은 정지시켜 뒀다.**
 
-```text
-updates.smlight.tech/firmware/slzb-07/
-  ncp-uart-hw-v7.4.1.0-slzb-07-115200.gbl      239,520 B   ← coordinator (이걸 구워야 한다)
-  slzb07_zigbee_router_8.0.2.0_115200.gbl      284,760 B   ← router (아마 이게 들어갔다)
-  ot-rcp-v2.4.5.0-slzb-07-460800.gbl           109,068 B
-updates.smlight.tech/firmware/smhub/utils/
-  flash-efr.sh · efr_btl_enabler.sh
+⚠️ 두 크래시 모두 `log_level: warning`이라 **ASH 카운터 블록이 안 남았다.** 원인을 CPU로 못
+박으려면 재현 때 `info`로 올려야 한다(§2.5.3의 함정 그대로 밟았다).
+
+### 오늘 떨어져 나간 이름 네 개
+
+어제 이 증상을 **"펌웨어 버전 문제"**라 불렀다. 오늘 측정이 하나씩 뗐다:
+
+| 이름 | 왜 아닌가 |
+|---|---|
+| 펌웨어 | 칩은 7.4.2로 멀쩡. 어제 플래시는 안 써졌고, 부트로더에 앉아 있었을 뿐 |
+| 시리얼(바이트 손실) | `oe:`가 하루 종일 **0**. rx 82,913까지 누적하고도 0 |
+| 전원 | 10W → **18W** 교체 + 파워사이클 후에도 같은 자리에서 죽는다 |
+| flow control | ASH `CRC/Comm/Bad length/Out of buffers` 전부 0 |
+
+**남은 것 하나**: 1코어가 인터뷰 버스트의 ASH ACK 마감을 못 지킨다.
+
+## 다음 한 걸음 — 변수 하나씩 되돌리는 시험
+
+세 변수가 동시에 걸려 있어서, **한 번에 하나만** 되돌리며 무엇이 듣는지 가른다.
+
+| # | 시험 | PASS | FAIL |
+|---|---|---|---|
+| 1 | 그대로 두고 **한 대만** 페어링 (인터뷰 완료까지 대기) | 인터뷰 완료 + 이후 10분 무크래시 | `EXCEEDED_MAXIMUM_ACK_TIMEOUT` 재발 |
+| 2 | 1이 PASS면 `adapter_concurrent` **1 → 2**로 되돌리고 다시 한 대 | 동일 | 되돌린 값이 원인 → 1로 고정 |
+| 3 | 2도 PASS면 **연속 2~3대**를 사이 없이 | 동일 | 버스트가 원인 → 운영 rate shaping 레인 |
+
+**판정은 사실원으로.** 배너·`rc-service status` 금지:
+
+```bash
+# 살아있나 (ps 로는 안 보인다 — z2m은 root)
+mosquitto_sub -h localhost -t zigbee2mqtt/bridge/state -C 1 -W 10
+# 크래시 났나
+grep -aE "EXCEEDED|WRONG_DIRECTION" /var/log/zigbee2mqtt.log | tail -3
+# 바이트를 흘렸나 (oe: 가 보이면 처음으로 흘린 것이다)
+sudo sed -n 3p /proc/tty/driver/serial
 ```
 
-**벤더가 SMHub의 EFR32를 SLZB-07 호환으로 취급한다** — `flash-efr.sh`가 위 slzb-07 이미지를
-가리킨다. `firmware/nano/`·`firmware/smhub-nano/`는 404다.
+**크래시 루프에 빠지면 시험을 계속하지 마라** — 루프가 스스로를 먹어서 이후 데이터가 전부
+오염된다. z2m을 멈추고 **완전 파워사이클**로 끊은 뒤 다시 시작한다.
 
-**⚠️ 이 보드 프로파일에 맞는 것을 골라야 한다**: 우리는 `rtscts:false` @115200이므로
-**`sw_flow`/`no_flow` + `115200`** 이어야 한다. 3rd-party(Nerivec) slzb-07 빌드는 **전부
-`hw_flow`**라 쓰면 안 된다. 참고로 우리 리포에 같은 규칙의 파일이 이미 있다:
-`firmware/zbdonglee/zbdonglee_zigbee_ncp_8.0.3.0_sw_flow_115200.gbl`(칩이 달라 그대로는 못 쓴다).
+### 되돌리기 경로 (2026-09-09에 바꾼 것 전부)
 
-**부트로더 진입은 GPIO다** — `efr_btl_enabler.sh`:
+| 바꾼 것 | 원래 값 | 되돌리는 법 |
+|---|---|---|
+| `adapter_concurrent` | 2 | `configuration.yaml`에서 1 → 2 |
+| `log_level` | warning (실험 중 info로 올렸다 되돌림) | 현재 warning = 원래 값 |
+| z2m data 전체 | 복구 직전 상태 | 기기의 `/home/smlight/z2m-data-before-restore-20260909-065751.tar.gz` |
+| `configuration.yaml` | 각 편집 직전 | 기기의 `configuration.yaml.bak-*` |
+| 계측 스크립트 | — | `/home/smlight/pairwatch.sh` (정지됨, 지우면 끝) |
 
-```sh
-GPIO_RST_EFR32=423 ; GPIO_FLSH_EFR32=422
-# rst=0, flsh=0 → 0.1s → rst=1 → 0.5s → flsh=1
-```
+### 그다음 레인 — x86 미니PC (GLG 2026-09-09)
 
-앱 펌웨어가 무엇이든 호스트가 부트로더를 부를 수 있다 → **벽돌이 아니다.**
-⚠️ 단 `flash-efr.sh`는 `/dev/ttyS2`(상위 모델)를 쓴다. **우리 Nano Mg24는 `/dev/ttyS1`**이고
-GPIO 422/423도 이 모델에서 재확인이 필요하다(`docs/SMHUB.md` §3.8 실측 맵과 대조).
+**이 리포는 여기까지다.** 이 보드의 값은 나왔다: *1코어 488M은 정상 운용은 받지만, 인터뷰
+버스트에서 ASH ACK 마감을 못 지킨다.* 다음은 `works-nixos-zigbee`의 **x86 미니PC**이고, 거기선
+코어가 여럿이고 USB CDC라 오늘의 실패 모드가 성립하지 않는다 — **그게 이 진단의 대조군이다.**
+돌아올 때 가져올 숫자: 같은 페어링 절차에서 x86이 몇 대까지 버스트를 받는가.
 
-## 안전망 (복구용, 리포 밖)
+⛔ **DT `dmas`/AFE는 안 건드린다 (GLG 2026-09-09).** 흘린 바이트가 없으므로 고칠 대상이 없다.
+반대심문 보고서(`.agent-reports/2026-09-09-smhub-mg24-frame-cross-examination.md`)는 DMA를 구조
+카드 1순위로 매겼지만, **그건 GLG 결정 이전의 순위**다. 결정이 순위를 덮는다 — 다시 열려면
+GLG에게 묻는다.
 
-```text
-~/smhub-safety/20260908-1805/
-  coordinator_backup.json   network_key · pan_id e760 · channel 11 · ext_pan 41492c8588524cda
-  database.db               기기 12대
-  configuration.yaml · state.json
-```
+## 안전망 (리포 밖, 커밋 금지)
 
-**커밋 금지** — `network_key`가 들어 있다. 라디오가 살아나면 z2m이 이 백업으로 네트워크를
-복원한다. 안 되면 12대 재페어링(GLG "괜찮다").
-
-## 12가 풀리면 바로 11
+## RAIL 11 — 부하 등급 (2026-09-08 기록, 오늘 3번 프레임이 정정됐다)
 
 **RAIL 11 = 1코어 488M이 30~40대를 받는가.** 오늘 두 축이 갈렸다:
 
@@ -91,16 +161,20 @@ GPIO 422/423도 이 모델에서 재확인이 필요하다(`docs/SMHUB.md` §3.8
 원인: [측정] 이 보드에서 V8이 `heap_size_limit`을 **259 MB**(MemTotal의 53%)로 스스로 잡아
 압박을 못 느낀다 → GC를 미룬다.
 
-**병목은 시리얼이다.** 크래시 순간 ASH 카운터가 갈랐다 — CRC 0 · comm 0 · out-of-buffers 0,
+**병목은 호스트 CPU다.** 크래시 순간 ASH 카운터가 갈랐다 — CRC 0 · comm 0 · out-of-buffers 0,
 그런데 `ACK frames RX=0/TX=858` + `Retry dupes 20`. **바이트를 흘린 게 아니라 CPU에 굶었다**
 (같은 시각 CPU0 100%, node 78%). `smhub/RUNBOOK.md` §6.5.
+⚠️ 2026-09-09 정정: 이 줄은 원래 *"병목은 시리얼이다"* 로 적혀 있었다. 측정 내용은 그대로
+맞지만 **이름이 틀렸다** — `oe:`는 그때도 지금도 0이고, 시리얼은 바이트를 흘린 적이 없다.
 
 **튜닝은 완화지 해결이 아니었다** — `adapter_concurrent:2` + `log_level:warning` +
 `NODE_OPTIONS` 셋을 다 넣고도 페어링 버스트에서 계속 끊겼다. 재현 가능한 형태로
 **`smhub/tune.sh`**에 넣어 뒀다(`--revert`/`--show`, 리부트 생존 확인).
 
 ⚠️ **`log_level: warning`은 진단을 가린다** — ASH 카운터 덤프가 `info` 레벨이다. 이 문제를 더
-팔 거면 `info`로 두어라(지금 `info`다).
+팔 거면 실험 동안만 `info`로 올려라. 🔻 **현재 값은 이 문단이 아니라 맨 위 NOW가 정본이다**
+(2026-09-09 기준 `log_level: warning` · `adapter_concurrent: 1`). 14대급에서 `info`는 그 자체가
+CPU 부하라 상시로 두지 않는다.
 
 ## 남은 미측정 (11의 실제 질문)
 
@@ -161,7 +235,7 @@ Node를 뺀다      →  자체 Zig     (EZSP 직결, 이 리포의 원래 축)
 
 ---
 
-# NOW — 이어받는 자리 (2026-09-08)
+# 이전 handoff — 2026-09-08 (참조용, 현재 자리는 맨 위 NOW)
 
 > **한 줄**: **domoticz 2026.3이 SMHub Nano(riscv64/1코어/488M)에서 돌고, 리부트도 건넜다.**
 > 남은 미지값은 **부하 하나** — 30~40대에서 1코어가 받는가.

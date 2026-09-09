@@ -143,6 +143,63 @@ ssh -i .sshkey/id_ed25519 smlight@<기기> 'ls -l /mnt/user/ssh/'
 
 ---
 
+## 2.5 정보면을 넓혀라 ⚠️ — SSH 다음으로 값이 큰 한 걸음 (2026-09-09)
+
+SSH가 열리면 셸은 생기지만 **기기가 스스로 무엇을 하는지는 여전히 안 보인다.** 벤더 백엔드가
+가진 것을 우리가 볼 수 있게 만드는 게 이 절이고, 이걸 먼저 하면 뒤의 삽질이 몇 시간 줄어든다.
+
+### 2.5.1 ⚠️ `smhub-services`는 기본 설치가 아니다 — Web UI에서 설치하는 앱이다
+
+[측정 2026-09-09] `opkg list-installed`가 베이스와 앱을 나란히 보여준다:
+
+```text
+smhub-os-base  - 1.0.2        ← 베이스 이미지
+smhub-services - 1.1.0-1      ← 앱. Web UI > Apps 에서 설치한다
+smhub-broker   - 1.0.4-1
+smhub-web      - 0.3.1-1   ·  smhub-ui - 1.0.6-1
+domoticz · nodered · zigbee2mqtt · esphome-bin · nodejs · python3
+```
+
+**이걸 깔아야 정보면이 열린다.** 안 깔면 Radio 페이지도, 앱별 실시간 로그 스트림도, 아래
+UDS API도 없다. 새 유닛을 받으면 **SSH(§2) 바로 다음에 이걸 설치한다.**
+
+### 2.5.2 정보면 여섯 개 — 무엇을 어디서 보나
+
+| 면 | 무엇을 준다 | 접근 |
+|---|---|---|
+| **UDS API** `/run/smhub-backend.sock` | Web UI가 쓰는 REST 전부. **인증 없이** 로컬에서 열린다 | `curl --unix-socket /run/smhub-backend.sock http://localhost/api/v1/...` |
+| 로그 파일 | `zigbee2mqtt.log` · `smhub-services.log` · `smhub-broker.log` · `messages` | `/var/log/` |
+| WebSocket 로그 스트림 | 앱별 실시간(`logs:zigbee2mqtt`, `logs:smhub-services`, …) | Web UI 로그 화면 |
+| MQTT | z2m의 사실원. `bridge/info`(펌웨어·pan·채널) · `bridge/devices` · `bridge/state` | `mosquitto_sub -h localhost -t ... -C 1 -W 15` |
+| 라디오 직접 프로브 | 칩에 **실제로** 올라간 펌웨어. 배너 말고 이걸 믿는다 | 기기 venv의 `universal-silabs-flasher` (`docs/SMHUB.md` §5.5 Q5) |
+| EEPROM | `model` · `hw_rev` · `uuid` — 벤더 문의에 필요한 SKU 좌표 | `sudo sh -c '. /usr/lib/eeprom/eeprom-read.sh; eeprom_get_model'` |
+
+UDS 라우트는 `/api/v1/<router>/<구체경로>` 형태다. **인덱스(`/api/v1/net/`)는 없다** — 구체
+경로라야 200이 온다. 확인된 예:
+
+```sh
+curl -s --unix-socket /run/smhub-backend.sock \
+  'http://localhost/api/v1/radio/0/firmware_list?type=0'
+```
+
+이 한 줄이 **벤더가 이 유닛에 어떤 라디오 펌웨어를 제시하는지**를 그대로 보여준다
+(2026-09-09에 이걸로 벤더 인덱스의 404 다운로드 링크를 잡았다 — `docs/SMHUB.md` §5.5 Q5).
+
+### 2.5.3 ⚠️ 삽질 포인트 — 보이는 것을 믿으면 틀리는 자리들
+
+| 함정 | 실제 | 확인법 |
+|---|---|---|
+| **`ps`에 z2m이 없다** | z2m은 root로 돈다. `smlight` 셸의 `ps`엔 안 보인다 → "죽었다"고 오판하기 쉽다 | `sudo fuser /dev/ttyS1` 또는 MQTT `bridge/state` |
+| **`rc-service status`가 `started`** | 프로세스가 죽어도 그렇게 말한다 (§8에 이미 여러 건) | 위와 동일 |
+| **`/proc/tty/driver/serial`에 `oe:`가 없다** | "필드 없음"이 아니라 **0**이다. 카운터는 0이 아닐 때만 출력된다 | §6.5.1 |
+| **`log_level: warning`이면 증거가 사라진다** | 크래시 시 ASH 카운터 블록이 `info`로 찍힌다 → warning이면 **원인 규명 불가** | 재현 실험 전 `info`로 올린다. ⚠️ 단 14대급에서 `info`는 그 자체가 CPU 부하다 — **실험 때만** |
+| `sqlite3 "... LIKE \"%x%\""` | 큰따옴표는 컬럼명으로 읽힌다 | 파일로 넘겨 `.read /tmp/q.sql` |
+| `top`/`pgrep`로 CPU 범인 찾기 | busybox `top`은 커널 스레드에 밀려 잘리고, `pgrep -f`는 **자기 자신을 잡는다** | `/proc/<pid>/stat`의 utime+stime 델타를 직접 재라 |
+| `hexdump ... eeprom: Permission denied` | EEPROM은 root만 읽는다 | `sudo`로 함수 소싱 |
+| 기기에 `timeout` 없음 | busybox 환경 | `mosquitto_sub -W <초>` 같은 도구 자체 옵션을 쓴다 |
+
+---
+
 ## 3. 기기 ABI 좌표 측정 ✅ — 빌드 전에 **반드시** 한다
 
 우리가 만들 건 **기기 ABI에 못박힌 바이너리**다. 그래서 빌드 base는 문서가 아니라 **이 기기**가
@@ -743,13 +800,18 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `homeassistant/` 토픽이 없다 | z2m 기본값이 `enabled: false` | §6.4.1 |
 | z2m이 `EACCES ... configuration.yaml`로 죽는다 | 설정 파일 소유자가 `root`로 바뀌었다 | §6.4.1 — `chown smlight:smlight`. **`rc-status`는 그때도 `started`** |
 | domoticz 페이지는 뜨는데 화면이 빈다 | LAN이 신뢰망에 없어 API가 401 | §6.4.2 |
-| 연속 페어링 중 z2m이 반복해서 죽는다 | `ASH_NCP_FATAL_ERROR` — PIO UART + 1코어 + no-flow | **§6.5**. 메모리 아니다 |
+| 연속 페어링 중 z2m이 반복해서 죽는다 | `ASH_NCP_FATAL_ERROR` — **호스트 CPU가 ASH ACK를 제때 못 보낸다**(1코어). ⚠️ *"no-flow라 바이트를 흘린다"가 아니다* — `oe:`는 계속 0이다 (2026-09-09 정정) | **§6.5**. 메모리 아니다. 죽고 **재시작을 반복하면** 아래 "크래시 루프" 줄로 간다 |
 | 전력량 위젯은 서는데 kWh가 안 온다 | 16A `TS011F_plug_3` polling 경로 | §6.4.5 — **기종마다 확인** |
 | `json.htm`이 전부 401 | 초기 domoticz는 `Users`가 비어 있다 | §6.4.3 |
 | `reboot`를 보냈는데 안 내려간다 | ssh 세션과 함께 죽었다 | `nohup sh -c "sleep 2; reboot"` 후 **:22가 닫히는지 확인** |
 | 리부트 후 domoticz가 안 뜬다 | `rc-update add`를 안 했거나 영속 실패 | §6 판정에 리부트가 있는 이유 |
 | `setup.sh`가 commit pin에서 멈춤 | 트리 HEAD가 태그와 다름 | 출력의 `git checkout --detach` 한 줄 |
 | ipk가 다른 기기에서 안 뜬다 | device profile 불일치 | 매니페스트의 profile과 대조(§5) |
+| Radio 페이지 플래시가 `HTTP Error 404` | **벤더 인덱스가 죽은 다운로드 URL을 준다.** 기기·네트워크 잘못이 아니다 | §2.5.2의 `firmware_list`로 링크를 직접 보고, 살아 있는 경로로 받아 CLI로 굽는다 |
+| z2m이 죽고 재시작을 반복한다 (크래시 루프) | **루프가 스스로를 먹인다** — node 기동이 1코어를 태우고, 그 CPU가 ASH ACK를 늦추고, NCP가 `ACK_TIMEOUT`으로 끊는다. 그래서 부하가 0인 `GET_EUI64` 초기화 지점에서도 죽는다 | z2m을 멈추고 **완전 파워사이클**로 루프를 끊는다. 그 뒤 `adapter_concurrent`를 내려 재기동 |
+| `ERROR_WRONG_DIRECTION` | ASH 상태 어긋남. 크래시 루프 중 재기동이 겹칠 때 나온다 | 위와 동일. 포트 동시 점유부터 배제(`sudo fuser /dev/ttyS1`) |
+| `smhub-broker`의 `bind() failed 19 hci0` 도배 | 기동 시 재시도다. UART HCI가 붙으면 멈춘다(에러 19=ENODEV) | `hciconfig`가 `UP RUNNING`이면 정상. CPU 범인 아님 |
+| Web UI 앱 화면에 Radio/로그가 없다 | `smhub-services`가 안 깔렸다 (기본 설치 아님) | §2.5.1 |
 
 ---
 

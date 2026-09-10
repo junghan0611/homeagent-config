@@ -85,7 +85,7 @@ lanes are Duo S (arm64 dev / RISC-V product ISA) + SMHub reference.)*
 | [`CHANGELOG.md`](CHANGELOG.md) | closed work / CalVer notes |
 | [`ROADMAP.md`](ROADMAP.md) | phase direction |
 | [`VERSION.md`](VERSION.md) | stack, version, and physical device matrix |
-| [`smhub/RUNBOOK.md`](smhub/RUNBOOK.md) | **새 SMHub Nano 한 대를 받아 domoticz가 돌기까지의 순서** — 함정과 판정 포함 |
+| [`smhub/RUNBOOK.md`](smhub/RUNBOOK.md) | **새 SMHub Nano 한 대를 받아 Zigbee 데이터가 나가기까지의 순서** — 함정과 판정 포함. 보드는 Z2M + mosquitto만 쥐고, domoticz는 마스터에 둔다 (2026-09-10) |
 | [`runtime/README.md`](runtime/README.md) | SG2000 runtime architecture + Zig/C906L code home |
 | [`docs/TARGET_DEVICE.md`](docs/TARGET_DEVICE.md) | board/radio strategy details |
 | [`docs/HUBS.md`](docs/HUBS.md) | certified Zigbee/Matter hub landscape research (DIRIGERA lane parked — not our direction), SoC/radio comparison, product line |

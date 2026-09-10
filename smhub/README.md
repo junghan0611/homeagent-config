@@ -5,11 +5,15 @@
 돌고, 우리가 소유할 수 있는 건 **p7의 설치면과 `.ipk` 하나**다. 그래서 이 트리의 산출물은
 이미지가 아니라 **그 벤더 rootfs에서 무수정으로 도는 riscv64 바이너리**다.
 
-- **처음 왔다면 → [`RUNBOOK.md`](RUNBOOK.md)** — 새 기기 개봉부터 domoticz 기동까지의 순서.
-  이 README는 **왜**를 말하고, RUNBOOK은 **무엇을 어떤 순서로**를 말한다.
+- **처음 왔다면 → [`RUNBOOK.md`](RUNBOOK.md)** — 새 기기 개봉부터 **Zigbee 데이터가 마스터로
+  나가기까지**의 순서. 이 README는 **왜**를, RUNBOOK은 **무엇을 어떤 순서로**를 말한다.
+- ⚠️ **2026-09-10 배치 변경.** 보드는 **Z2M + mosquitto(LAN)** 만 쥐고, **domoticz는 마스터**에서
+  MQTT-AD로 붙는다. 아래 domoticz `.ipk` 레인은 **닫힌 이식성 증명**이다 — 벤더 rootfs에서
+  우리 riscv64 바이너리가 무수정으로 돈다는 것을 보였고, 그 목적을 다했다. 현재 운용 경로가
+  아니다(`NEXT.md` RAIL 16).
 - 판(왜/무엇을): [#10](https://github.com/junghan0611/homeagent-config/issues/10)
 - 기기 사실(SSOT): `docs/SMHUB.md` — §4.1(플랫폼·ABI) · §3.7(설치면) · §3.6(SSH)
-- 현재 좌표: `NEXT.md` RAIL 9
+- 현재 좌표: `NEXT.md` RAIL 16·18 (RAIL 9는 닫힌 이식성 증명)
 
 ---
 

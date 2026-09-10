@@ -1,4 +1,10 @@
-# RUNBOOK — 새 SMHub Nano를 받아서 domoticz가 돌기까지
+# RUNBOOK — 새 SMHub Nano를 받아서 Zigbee 데이터가 나가기까지
+
+> ⚠️ **2026-09-10 배치 변경.** 보드는 이제 **Z2M + mosquitto(LAN)** 만 쥔다. **domoticz는 보드에서
+> 내렸고**(`opkg remove`), 마스터 domoticz가 우리 브로커에 **MQTT Auto-Discovery 로 직접 접속**한다.
+> 이 문서의 §4~§6(domoticz 크로스빌드 · `.ipk` · 설치)은 **닫힌 이식성 증명**으로 남긴다 —
+> 새 기기에 그대로 따라 하지 마라. 현재 경로는 §2 → §2.5/§2.6 → **§2.7(LAN 브로커 공개 → 마스터 연결)** 이다.
+> 왜 바뀌었는지는 `NEXT.md` RAIL 16.
 
 **이 문서는 "순서"다.** 왜 이렇게 하는지는 [`smhub/README.md`](README.md), 기기의 측정된 사실은
 [`docs/SMHUB.md`](../docs/SMHUB.md), 지금 어디까지 왔는지는 [`NEXT.md`](../NEXT.md)에 있다.
@@ -23,6 +29,7 @@
 |---|---|
 | §2 SSH 복구 (접속 + p7 캐시 정상) | ✅ 한 유닛 |
 | §2 **리부트를 건넌 SSH 지속** | ✅ **한 유닛 (2026-09-08)** |
+| §2.6 **Web UI 로그인 복구 (`security` 행 + 해시 교체)** | ✅ **한 유닛 (2026-09-10)** |
 | §3 ABI 측정 → base 태그 판정 | ✅ 한 유닛 |
 | §4 빌드 → riscv64 바이너리 | ✅ 한 유닛 |
 | §5 `.ipk` 생성 (기기에 물어 번들 도출) | ✅ 한 유닛 |
@@ -32,8 +39,9 @@
 | **§7 부하(30~40대) 등급 판정** | **❓ 미실행 — 페어링 기기가 없다** |
 
 **`domoticz 2026.3`이 SMHub Nano(riscv64, 1코어, 488M)에서 돈다 — 2026-09-08 실측.**
-남은 ❓는 **부하**다. 지금 값은 전부 페어링 0대의 유휴치이고, 이 리포 불변식 그대로
-*running ≠ installed ≠ enabled ≠ working*.
+이것은 **이식성이 증명됐다**는 뜻이고, **그 배치를 계속 쓴다는 뜻이 아니다** — 2026-09-10에
+보드에서 내렸다(RAIL 16). 1코어를 z2m과 다투는 상시 프로세스였기 때문이다.
+남은 ❓는 여전히 **부하**이고, 이 리포 불변식 그대로 *running ≠ installed ≠ enabled ≠ working*.
 
 ---
 
@@ -53,6 +61,7 @@
 - **Web UI 관리자 계정.** OS `1.0.2`부터 Web UI가 인증을 요구하고, 이건 **셸 계정(`smlight`)과
   다른 계정**이다. 셸 암호로 대체되지 않는다. 초기 생성/복구 경로는 벤더/판매자 인계나
   `PRIVATE.md`에서 받는다 — **없으면 §2의 Web Console에 도달할 수 없어 진행 불가다.**
+  ⚠️ **SSH가 이미 열려 있다면 이건 STOP이 아니다** — §2.6에 판정이, `PRIVATE.md`에 복구가 있다.
 - **지원 OS 프로파일.** 지금 검증된 프로파일은 **`1.0.2` 하나**다. 기기의 `VERSION_ID`가 다르면
   §3으로 가서 ABI를 다시 재고, base 태그를 다시 정해야 한다(§3의 판정 규칙).
 
@@ -197,6 +206,148 @@ curl -s --unix-socket /run/smhub-backend.sock \
 | `top`/`pgrep`로 CPU 범인 찾기 | busybox `top`은 커널 스레드에 밀려 잘리고, `pgrep -f`는 **자기 자신을 잡는다** | `/proc/<pid>/stat`의 utime+stime 델타를 직접 재라 |
 | `hexdump ... eeprom: Permission denied` | EEPROM은 root만 읽는다 | `sudo`로 함수 소싱 |
 | 기기에 `timeout` 없음 | busybox 환경 | `mosquitto_sub -W <초>` 같은 도구 자체 옵션을 쓴다 |
+
+---
+
+## 2.6 Web UI 로그인이 계속 로그인 화면으로 되돌아올 때 ⚠️ — 비밀번호 문제가 아니다
+
+**2026-09-10 실기에서 하루를 잡아먹을 뻔한 자리다.** 증상이 "비밀번호가 틀렸다"처럼 보이는데
+원인이 전혀 다른 곳에 있다. 비밀번호를 아무리 맞춰도 안 된다.
+
+### 2.6.1 증상
+
+로그인 버튼을 누르면 **아무 에러 없이** 다시 빈 로그인 폼으로 돌아온다. 브라우저 Network 탭에는
+`POST /api/v1/login/cookie` 가 **200** 이고 `Set-Cookie` 도 온다. 그런데 화면은 로그인 폼이다.
+
+### 2.6.2 비밀번호 문제가 아니라는 판정 — 30초
+
+로그인 시도 후 **같은 탭의 콘솔**에서:
+
+```js
+await fetch('/api/v1/users/me', {credentials:'include'}).then(r=>r.text())
+```
+
+- **사용자 JSON이 나온다** → 인증은 이미 성공했다. **비밀번호를 건드리지 마라.**
+  프론트가 세션을 인식하지 못하는 것이고, 원인은 §2.6.3이다.
+- **401이 나온다** → 그때가 진짜 자격증명 문제다.
+
+### 2.6.3 원인 — 벤더 DB에 `security` 페이지 행이 없다
+
+[읽음, 기기 위 벤더 백엔드 `smhub_backend/api/routes/login.py` 의 `get_security_status`]:
+이 엔드포인트는 `security` 라는 **페이지 설정**을 읽어 `enabled` 를 판단하는데, 공장 출하 DB에는
+**그 페이지 행이 아예 없다**(있는 것은 general·backups·usb·wireguard·updates·lte·mqtt·radios·
+wifi·ethernet·esphome·ser2net). 그래서 항상 `{"enabled": false}` 를 내고, 프론트는 그걸 보고
+**로그인이 성공해 쿠키를 받은 뒤에도 세션을 무효로 취급해 로그인 화면으로 되돌린다.**
+
+확인 (UDS 정보면이 열려 있을 때 — §2.5):
+
+```bash
+curl -s --unix-socket /run/smhub-backend.sock \
+  http://localhost/api/v1/login/security-status
+# {"enabled":false}  ← 이게 범인이다
+```
+
+### 2.6.4 복구
+
+⚠️ **복구 절차(설정 행 추가 · 비밀번호 해시 교체)는 벤더 폐쇄 백엔드의 인증 DB를 직접 다루므로
+공개 문서에 싣지 않는다. `PRIVATE.md` → "SMHub Web UI 관리자 계정 복구"를 보라.**
+2026-09-10 실기에서 통과했다. 정식 경로는 벤더/판매자 지원이다.
+
+복구 후 확인: `security-status` 가 `{"enabled":true}` 로 바뀌고, 새로고침하면 대시보드가 뜬다.
+
+⚠️ **복구가 끝나면 `smhub-services` 를 다시 정지하라.** 이 백엔드는 **평상시 꺼두는 것이 현재
+운용 결정**이다(RssAnon 약 81MB + 1코어 CPU). 로그인 복구는 서비스를 켠 상태에서만 가능하므로,
+끝난 뒤 원래대로 돌려놔야 한다 — §2.5의 정보면 운용 규칙과 같다.
+
+```bash
+$SSH 'echo <sudo-pw> | sudo -S rc-service smhub-services stop'
+```
+
+### 2.6.5 왜 이 절이 필요한가
+
+`0.1` 은 이 계정을 "없으면 STOP" 으로 적었다. **SSH가 이미 열려 있으면 STOP이 아니다** —
+백엔드 DB가 기기 안에 있고 우리가 읽고 쓸 수 있기 때문이다. 순서가 이렇게 갈린다:
+
+```
+계정 모름 → (SSH 있음)  → PRIVATE.md 의 복구 절차 → 로그인
+계정 모름 → (SSH 없음)  → 여전히 STOP. 벤더/판매자 인계가 필요하다
+```
+
+## 2.7 현재 경로 — 보드 브로커를 LAN에 열고, 마스터가 직접 붙는다 ✅ (2026-09-10)
+
+**보드가 소유하는 것은 여기까지다: 라디오 → Z2M → mosquitto.** 뷰·이력·제어는 마스터가 갖는다.
+`README.md`의 *"No display in the hub"* 가 이 자리에서 실행된다.
+
+```
+[SMHub]   기기 → z2m → mosquitto (LAN, 인증)
+                            ↑
+[마스터]  domoticz — MQTT Auto-Discovery 하드웨어로 직접 접속
+```
+
+### 2.7.1 왜 브리지가 아닌가
+
+mosquitto 브리지를 세울 필요가 없다. domoticz의 MQTT-AD는 **IP·포트·계정을 인자로 받는 MQTT
+클라이언트**이고 [읽음 domoticz `hardware/MQTTAutoDiscover.cpp:77-79`], **discovery prefix 아래만
+구독**하며 [읽음 `:148`], discovery 상태가 **하드웨어 인스턴스별로 격리**된다
+[읽음 `hardware/MQTTAutoDiscover.h:286`]. 그래서 노드가 여럿이어도 `base_topic`을 나눌 필요가
+없고, 마스터 쪽에 브로커를 새로 세울 이유도 없다.
+
+### 2.7.2 보드에서 할 일 — 셋을 한 번에
+
+⚠️ **셋을 따로 하면 z2m이 끊긴다.** 순서가 아니라 한 묶음이다.
+
+1. `/etc/mosquitto/conf.d/` 에 리스너 + `password_file`
+2. **z2m `configuration.yaml`의 mqtt 블록에 계정 추가**
+3. mosquitto → z2m 재시작
+
+```sh
+# conf.d/lan.conf
+listener 1883 0.0.0.0
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+```
+
+계정은 **로컬 z2m용과 마스터용을 분리**한다. 값은 `PRIVATE.md`.
+
+### 2.7.3 ⚠️ 이 레인 최대의 함정 — `conf.d`가 있다고 읽히는 게 아니다
+
+벤더 `/etc/mosquitto/mosquitto.conf` 는 **50,519바이트가 전부 주석**이고, 거기엔
+**`include_dir` 자체가 없다.** 그래서 `conf.d/` 에 무엇을 써도 **아예 읽히지 않는다** —
+리스너는 `127.0.0.1` 그대로고 익명도 열린 채다. 증상이 "설정이 안 먹는다"라 원인을 엉뚱한
+곳에서 찾게 된다.
+
+```sh
+grep -q '^include_dir' /etc/mosquitto/mosquitto.conf || \
+  echo 'include_dir /etc/mosquitto/conf.d' >> /etc/mosquitto/mosquitto.conf
+```
+
+⚠️ **`listener` 를 명시하는 순간 기본 리스너와 익명 허용이 같이 사라진다.** 위 2번(z2m 계정)을
+빠뜨리면 z2m이 조용히 끊긴다.
+
+### 2.7.4 판정 — 배너 말고 사실원
+
+```sh
+ss -ltn | grep 1883                    # 0.0.0.0:1883  ← LAN 열림
+mosquitto_sub -h localhost -u <z2m계정> -P <pw> -t zigbee2mqtt/bridge/state -C 1 -W 10
+                                       # {"state":"online"}
+mosquitto_sub -h localhost -t zigbee2mqtt/bridge/state -C 1 -W 5
+                                       # Connection Refused: not authorised  ← 익명 차단 확인
+mosquitto_sub -h localhost -u <계정> -P <pw> -t 'homeassistant/#' -v -W 12 | wc -l
+                                       # discovery retained 개수. 마스터가 이걸로 장치를 만든다
+```
+
+**discovery가 0이면 마스터에 붙여도 화면이 빈다.** 기기를 페어링해야 z2m이 발행한다.
+
+### 2.7.5 마스터 쪽 (참고 — 우리 리포 밖)
+
+MQTT-AD 하드웨어를 추가한다: 주소·포트·계정, discovery prefix `homeassistant`.
+⚠️ **domoticz는 링크 종류마다 Password 저장 형식이 다르다** — 노드 공유(Type=3)는 **MD5 hex**,
+MQTT(Type=125)는 **평문**이다 [읽음 domoticz `tcpserver/TCPServer.cpp:128,207` ·
+`hardware/MQTT.cpp:679`]. 섞으면 **조용히 인증만 실패한다.**
+
+2026-09-10 실측: 노드 공유가 주던 엔티티 8개가 MQTT 직접에서는 **22개**가 됐다. 스위치·child
+lock·indicator에 더해 **브리지 제어(Permit Join·Restart)까지** discovery로 따라와서, 마스터에서
+원격 페어링이 된다.
 
 ---
 

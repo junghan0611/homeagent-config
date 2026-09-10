@@ -4,18 +4,279 @@
 - [ ] **6. S99wpa_supplicant 제거/no-op 판단** ← DEPRIORITIZED (GLG 2026-09-07)
 - [ ] **7. gecko 플래시 결과 대기** ← PAUSED: 우리 손 없음
 - [ ] **8. #8 나머지 아이덴티티 / Matter** ← PAUSED
-- [x] **9. SMHub에 domoticz 올리기 — 돈다 (2026-09-08)**. 크로스빌드 → ipk → 설치 → 기동 → 리부트 생존 → z2m MQTT 연결 → **기기 12대 페어링, domoticz 엔티티 112개**
-- [x] **10. Zigbee 호스트 결정 — `domoticz + Z2M`, Z4D 비채택 (GLG 2026-09-08)**
+- [x] **9. SMHub에 domoticz 올리기 — 돈다 (2026-09-08)** → **2026-09-10 보드에서 내렸다(RAIL 16)**. 크로스빌드 → ipk → 설치 → 기동 → 리부트 생존까지가 **이식성 증명(portability proof)** 으로 닫혔다. 현재 운용 경로가 아니다
+- [x] **10. Zigbee 호스트 결정 — `Z2M`, Z4D 비채택 (GLG 2026-09-08)**. domoticz는 쓰되 **위치가 바뀌었다**: 보드=Z2M+mosquitto, **domoticz=마스터**가 MQTT-AD로 붙는다 (2026-09-10, RAIL 16)
 - [ ] **11. 부하 등급 판정** ← 진행 중. RAM 아님 · 시리얼 아님 → **호스트 CPU와 크래시 루프**로 좁혀졌다
 - [x] **12. 라디오 "복구" — 복구할 게 없었다 (2026-09-09)**. 칩은 7.4.2 그대로였고 부트로더에 앉아 있었을 뿐이다
 - [ ] **13. 펌웨어 버전업 — 보류**. 벤더 공개 이미지가 전부 hw_flow이고, 벤더 인덱스가 **404 링크**를 배포 중이다
 - [x] **14. 정보면 확보 (2026-09-09)**. `smhub-services` 앱 · UDS API · 라디오 직접 프로브 → `smhub/RUNBOOK.md` §2.5
+- [x] **15. 이기종 허브 두 대가 한 화면에 섰다 (2026-09-10)**. 마스터 domoticz(GLG 노트북)에 x86 minipc=`gq-node-01`(16대) + SMHub=`gq-node-02`(2대) = 18기기
+- [x] **16. 보드에서 domoticz 하차 — 끝났다 (2026-09-10)**. 마스터 domoticz가 우리 브로커에 직접 붙는다. `opkg remove domoticz` 완료, MQTT 링크가 `:6144`보다 풍부하다(22개 vs 8개)
+- [ ] **17. RTOS/rpmsg 축 — 1.0.2 재확인 + 라디오 비연결 경계 (2026-09-10)**. beta5(§5.4)에서 이미 실측된 축이고, 오늘 새로 얻은 것은 **MG24가 이 축에 없다**는 경계다. `smhub-broker`는 MQTT 브로커가 아니라 코프로세서 RPC 데몬
+- [x] **18. 런타임 조이기 — available 232 → 302 MB (2026-09-10)**. domoticz 제거(+14) + `smhub-services` 정지(+81). UDS API는 켜고 끄는 것으로 남긴다
 
-현재 좌표: 1~5·9·10·12·14 완료 → **11이 열린 축** → 13은 벤더 회신 대기 → 6·7·8 보류
+현재 좌표: 1~5·9·10·12·14·15·16·18 완료 → **17이 열린 발견 축** → 11은 z2m 초기화 + 조이기로 조건이 바뀌어 곡선 재측정 → 13 벤더 대기 → 6·7·8 보류
 
 ---
 
-# NOW — 이어받는 자리 (2026-09-09)
+# NOW — 이어받는 자리 (2026-09-10)
+
+> **한 줄**: 이기종 허브 두 대가 마스터 domoticz 한 화면에 섰다. 그리고 그 성공 위에서
+> GLG가 방향을 뒤집었다 — **보드의 domoticz를 내린다.** 허브는 라디오와 프로토콜만
+> 소유하고, 뷰·이력·제어는 마스터가 갖는다. 덤으로 **벤더가 이미 RISC-V 코프로세서를
+> 돌리고 있다는 것**을 발견했다.
+
+## 오늘 한 것
+
+### z2m을 싹 초기화했다 (GLG 지시)
+
+works-nixos-zigbee가 SP 15대를 x86 minipc로 옮겨가면서 우리 쪽 등록 17대가 전부 유령이 됐다.
+
+| | 값 | 근거 |
+|---|---|---|
+| 새 네트워크 | **pan_id 61618 / ch11** (옛 59232 폐기) | [측정] `bridge/info` |
+| 등록 기기 | 17대 → **0대** → TS011F 플러그 **2대 재페어링, 둘 다 인터뷰 완료** | [측정] `bridge/devices` |
+| MQTT retained | 223개 → **0개** | [측정] `mosquitto_sub` 열거 후 빈 payload retained publish |
+| domoticz 장치 | 127개(Used=1이 111) → 0 → **15개**(총 19) | [측정] `DELETE FROM DeviceStatus WHERE HardwareID=2` 후 MQTT-AD 자동 재생성 |
+| 크래시 | **0건.** `EXCEEDED`/`FATAL` 로그 없음, `oe:` 없음 | [측정 2026-09-10 14:53] tx 9194 rx 18669, load 0.33 |
+
+⚠️ **RAIL 11 곡선을 처음부터 다시 그린다.** 어제까지의 "16대 견디고 17번째에서 죽는다"는
+옛 네트워크의 값이다. 지금은 2대에서 다시 쌓는 중이고, 아직 크래시가 없다.
+
+되돌리기: `/home/smlight/z2m-data-before-wipe-20260910-033543.tar.gz` ·
+`/home/smlight/domoticz.db.bak-20260910-033957` (둘 다 기기 안, 리포엔 안 들어온다)
+
+### 노드 링크가 섰다 — 그리고 곧 걷어낸다
+
+`gq-node-02`로 마스터 domoticz에 붙었다. 조건 넷 중 **`Users.RemoteSharing=0` 하나가 유일한
+블로커**였고 1로 고쳤다. 나머지 셋(`RemoteSharedPort` · `Username`(domoticz는 base64로 저장한다) ·
+`Used=1`)은 이미 충족돼 있었다 [전부 측정, 슬레이브 `domoticz.db`]. 실제 좌표·계정은 `PRIVATE.md`.
+
+## 16 — domoticz 하차: 끝났다
+
+**결과**: 보드에서 domoticz가 사라졌고, 마스터 domoticz가 **우리 브로커에 직접 붙는다.**
+
+```
+하드웨어        Type  장치  경로
+gq-node-01         3    61  :6144 도메틱스 노드 공유 (x86 minipc)
+gq-node-02       125    22  MQTT 직접 (SMHub Nano)          ← 우리
+```
+
+**`:6144`가 주던 8개(2대 × 4종)가 MQTT에서는 22개가 됐다** [works-nixos-zigbee 담당 측정
+2026-09-10 16:51]. 전력 4종에 더해 Switch · Child Lock · Indicator가 붙었고,
+**브리지 제어(Permit Join · Restart)까지 왔다 — 마스터에서 원격 페어링이 된다.**
+우리가 처음 "IN 토픽으로 열어야 한다"고 계약에 넣었던 `bridge/request/#`가 discovery로
+자동으로 따라온 것이다. 즉 **직접 접속이 노드 공유보다 기능이 넓다.**
+
+### 우리가 한 것
+
+```
+/etc/mosquitto/conf.d/lan.conf     listener 1883 0.0.0.0 / allow_anonymous false / password_file
+/etc/mosquitto/passwd              계정 둘 — 로컬 z2m용과 마스터용을 **분리**했다 (이름·값은 PRIVATE.md)
+z2m configuration.yaml             mqtt 블록에 user/password
+opkg remove domoticz               2026.3 제거
+```
+
+측정 [2026-09-10 16:34~16:54]:
+
+```
+ss -ltn                  0.0.0.0:1883 LISTEN
+익명 접속                Connection Refused: not authorised
+homeassistant/# retained 34개  ← 마스터가 붙는 즉시 장치가 생성된다
+domoticz 제거 전후        available 211 → 225 MB, 8081·6144 사라짐
+```
+
+### ⚠️ 함정 — `conf.d`가 있다는 것이 읽힌다는 뜻이 아니다
+
+보드 `mosquitto.conf`는 **50,519바이트가 전부 주석**이었고, 거기엔 **`include_dir`도 없었다.**
+그래서 `conf.d/lan.conf`를 써도 **아예 읽히지 않았다** — 리스너가 `127.0.0.1` 그대로였고
+익명도 열려 있었다. `mosquitto.conf` 끝에 `include_dir /etc/mosquitto/conf.d` 한 줄을 붙여
+풀렸다 [측정: 추가 전 `ss`는 `127.0.0.1:1883`, 추가 후 `0.0.0.0:1883`].
+
+리스너를 **하나만**(`listener 1883 0.0.0.0`) 뒀다. 그래서 z2m의 로컬 접속도 같은 인증을 탄다 —
+**`listener`를 명시하는 순간 기본 리스너와 익명이 같이 사라진다.** z2m 계정을 안 넣으면
+z2m이 조용히 끊긴다.
+
+### 되돌리기
+
+```
+/etc/mosquitto/conf.d/lan.conf                        지우면 원래대로
+/etc/mosquitto/mosquitto.conf.bak-<epoch>             include_dir 추가 전 원본
+/opt/zigbee2mqtt/data/configuration.yaml.bak-preauth-<epoch>
+/home/smlight/domoticz.db.bak-20260910-033957         (패키지는 지웠지만 DB 백업은 남아 있다)
+```
+
+### 근거 — 왜 브리지가 아니라 직접 접속인가 (works-nixos-zigbee 담당이 정정)
+
+우리는 처음 mosquitto 브리지를 제안했다. 더 싼 길이 있었고 소스가 증명했다.
+
+| 근거 | 좌표 |
+|---|---|
+| MQTT-AD는 IP·포트·계정을 받는 **MQTT 클라이언트**다 | [읽음 `hardware/MQTTAutoDiscover.cpp:77-79`] |
+| **discovery prefix 아래만 구독**한다 — `zigbee2mqtt/#` 통구독이 아니다 | [읽음 `hardware/MQTTAutoDiscover.cpp:148`] |
+| discovery 상태가 **인스턴스 멤버** → 노드별 하드웨어면 토픽이 안 섞인다 | [읽음 `hardware/MQTTAutoDiscover.h:286`] |
+
+좌표는 domoticz upstream 트리 기준이다 (로컬 클론 위치는 `PRIVATE.md`).
+
+⚠️ **우리 측정 하나가 오독이었다.** "마스터 노트북에 브로커가 있다"고 보고했는데,
+`127.0.0.1:1883`은 `hejhub-mosquitto`(eclipse-mosquitto:2.0 **도커**)이고 **hejhub-nano 레인 것**이다
+[측정 2026-09-10, `docker ps`]. 브리지로 갔으면 없던 브로커를 새로 세워야 했다.
+
+⚠️ **"안 보낼 토픽 목록"(`bridge/devices`·`info`·`logging`)은 폐기.** MQTT-AD가 애초에 안
+구독하므로 유지할 목록이 없다. 토픽 remap도 불필요하다.
+
+### 옆 리포가 알려준 두 가지 (우리에게도 걸린다)
+
+**1. 두 링크는 Password 저장 형식이 다르다.**
+
+```
+domoticz-share (Type=3)   MD5 hex 32자 — 그 문자열이 그대로 AES 키가 된다
+                          [읽음 domoticz tcpserver/TCPServer.cpp:128,207]
+mqtt (Type=125)           평문 — mosquitto에 그대로 넘어간다
+                          [읽음 domoticz hardware/MQTT.cpp:679 username_pw_set()]
+```
+
+섞으면 **조용히 인증만 실패한다.** `Extra`의 넷째 칸이 discovery prefix
+[읽음 `MQTTAutoDiscover.cpp:81-91`, `strarray[3]`], `Mode2`가 TLS_Version
+[읽음 `main/mainworker.cpp:1099`].
+
+**2. 선언 정리는 확인이 끝난 뒤에 한다.** 옆 리포가 `nodes.json`을 먼저 정리하고 prune을
+돌렸더니 **새로 붙인 MQTT 하드웨어(22개)를 지우고 죽은 `:6144`(8개)를 남겼다** — 선언을 먼저
+바꾸면 prune의 기준이 뒤집힌다. 복구했다. 우리가 제안한 순서(선언 정리를 맨 마지막)가 옳았다.
+
+**3. 전환 중 드러난 것**: `:6144`는 **16:32에 이미 데이터가 멈춰 있었다**
+(`No data received from <기기>:6144 after 12 seconds`) — mosquitto 익명 차단으로 보드
+domoticz의 MQTT 연결이 끊긴 시각과 같다. 즉 **MQTT 링크가 붙은 것이 끊긴 구간을 메웠다.**
+
+## 17 — RTOS/rpmsg 축의 1.0.2 재확인 + **라디오 비연결 경계** (오늘의 실제 소득)
+
+⚠️ **이건 "처음 본 것"이 아니다.** `docs/SMHUB.md` §5.4가 **2026-07-01 beta5에서 이미 전부
+실측**했다 — `remoteproc0` running · `smhub-rtos.elf` · rpmsg 2채널(`esphome-rpc`/`smhub-rpc`) ·
+ESPHome 2026.5.3 on FreeRTOS(open-amp) · broker 소켓 브리지 · 커널 `REMOTEPROC/RPMSG/MAILBOX`
+활성까지. 오늘 이름(`smhub-broker`)에 속아 "새로 발견"이라 쓸 뻔했다.
+
+### 오늘 실제로 새로 얻은 것
+
+**① 라디오(MG24)는 이 축에 없다 — 이게 오늘의 값이다.**
+
+| 사실 | 근거 |
+|---|---|
+| 펌웨어·데몬 문자열 전수에 `mg24`/`zigbee`/`efr32` **0건** | [외부 산출물] `.agent-reports/2026-09-10-smhub-rtos-rpmsg-survey.md` (gitignore, 로컬 정적분석) |
+| RTOS가 아는 GPIO 엔티티는 `led_pwr`/`led_cus`/`btn_1`/`btn_2` **뿐** | 〃 |
+| `smhub-reset-daemon` = **공장초기화 버튼 감시**(라디오 무관) | 〃 + `docs/SMHUB.md:318` 재확인 |
+| `smhub-arbitration` = `/dev/mem` 상태조회 CLI, 상시 프로세스 아님 | 〃 |
+| rpmsg를 여는 유일한 프로세스는 `smhub-broker`(RSS 6.4MB) | 〃, `/proc/<pid>/fd` 실측 |
+
+→ **어제 GPIO로 MG24를 부트로더에서 꺼낸 것은 RTOS 관할과 다른 경로였다.**
+다만 이것은 **부재 증거**라 완전히 닫힌 질문은 아니다.
+
+→ 그리고 **"z2m 부담을 코프로세서로 넘긴다"는 그림은 이 제품에서 성립하지 않는다.**
+코프로세서는 Zigbee를 모른다. 옆 리포(works-nixos-zigbee)가 자기 SPEC의 「동글당 수용량」 축에
+이걸 근거로 쓰려 해서 그렇게 회신했다.
+
+**② `smhub-services`(101MB)는 RTOS와 무관하다.** rpmsg를 전혀 열지 않는 Python venv Web UI
+REST 백엔드다(sqlite + io_uring). RTOS 면 전체(`smhub-broker` + `rtos-logger`)는 **약 9MB로 이미
+가볍다** — 조일 값은 RTOS가 아니라 Python 쪽에 있었다(→ RAIL 18).
+
+**③ ELF가 커졌다.** beta5 `355,216 B` → 1.0.2 **`422,792 B`** [측정 `dmesg`, 2026-09-10].
+`docs/SMHUB.md` §5.4의 beta5 스냅샷과 나란히 둘 값이다.
+
+**④ 채널 프로토콜의 모양** — `esphome-rpc` = ESPHome native API(protobuf/nanopb)를 rpmsg 위에,
+`smhub-rpc` = 벤더 자체 nanopb GPIO RPC(`smhub_hal_rpc_GpioConfigReq`/`GpioEdgeEvent`).
+[외부 산출물, 정적분석. **rpmsg를 직접 열어 읽지는 않았다** — broker가 단일 오너라 두 번째
+open이 그 통신을 깰 수 있다.]
+
+### 아직 안 본 것
+
+- `/dev/rpmsg0`·`rpmsg1`의 **실제 프레임** (단일 오너 문제를 어떻게 우회할지부터 정해야 한다)
+- `smhub-rtos.elf` 교체로 우리 `runtime/c906/rtos-agent/`를 올리는 길 — 벤더 blob 교체 +
+  remoteproc 재기동이 필요하고, 위 ①이 부재 증거인 이상 아직 안 건드린다
+- Duo S SDK의 `freertos/`는 Cvitek 자체 **cmdqu mailbox**뿐이다. 벤더는 그걸 안 쓰고 Linux 표준
+  **remoteproc/virtio_rpmsg + open-amp**를 얹었다 — 우리가 재현하려면 커널 옵션 + DT 노드 +
+  FreeRTOS쪽 open-amp 포팅이 필요하다. 시작점 후보는 `slzb-esphome`(GPL-3.0).
+  [외부 산출물. 우리 `runtime/README.md`가 mailbox를 기준으로 삼은 것과 **다른 계약**이다]
+
+⛔ **RTOS를 멈추거나 펌웨어를 다시 쓰지 마라.** 지금은 읽기만 한다.
+
+## 18 — 런타임 조이기: available 232 → 302 MB
+
+**이 리포의 값어치는 기능 목록이 아니라 저사양에 눌러담는 기술이다**(`AGENTS.md`).
+오늘 그 축에서 두 칸 벌었다.
+
+```
+아침 (조이기 전)          available 232 MB
+저녁 (둘 다 반영 후)       available 302 MB · used 186 MB · load 0.33 / 0.15 / 0.11
+                                                                  [측정 2026-09-10, `free -m`]
+```
+
+⚠️ **개별 회수량은 서로 다른 시점의 스냅샷이라 더할 수 없다.** domoticz 제거 직전/직후는
+211 → 225 MB 였고(+14), `smhub-services` 의 RssAnon 은 80.9 MB 다. 그 사이 page cache 와 다른
+프로세스도 움직였으므로 `232 + 14 + 81` 이 302가 되지 않는다. **확정 가능한 것은 하루 전체의
+232 → 302 MB 하나뿐**이고, 개별 숫자는 "그 프로세스가 그만큼 쥐고 있었다"는 뜻으로만 읽어라.
+
+**488MB 보드에서 300MB가 비었다.** RAIL 11(부하 등급)을 다시 재는 조건이 크게 좋아졌다.
+
+### `smhub-services` — 지우지 않고 끄고 켠다 (GLG 2026-09-10)
+
+101MB짜리 Python venv Web UI REST 백엔드다. **그제(2026-09-08) GLG가 UDS API 정보면을 위해
+직접 설치한 것**이고 벤더 기본이 아니다 [측정: `opkg info` `Installed-Time` 1788769385].
+
+```
+평소:      sudo rc-service smhub-services stop          → 81 MB 회수
+개발할 때: sudo rc-service smhub-services start         → /run/smhub-backend.sock 부활
+자동시작:  rc-update del smhub-services boot            (해제 완료)
+```
+
+⛔ **디스크에서 지우지 않는다 (GLG 결정).** 재설치에 벤더 피드 + HTTP 인증이 필요하고,
+회수량은 정지와 똑같다(디스크 155.5MB만 추가). `smhub-web`·`smhub-ui`가 이 패키지에 의존해서
+`opkg remove`가 그 둘을 끌고 간다.
+
+**정지 상태의 Web UI**: 정적 페이지는 **200**, API는 **502**다 — nginx가 `127.0.0.1:8000`으로
+프록시하는데 그게 꺼져 있다 [측정 `/etc/nginx/nginx.conf:30`]. **껍데기는 뜨고 내용이 빈다.**
+화면을 쓰려면 켜야 한다.
+
+**왜 튜닝으로는 안 되는가** [측정 `/proc/<pid>/status`]:
+
+```
+RssAnon    80.9 MB   ← 죽여야만 돌아오는 순수 힙 (Python + 10스레드 + sqlalchemy/pydantic/cryptography)
+RssFile    20.8 MB   ← 매핑된 .so/.pyc. 압박이 오면 커널이 알아서 회수한다
+VmSwap      0        ← 스왑이 없으니 물릴 곳도 없다
+```
+
+워커 수나 `MALLOC_TRIM`으로는 한 자릿수 MB다. `pip`(13MB)·`pytz`를 venv에서 지워도
+**import되지 않으므로 RssAnon은 안 준다** — 디스크만 준다. 조이기 대상이 아니다.
+
+### 곁가지 둘 — 기록해 둔다
+
+**`zigpy`는 벤더 것이다.** GLG가 "Z4D 테스트 때 들어간 것 아니냐"고 물었는데 아니다 —
+`opkg files smhub-services`에 zigpy 파일이 **186개** 들어 있고 디렉토리 mtime이
+`Jul 15 19:31`로 `sqlalchemy`와 같다(= 벤더 이미지 빌드 시각). Z4D 흔적은 없다.
+**벤더 백엔드가 자체 zigpy 기반 Zigbee 스택을 갖고 있다** — `docs/ECOSYSTEM-PORTFOLIO.md` §4의
+"Z2M vs zigpy vs 우리 것" 축에 실물 근거가 하나 생겼다.
+
+**벤더가 MQTT 브리지를 이미 갖고 있다.** `/etc/init.d/smhub-mqtt-bridge` →
+`/usr/libexec/smhub-mqtt-bridge -c /etc/peripherals/smhub-mqtt-bridge.conf`,
+`depend: need net, after mosquitto`. 지금 stopped이고 어느 런레벨에도 없다.
+우리가 브리지를 직접 만들려던 자리에 벤더 구현이 있었다. 지금 경로엔 필요 없지만
+**무엇을 어디로 보내는 물건인지는 아직 안 읽었다.** `/etc/peripherals/`도 처음 본 디렉토리다.
+
+## 벤더 피드에 데이터 뷰어는 없다 (2026-09-10 조사)
+
+```
+domoticz  nodered  matterbridge(+hass/shelly/z2m)  zwavejsui  esphome-bin
+openthread  picoclaw  tailscale  nodejs  python3
+smhub-{os-base,services,ui,web,broker}
+```
+
+**Grafana · InfluxDB · Telegraf 없음.** 얹으면 우리가 소유하는 런타임이고, 등급 비용이다.
+`nodered 4.1.5-1`은 **설치돼 있으나 서비스로 안 뜬다** [측정: `rc-status`에 없음].
+
+계측 축(Influx/Grafana)은 **보드가 아니라 마스터 쪽 선택**이라 우리 등급에 안 걸린다.
+지금은 domoticz가 받는다.
+
+---
+
+# 이전 NOW (2026-09-09)
 
 > **한 줄**: 어제 "펌웨어가 죽었다"고 부른 것은 **펌웨어가 아니었다.** 칩엔 7.4.2가 그대로
 > 있었고 부트로더에 앉아 있었을 뿐이다. 오늘 프레임이 세 번 뒤집혔고, 지금 남은 열린 축은

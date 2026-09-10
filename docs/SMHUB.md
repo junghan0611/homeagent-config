@@ -598,6 +598,43 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
 
 ---
 
+### 5.6 1.0.2 현재면 — 운용 재편 + RTOS 경계 (2026-09-10 실측)
+
+§5.4는 **beta5(2026-07-01)** 스냅샷이다. 이 절은 **OS 1.0.2 에서의 현재 상태**이고, 둘을 섞지 않는다.
+
+| # | 항목 | 1.0.2 실측 | beta5 대비 |
+|---|---|---|---|
+| C1 | **RTOS 펌웨어 크기** | `smhub-rtos.elf` **422,792 B** | beta5 `355,216 B` → **커졌다** |
+| C2 | remoteproc / rpmsg | `remoteproc0` running, 채널 `esphome-rpc`(0x400) · `smhub-rpc`(0x401) | 동일 (§5.4 B1·B2 재확인) |
+| C3 | **라디오는 이 축에 없다** | 펌웨어·데몬 문자열 전수에 `mg24`/`zigbee`/`efr32` **0건**. RTOS가 아는 GPIO는 `led_pwr`/`led_cus`/`btn_1`/`btn_2` 뿐 | **새 경계** |
+| C4 | `smhub-reset-daemon` | **공장초기화 버튼 감시** — 라디오 리셋과 무관 | §3.6 재확인 |
+| C5 | `smhub-arbitration` | `/dev/mem` 상태조회 CLI. 상시 프로세스 아님 | 새 확인 |
+| C6 | rpmsg 소유자 | **`smhub-broker` 단독**(RSS 6.4MB). `/proc/<pid>/fd` 에 `/dev/rpmsg0`·`1` | 단일 오너 = 두 번째 open 위험 |
+| C7 | `smhub-services` | **RTOS와 무관.** rpmsg 안 열고 sqlite + io_uring 쓰는 Python venv Web UI REST 백엔드. RSS 101.2MB (RssAnon 80.9MB) | beta5 1.0.4-1 → **1.1.0-1**, 기본 미설치 앱 |
+| C8 | RTOS 면 총비용 | `smhub-broker` + `rtos-logger` = **약 9MB** | 조일 값은 RTOS가 아니라 Python 쪽 |
+| C9 | 채널 프로토콜 모양 | `esphome-rpc` = ESPHome native API(protobuf/nanopb) on rpmsg · `smhub-rpc` = 벤더 nanopb GPIO RPC(`smhub_hal_rpc_GpioConfigReq`/`GpioEdgeEvent`) | 정적분석. **프레임을 직접 읽지는 않았다** |
+
+**근거**: C1·C2·C6은 [측정] `dmesg` · `/sys/class/remoteproc/` · `/proc/<pid>/fd`.
+C3~C5·C7~C9는 [외부 산출물] `.agent-reports/2026-09-10-smhub-rtos-rpmsg-survey.md`(gitignore,
+벤더 blob 로컬 정적분석). **C3은 부재 증거**라 완전히 닫힌 질문이 아니다.
+
+**함의**: L2 코프로세서는 **LED·버튼·bluetooth_proxy**를 쥔다. Zigbee 는 쥐지 않는다.
+→ "z2m 부담을 코프로세서로 넘긴다"는 그림은 **이 제품 형태에서는 성립하지 않는다.**
+→ GPIO 로 MG24 를 리셋한 것(2026-09-09)은 RTOS 관할 밖의 경로였다.
+
+**운용 재편 (같은 날)**:
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| domoticz | 보드에 설치·상시 운용 (2026-09-08~) | **`opkg remove`. 마스터가 MQTT-AD 로 우리 브로커에 직접 접속** |
+| mosquitto | `127.0.0.1:1883`, 익명 | **`0.0.0.0:1883`, 계정 인증**(z2m용/마스터용 분리) |
+| `smhub-services` | 상시 | **평상시 stop**, 필요할 때만 start (UDS 정보면) |
+| z2m 네트워크 | pan 59232 / 17대 | **재초기화** — 새 pan / 2대부터 곡선 재시작 |
+| `available` | 232 MB (아침) | **302 MB** (저녁) — 개별 회수량은 서로 다른 스냅샷이라 가산 불가 |
+
+⚠️ 벤더 `mosquitto.conf` 는 **전부 주석이고 `include_dir` 이 없다** → `conf.d/` 가 읽히지 않는다.
+절차는 `smhub/RUNBOOK.md` §2.7.
+
 ## 6. 정보 벽 = 재현 공백 (없는 것 확실히) + SMLIGHT 연락 후보
 
 이미지에서 **얻을 수 없는** 것들. 역설계 우회 가능하나 SMLIGHT 직접 요청이 양쪽에 득(오픈소스 hub 검증 협업 명분).

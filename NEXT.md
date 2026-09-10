@@ -196,6 +196,64 @@ open이 그 통신을 깰 수 있다.]
   FreeRTOS쪽 open-amp 포팅이 필요하다. 시작점 후보는 `slzb-esphome`(GPL-3.0).
   [외부 산출물. 우리 `runtime/README.md`가 mailbox를 기준으로 삼은 것과 **다른 계약**이다]
 
+### ⭐ 다음 세션의 자리 — broker는 rpmsg↔ESPHome API **브리지**다 (2026-09-10 저녁 발견)
+
+**`/dev/rpmsg`를 직접 열 이유가 없었다. 벤더가 이미 표준 ESPHome API로 번역해 LAN에 열어놨다.**
+
+```
+smhub-broker (pid 1349)  [측정: ss -ltnp, /proc/<pid>/fd]
+  fd 8,9 → /dev/rpmsg0, /dev/rpmsg1      ← 단일 오너 (그래서 우리가 직접 못 연다)
+  fd 4   → /dev/input/event0             ← 버튼
+  fd 10  → LISTEN *:6053                 ← ESPHome native API
+  fd 6   → LISTEN *:3232                 ← ESPHome OTA
+```
+
+**핸드셰이크 응답** [측정 2026-09-10, `0x01 00 00` 을 6053 에 보냄]:
+
+```
+01 00 24 01 "rtos-nano-<id>" "<MAC>"      ← 평문으로 이름과 MAC을 알린다
+```
+
+→ 코프로세서가 **`rtos-nano-<id>` 라는 ESPHome 장치로 자기를 알린다** (실제 id·MAC 은 `PRIVATE.md`). Noise 암호화 모드.
+키는 `devicesettings.encryption_key` 에 있고 **벤더 테스트 키가 출하품에 그대로 박혀 있다**
+(값은 `PRIVATE.md`). 우리 기기라 우리에겐 열쇠지만, 제품 관점에선 지적 사항이다.
+
+### 이게 여는 것 — `runtime/` 축을 다시 그린다
+
+| 문 | 가능해지는 것 |
+|---|---|
+| **:6053 native API** | **표준 ESPHome 클라이언트가 그대로 붙는다** — `aioesphomeapi` · `esphome` CLI · Home Assistant. LED·버튼·GPIO·bluetooth_proxy 를 우리 코드에서 읽고 쓴다. **프로토콜·클라이언트·HA 통합을 하나도 안 만들어도 된다** |
+| **:3232 OTA** | **우리 펌웨어를 코프로세서에 올리는 정규 경로.** `/opt/firmware/smhub-rtos.elf` 를 파일로 갈아끼우고 remoteproc 을 재기동하는 위험한 길 대신, 벤더가 만들어둔 문이다 |
+
+⚠️ **우리 `runtime/README.md` 의 설계와 계약이 다르다.** 우리는 "C906L 에 우리 FreeRTOS + raw
+mailbox" 로 적어놨다. 벤더가 실제로 한 것은 **remoteproc/rpmsg + open-amp 위에 ESPHome, 그리고
+그것을 ESPHome API 로 노출**이다. **어느 쪽을 공개 쇼케이스 베이스로 삼을지가 다시 열린 질문이다.**
+
+### 리포 안의 관련 좌표 (이미 있던 것들)
+
+| 곳 | 무엇이 적혀 있나 | 오늘과의 관계 |
+|---|---|---|
+| `docs/ECOSYSTEM-PORTFOLIO.md:542` | *"A′(코프로세서) 슬롯은 우리도 이미 갖고 있다 … **아직 안 쓴 슬롯이다**"* | **오늘 그 슬롯의 문을 찾았다** |
+| `docs/ECOSYSTEM-PORTFOLIO.md:102` | beta3(2026-06-14)에 벤더가 ESPHome 을 RTOS 코어에 올렸다는 기록 | 배경 |
+| `docs/INTEGRATION-SURFACE.md:89` | *"ESPHome — HTTP(`web_server` 필요), **네이티브 API 미지원**"* | ⚠️ **이건 SLZB 통합 표 관점이고, 오늘 native API 로 응답을 받았다.** 문장을 손볼지 판단 필요 |
+| `docs/INTEGRATION-SURFACE.md:171` | *"ESPHome ❌ — Python + 컴파일 툴체인 전체, 헤드리스 허브가 짊어질 대상 아님"* | **여전히 맞다.** 그건 *호스트에 ESPHome 을 올리는* 비용이고, 오늘 건 *이미 코어에 있는 것에 붙는* 이야기다. 섞지 마라 |
+| `docs/SMHUB.md` §5.6 | 오늘 쓴 1.0.2 현재면 | 이 발견을 여기에 추가할 자리 |
+| `~/repos/3rd/milkv/slzb-esphome` | 벤더 ESPHome 컴포넌트 (GPL-3.0, `components/` `devices/` `hw_defs/` `packages/`) | ⚠️ [측정] **SG2000/nano/rpmsg 참조가 0건** — ESP32 계열 보드 yaml 뿐이다. `nano-esphome.yaml` 은 별도 리포(`github://smlight-smhub/rtos-config`, §5.4 B3) |
+| `edgeagent-config` | 형제 리포 = ESP32 엣지 노드 레인 | ESPHome 경험이 그쪽에 있을 수 있다 |
+
+### 다음 세션 첫 걸음 (순서대로)
+
+1. `aioesphomeapi` 로 noise 핸드셰이크를 끝내고 **엔티티 목록을 실제로 받아본다**
+   (키는 `PRIVATE.md`). 오늘은 핸드셰이크 첫 응답까지만 봤다.
+2. 받은 엔티티가 sonnet 정적분석 결과(LED/버튼/GPIO스위치/bluetooth_proxy)와 **일치하는지 대조**.
+   일치하면 ①이 [측정]으로 승격되고, 라디오 비연결 경계(C3)도 한 겹 더 단단해진다.
+3. `github://smlight-smhub/rtos-config` 의 `nano-esphome.yaml` 을 찾아본다 — 벤더가 무엇을
+   선언했는지가 곧 **우리가 OTA 로 무엇을 바꿀 수 있는지**다.
+4. 그 다음에야 `runtime/README.md` 의 mailbox 계약을 고칠지 판단한다. **문서를 먼저 고치지 마라.**
+
+⛔ **아직 OTA 를 쓰지 마라.** 벤더 펌웨어를 덮으면 되돌리는 경로가 `.factory-seed`(p7) 뿐이고
+[읽음 `docs/SMHUB.md:283`], 그 전에 현재 ELF 를 로컬에 보존해야 한다.
+
 ⛔ **RTOS를 멈추거나 펌웨어를 다시 쓰지 마라.** 지금은 읽기만 한다.
 
 ## 18 — 런타임 조이기: available 232 → 302 MB

@@ -635,17 +635,79 @@ C3~C5·C7~C9는 [외부 산출물] `.agent-reports/2026-09-10-smhub-rtos-rpmsg-s
 ⚠️ 벤더 `mosquitto.conf` 는 **전부 주석이고 `include_dir` 이 없다** → `conf.d/` 가 읽히지 않는다.
 절차는 `smhub/RUNBOOK.md` §2.7.
 
+### 5.7 벤더 GitHub 소스 공개 범위 — `smlight-smhub` 조직 확인 (2026-09-11)
+
+§5.4 B3에서 ELF strings로 뽑은 `github://smlight-smhub/rtos-config` 좌표를 실제로 열어봤다.
+**`smlight-smhub`는 제품 레포 조직 `smlight-tech`와는 별개인 두 번째 조직**이다
+[측정: `gh api orgs/smlight-smhub` — `created_at: 2026-05-25`, `public_repos: 12`, 로그인 없이도
+`curl` 200 — 검색으로는 안 걸리고 URL을 알아야 보인다].
+
+**공개 레포 12개, 전부 RTOS 코프로세서(C906L) 빌드 체인 + 범용 ESPHome 툴링**:
+
+| 레포 | 무엇인가 |
+|---|---|
+| `platform-sg2000` | "Build tooling for SMHUB bare-metal RTOS core"(PlatformIO platform) |
+| `framework-sg2000-rtos` | "Bare-metal SDK for the SMLIGHT SMHUB hardware architecture" |
+| `open-amp` · `libmetal` | 업스트림 OpenAMP/libmetal 미러(rpmsg/remoteproc 기반) |
+| `FreeRTOS-Kernel` | 업스트림 FreeRTOS 커널 미러 |
+| `nanopb` | 업스트림 nanopb 미러(§5.6 C9의 GPIO RPC가 이걸 쓴다) |
+| `esphome` | **SMLIGHT 자체 ESPHome 포크** — SG2000 커스텀 컴포넌트 포함(아래) |
+| `rtos-config` | ESPHome YAML 선언 — `nano-esphome.yaml`·`.common-core.yaml`·`smhub-esphome.yaml` |
+| `smhub-addons` | HA add-on repository 정의(`repository.yaml`, ESPHome HA add-on 형태) |
+| `device-builder` / `device-builder-frontend` | **업스트림 `esphome/device-builder`의 재배치본**(README가 그대로 `esphome/device-builder`를 자기 소개함) — SMHub 전용 코드 아님 |
+| `smhub-rtos-dev` | "meta repository pulling together all components for development on rtos stack" |
+
+**`rtos-config/nano-esphome.yaml` + `.common-core.yaml` 실측** [읽음, GitHub raw]:
+
+```yaml
+esphome: { name: rtos-nano, min_version: 2026.5.3 }
+api:
+  encryption:
+    key: "<base64>"   # 디코드하면 아래 테스트 문자열 — 리터럴은 벤더 공개 레포에 그대로 있다
+binary_sensor: [Factory Reset Button (btn_1)]
+switch: [Blue LED (led_cus), Power LED (led_pwr)]
+bluetooth_proxy: { active: true }
+time: { platform: smhub_time }
+ota: { platform: esphome, port: 3232 }
+```
+
+- **§5.6 C3의 GPIO 엔티티 목록(`led_pwr`/`led_cus`/`btn_1`)이 정적분석 추정에서 벤더 공개 소스로 승격됐다.**
+  `btn_2`는 이 공통 코어 선언에 없다 — ESPHome API로는 안 열리는 버튼이라는 뜻이다.
+- **암호화 키가 [정적분석 추정]에서 [벤더 공개 레포 확인]으로 승격됐다.** `TestingTRNGEncryptionKey12345678`이
+  공개 리포에 하드코딩돼 있다 = 출하 유닛 전체가 같은 키를 공유하는 **벤더 설계**이지, 개별 기기 유출이 아니다.
+- `esphome`(포크)의 `esphome/components/`에 **`sg2000`·`sg2000_adc`·`sg2000_pwm`·`sg2000_ws2812`·`smhub_time`**
+  커스텀 컴포넌트가 실제로 있다 [측정: `gh api repos/smlight-smhub/esphome/contents/esphome/components`].
+  `sg2000/` 안에 `sg2000_arbitration.h`(§5.6 C5의 `smhub-arbitration`과 대응) ·
+  `smlight_rpc_handlers.cpp`(§5.6 C9의 `smhub_hal_rpc_*` GPIO RPC와 대응)가 있다.
+  → **아래 §6 항목 5의 "공개분 없음" 판정을 뒤집는다.**
+- **Buildroot 본체(메인 Linux BSP)는 이 12개 레포 안에 없다.** 전부 RTOS 코어 쪽이고, SG2000 큰코어를
+  굽는 defconfig/BR2_EXTERNAL은 여전히 안 보인다 — §6 항목 2 갭은 유지, 다만 "어디를 봤는데도 없다"로
+  범위가 좁혀졌다.
+
+**벤더 공개 릴리스노트 대조** [읽음, `smlight.tech/support/manuals/books/smhub/page/smhub-os-release-notes`,
+2026-09-11]: 공개 최신 stable은 **v1.0.0(2026-07-10)**. **beta3(2026-06-14)** 공지문이 §5.4/§5.6의
+RTOS/ESPHome 발견을 벤더 쪽에서도 그대로 확인해준다 — *"your smhub has been keeping a secret: a
+dedicated, hidden RTOS co-processor core… Beta 3 brings native ESPHome firmware support directly to
+that core"*, `esphome-bin`+`smhub-broker` 기본 설치는 이때부터. beta4(06-17)에 "Fixed saving ESPHome
+encryption keys from the web UI" 버그픽스가 있다 — 위 테스트 키 노출과 무관하지 않을 수 있다.
+⚠️ **버전 불일치, 미해결**: §5.6이 실측한 `1.0.2`가 이 공개 릴노트 목록엔 없다(최신이 `v1.0.0`) —
+패치 릴노트를 벤더가 공개 안 했거나, 우리 실측 필드 해석이 다를 수 있다.
+
 ## 6. 정보 벽 = 재현 공백 (없는 것 확실히) + SMLIGHT 연락 후보
 
 이미지에서 **얻을 수 없는** 것들. 역설계 우회 가능하나 SMLIGHT 직접 요청이 양쪽에 득(오픈소스 hub 검증 협업 명분).
 
 1. **opkg 피드 소스** `pkg.smlight.tech/v1` — ipk 바이너리만, 빌드 소스 ❌ (URL에 http-auth 크레덴셜 → redacted만 안전).
 2. **벤더 Buildroot defconfig + BR2_external + overlay** — 베이스 OS 재현 최대 공백.
+   ✅ **[정정 2026-09-11] 벤더의 RTOS/ESPHome 전용 GitHub 조직(`smlight-smhub`, §5.7)까지 뒤졌지만
+   거기도 없다** — 12개 공개 레포 전부 C906L RTOS 코어 쪽이고, 큰코어 Linux Buildroot는 어느 쪽에도
+   공개돼 있지 않다. 공백은 그대로이고, 못 찾은 위치가 하나 좁혀졌을 뿐이다.
 3. **커널 `.config` + 벤더 DT diff** — **0.9.8 full `.config` text 확보**(config.gz 5178줄, §4 C3); DT diff + raw gz 원본 남음.
 4. **smhub-broker / rtos-logger / rtos-notify 소스** — RISC-V 바이너리만.
-5. **벤더 ESPHome SG2000/SMHub 컴포넌트 소스**(`sg2000_*`, `smhub_*`). **GPLv3 근거 있음**: esphome-bin.elf가
-   ESPHome GPLv3 C++ 코어와 static-link → 파생저작물이면 소스 제공 의무. 선례=`slzb-esphome` GPL 공개.
-   전수 조사(2026-06-30) 결과 SG2000/C906L ESPHome 포트 **공개분 없음** — GPL 근거 직접 요청이 유일 경로. (재조사 불필요.)
+5. ~~벤더 ESPHome SG2000/SMHub 컴포넌트 소스(`sg2000_*`, `smhub_*`) — 전수조사(2026-06-30) 결과 공개분 없음~~
+   ✅ **[정정 2026-09-11, §5.7] 이 판정은 틀렸다 — 당시 조사가 엉뚱한 조직(`smlight-tech`)만 봤다.**
+   `smlight-smhub/esphome`(포크)의 `esphome/components/`에 `sg2000`·`sg2000_adc`·`sg2000_pwm`·
+   `sg2000_ws2812`·`smhub_time`이 **전부 공개돼 있다.** GPLv3 근거 요청은 불필요해졌다 — 이미 공개다.
 6. **MG24 코디네이터 펌웨어 `.gbl`** — 이미지에 .gbl 없음. flash 툴 공개(`universal-silabs-flasher`+`bellows`/EZSP).
   - ✅ **[정정 2026-09-08] 정보 벽이 아니다 — 이미지에 없을 뿐 벤더가 공개 배포한다.**
     [측정, curl 200] `updates.smlight.tech/firmware/slzb-07/ncp-uart-hw-v7.4.1.0-slzb-07-115200.gbl`

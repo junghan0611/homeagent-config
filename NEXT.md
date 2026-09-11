@@ -243,13 +243,21 @@ mailbox" 로 적어놨다. 벤더가 실제로 한 것은 **remoteproc/rpmsg + o
 
 ### 다음 세션 첫 걸음 (순서대로)
 
-1. `aioesphomeapi` 로 noise 핸드셰이크를 끝내고 **엔티티 목록을 실제로 받아본다**
-   (키는 `PRIVATE.md`). 오늘은 핸드셰이크 첫 응답까지만 봤다.
-2. 받은 엔티티가 sonnet 정적분석 결과(LED/버튼/GPIO스위치/bluetooth_proxy)와 **일치하는지 대조**.
-   일치하면 ①이 [측정]으로 승격되고, 라디오 비연결 경계(C3)도 한 겹 더 단단해진다.
-3. `github://smlight-smhub/rtos-config` 의 `nano-esphome.yaml` 을 찾아본다 — 벤더가 무엇을
-   선언했는지가 곧 **우리가 OTA 로 무엇을 바꿀 수 있는지**다.
-4. 그 다음에야 `runtime/README.md` 의 mailbox 계약을 고칠지 판단한다. **문서를 먼저 고치지 마라.**
+1. ~~`aioesphomeapi` 로 noise 핸드셰이크~~ / ~~`github://smlight-smhub/rtos-config` 찾아보기~~
+   → **2026-09-11 완료, 직접 붙지 않고도 소스로 닫혔다.** `smlight-smhub`는 `smlight-tech`와
+   별개인 두 번째 벤더 조직(공개, 검색으론 안 걸림 — URL을 알아야 보인다)이고, `rtos-config`의
+   `nano-esphome.yaml`+`.common-core.yaml`을 그대로 읽었다: LED 2개(`led_cus`/`led_pwr`) + 버튼 1개
+   (`btn_1`, `btn_2`는 없음) + `bluetooth_proxy` — **정적분석과 일치, [측정]으로 승격됐다.**
+   암호화 키 `TestingTRNGEncryptionKey12345678`도 **공개 레포에 하드코딩**돼 있음을 확인 —
+   출하 전 유닛 공유 키라는 뜻(개별 유출 아님). 상세: `docs/SMHUB.md` §5.7.
+   ⚠️ **덤으로 §6 항목 5("SG2000 ESPHome 컴포넌트 공개분 없음")가 틀린 판정이었음도 드러났다** —
+   `smlight-smhub/esphome`(포크)에 `sg2000`/`sg2000_adc`/`sg2000_pwm`/`sg2000_ws2812`/`smhub_time`
+   커스텀 컴포넌트가 공개돼 있다. §6 항목 2(Buildroot 본체)는 여기까지 뒤져도 **여전히 없다** —
+   갭은 유지, 위치만 좁혀졌다.
+2. 벤더 공개 릴노트(`smhub-os-release-notes`) 대조 — beta3(06-14) 공지문이 RAIL 17 발견을 벤더
+   쪽에서도 확인해준다. ⚠️ 새로 걸린 것: 공개 최신 stable은 `v1.0.0`(07-10)인데 우리 실측은
+   `1.0.2` — **버전 불일치, 미해결**(`docs/SMHUB.md` §5.7 끝부분).
+3. 그 다음에야 `runtime/README.md` 의 mailbox 계약을 고칠지 판단한다. **문서를 먼저 고치지 마라.**
 
 ⛔ **아직 OTA 를 쓰지 마라.** 벤더 펌웨어를 덮으면 되돌리는 경로가 `.factory-seed`(p7) 뿐이고
 [읽음 `docs/SMHUB.md:283`], 그 전에 현재 ELF 를 로컬에 보존해야 한다.

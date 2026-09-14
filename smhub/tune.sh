@@ -22,6 +22,27 @@
 #   SMHUB_SSH=smlight@<device> ./smhub/tune.sh            # apply
 #   SMHUB_SSH=smlight@<device> ./smhub/tune.sh --revert   # undo
 #   SMHUB_SSH=smlight@<device> ./smhub/tune.sh --show     # report only, no change
+#   SMHUB_SSH=smlight@<device> ./smhub/tune.sh --ash-on   # ASH observation window ON
+#   SMHUB_SSH=smlight@<device> ./smhub/tune.sh --ash-off  # ...and back to the tuned baseline
+#
+# ASH OBSERVATION (--ash-on / --ash-off, added 2026-09-14).
+#   The hourly [ASH COUNTERS] / [NCP COUNTERS] lines are logger.info calls
+#   (emberAdapter.js:135,550 on the device's herdsman 10.8.0), so at
+#   `log_level: warning` they do not exist -- the tuning above deliberately
+#   hides the one diagnostic this board needs. These two modes own that
+#   trade-off instead of leaving it to a hand edit.
+#
+#   ⚠️ --ash-on raises log_level ONLY. It also *forces* log_output back to
+#   [console] if something added `file`, because console lands on /tmp (tmpfs)
+#   while the file sink lands on /mnt/user (eMMC) -- a blocking write on the
+#   loop that owes the NCP an ACK, on flash. That is the invariant the header
+#   above calls "so the path does not move", and it was broken by hand once
+#   (2026-09-14, RUNBOOK §6.5.2c). The console sink already keeps the counters
+#   in /tmp/zigbee2mqtt.log; the only thing `file` buys is surviving a reboot,
+#   and that is not worth moving the write path.
+#
+#   ⛔ Do not leave --ash-on across a pairing burst. Measured: ~89 info lines in
+#   the 30s before a crash at 17 devices, versus ~0 at 2 idle devices.
 set -euo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
@@ -89,6 +110,46 @@ show() {
 }
 
 if [ "$MODE" = "--show" ]; then show; exit 0; fi
+
+# --- ASH observation window ---------------------------------------------------
+# Owns exactly two things: log_level, and the log_output path invariant.
+# Everything else (NODE_OPTIONS, adapter_concurrent) is left as it is.
+if [ "$MODE" = "--ash-on" ] || [ "$MODE" = "--ash-off" ]; then
+  if [ "$MODE" = "--ash-on" ]; then LVL=info; else LVL=warning; fi
+  echo "[tune] ASH observation -> log_level: $LVL  on $SMHUB_SSH"
+  run_root <<EOS
+set -e
+cp -a $Z2M_YAML $Z2M_YAML.bak-ash-\$(date +%s)
+
+if grep -q '^  log_level:' $Z2M_YAML; then
+  sed -i 's/^  log_level: .*/  log_level: $LVL/' $Z2M_YAML
+else
+  sed -i '/^advanced:/a\  log_level: $LVL' $Z2M_YAML
+fi
+
+# The path invariant: console only. A stray 'file' sink moves writes to eMMC.
+if grep -q '^    - file\$' $Z2M_YAML; then
+  sed -i '/^    - file\$/d' $Z2M_YAML
+  echo "  removed log_output 'file' sink (path invariant: console/tmpfs only)"
+fi
+
+chown smlight:smlight $Z2M_YAML
+rc-service zigbee2mqtt restart >/dev/null 2>&1
+EOS
+  echo "[tune] restarted; waiting for z2m"
+  for _ in $(seq 1 30); do
+    run 'ss -ltn | grep -qw 8080' 2>/dev/null && break
+    sleep 5
+  done
+  show
+  echo
+  if [ "$MODE" = "--ash-on" ]; then
+    echo "[tune] first [ASH COUNTERS] lands one hour after adapter start, not on the clock hour."
+    echo "[tune]   read:  grep -o '\[ASH COUNTERS\].*' /var/log/zigbee2mqtt.log"
+    echo "[tune]   ⛔ turn this off before a pairing burst:  ./smhub/tune.sh --ash-off"
+  fi
+  exit 0
+fi
 
 if [ "$MODE" = "--revert" ]; then
   echo "[tune] reverting on $SMHUB_SSH"

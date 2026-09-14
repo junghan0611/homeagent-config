@@ -200,11 +200,20 @@ SSH 프로빙(92초 전). 직전 4일은 무접촉·`warning`·크래시 0이었
    그리고 **`file`은 애초에 불필요했다** — 콘솔 경로가 이미 `/tmp/zigbee2mqtt.log`에 카운터를
    남긴다(4일 39 B → 지금 100 KB). `file`이 주는 건 재부팅 생존뿐이다.
 
-**남은 일 (권고)**: **`log_output`을 `[console]`로 되돌리고 `log_level: info`만 남긴다.**
-튜닝 기준선과의 차이가 한 칸으로 줄고 `tune.sh`의 path 불변식이 회복된다. 그 뒤 `tune.sh`에
-ASH 관측 모드(`info` 한 칸)를 넣어 소유권을 되돌린다. 지금은 기기와 스크립트가 어긋나 있다 —
-누가 `tune.sh`를 돌리면 `log_level`만 되돌아가고 `log_output`은 남아 **반쯤 되돌아간 상태**가 된다.
-⛔ **2단계(재페어링) 전에는 반드시 `file`을 빼야 한다.**
+### ✅ 고쳤다 — 소유권 회복 [2026-09-14 17:15]
+
+1. **`log_output`을 `[console]`로 되돌렸다.** `log_level: info`만 남는다. 되돌리기
+   `configuration.yaml.bak-ashfile-off-20260914081256`. 검증 [측정]: `log_output=['console']` ·
+   `log_level=info` · `adapter_concurrent=1`(무변) · 기기 2대 interview True ·
+   `[INIT TC] matches config` · `bridge/state online` · 마스터 링크 복귀(`:59632`) ·
+   새 log 디렉토리 안 생김(=file sink 꺼짐) · 콘솔은 `/tmp/zigbee2mqtt.log`(tmpfs)에 그대로.
+2. **`smhub/tune.sh`에 `--ash-on` / `--ash-off`를 넣었다.** 그 두 모드가 **`log_level` 한 칸과
+   `log_output` path 불변식**을 소유한다 — `--ash-on`은 누가 `file`을 넣어 놨으면 **지운다.**
+   왜 그래야 하는지(console=tmpfs vs file=eMMC, 89줄/30초 대 0줄)를 헤더에 근거와 함께 적었다.
+   `bash -n` · `shellcheck -S warning` 통과.
+
+→ **기기 현재 상태가 `--ash-on` 결과와 정확히 일치한다. 기기와 스크립트가 다시 같은 말을 한다.**
+⛔ **2단계(재페어링) 전에 `--ash-off`.** 페어링 버스트에서는 info가 진짜 부하다.
 
 📌 그리고 두 크래시 표본은 **V8 설정도 다르다** — 09-08은 `NODE_OPTIONS` 이전(heap **259 MB**),
 09-14는 이후(heap **134 MB**, `--v8-pool-size=0`) [측정: 같은 바이너리에 옵션 넣고 뺀 값].
@@ -213,13 +222,26 @@ ASH 관측 모드(`info` 한 칸)를 넣어 소유권을 되돌린다. 지금은
 
 ## 4. 다음 한 걸음
 
+**보드는 지금 관측 상태로 서 있다** — `log_level: info` · `log_output: [console]` ·
+`adapter_concurrent: 1`. 이 상태가 `tune.sh --ash-on`이 만드는 것과 같다.
+
 ```
-1. ✅ 첫 매시간 CSV 확보 (16:09:24, 오류 0) — §3.5
-1b. **GLG 판단 대기: `info` 유지 + SSH 끊고 24h 방치** → 크래시 혼입 가르기 (§3.5).
-    내일 한 번만 붙어 덤프 24개를 한꺼번에 읽는다. 그동안 보드 무접촉
-2. RAIL 17 다음걸음 3 — runtime/README.md 의 mailbox 계약을 고칠지 판단 (§5.7 닫혔으니 이제 여기)
-3. RAIL 11 — 곡선이 2대에서 멈춰 있다. 기기를 더 붙이지 않으면 이 축은 안 움직인다
-4. (보류) ASH 2단계 concurrent 16 · smhub-services stop · 개명 리허설 — 전부 GLG 판단
+1. ★ 크래시 혼입 가르기 — SSH 끊고 24h 방치            ← GLG 판단, 지금 가장 싸다
+      변수가 log_level 하나로 깨끗해졌다(file sink 제거 완료).
+      내일 한 번만 붙어 `grep -o "\[ASH COUNTERS\].*" /var/log/zigbee2mqtt.log` 로
+      덤프 ~24개를 한꺼번에 읽는다. 그동안 보드 무접촉.
+      ⚠️ 콘솔 로그는 /tmp(tmpfs)라 **재부팅하면 사라진다.** 읽기 전에 재부팅 금지.
+2. RAIL 17 다음걸음 3 — `runtime/README.md` mailbox 계약을 고칠지 판단.
+      §5.7 이 닫혔으니 여기가 RAIL 17 의 다음 칸이다. **설계 판단이라 새 세션이 낫다.**
+3. RAIL 11 — 곡선이 2대에서 멈춰 있다. 기기를 더 붙여야 움직인다.
+      ⚠️ 오늘 §6.5.2a 가 그 전제를 흔들었다 — 고장이 양에 비례하지 않는다.
+4. 이슈 본문 둘 (terra 검수 지적, GLG 판단)
+      #10 본문이 닫힌 「보드에 domoticz」를 열린 과제로 지시한다
+      #11 이 현재 근거보다 강하다 + 오늘 `rxAckFrames` 가 근거에서 빠졌다(§6.5.2b)
+5. `[NCP COUNTERS]` 42칸 디코드 — `EmberCounterType` enum 대조만 하면 된다. 미착수
+6. (보류, GLG 판단) ASH 2단계 `adapter_concurrent 1 → 16` — 재페어링 때 같이.
+      `smhub-services` stop(+80MB) — 지금은 그냥 둔다(GLG).
+      `gq-node-02-r1` 개명 리허설 — 이미 옆 레인이 밟았고 우리 행은 무사하다.
 ```
 
 ⛔ OTA 금지 · ⛔ RTOS 정지/재기록 금지 — 그대로.

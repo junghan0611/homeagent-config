@@ -209,7 +209,8 @@ as a future recovery layer, not a Phase-1 task. Starting point when it is time:
 
 ## BSP base — Milk-V dev SDK, then diff the SMHUB product
 
-The base is **`milkv-duo/duo-buildroot-sdk-v2` (`develop` branch)**. It carries the
+The base is the pinned **`junghan0611/duo-buildroot-sdk-v2`** fork, branch
+**`feat/riscv64-nodejs-pure-cross` @ `087547cf8`** (upstream base `ad920f839`). It carries the
 **whole boot chain in one tree** — `fsbl`, `opensbi`, `u-boot-2021.10`, `linux_5.10`,
 `ramdisk`, and crucially **`freertos`** for the C906L small core (the L2 mailbox base
 starts here). We boot the **Milk-V Duo S dev board** from the bootloader up on this SDK
@@ -220,7 +221,7 @@ SMHUB Nano is a Duo S / SG2000 product, but SMLIGHT does **not** ship the vendor
 is — they run a **separate, more mainline product Buildroot set** we read and diff as a
 system-application developer (not rebuild). From the SMHUB-OS release notes:
 
-| Layer | Milk-V dev SDK (`duo-buildroot-sdk-v2` develop) | SMHUB Nano product (SMLIGHT) |
+| Layer | Milk-V dev SDK (`duo-buildroot-sdk-v2`, pinned fork) | SMHUB Nano product (SMLIGHT) |
 |-------|--------------------------------------------------|-------------------------------|
 | Kernel | linux **5.10** (vendor/cvitek) | linux **6.18** (was vendor 5.4.x) |
 | Bootloader | u-boot **2021.10** + opensbi + fsbl (vendor) | mainline **OpenSBI 1.8 + U-Boot 2026.04** |
@@ -239,7 +240,7 @@ side (this is where the whole `smlight-smhub` org clone lives — `framework-sg2
 
 | Repo | Role |
 |------|------|
-| `milkv-duo/duo-buildroot-sdk-v2` (`develop`) | the BSP base — full boot chain + C906L FreeRTOS |
+| `junghan0611/duo-buildroot-sdk-v2` (`feat/riscv64-nodejs-pure-cross` @ `087547cf8`) | the BSP base — full boot chain + C906L FreeRTOS |
 | `milk-v/milkv.io` | Milk-V official docs. Key pages under `docs/duo/getting-started/`: `duos.md` (ARM/RISC-V switch), `boot.md` (L0), `rtoscore.md` (C906L FreeRTOS mailbox, L2), `8051core.md` (L1), `buildroot-sdk.md` (build) |
 | `milkv-duo/duo-examples` → `mailbox-test` | concrete big-core-Linux → C906L-FreeRTOS mailbox example (L2 starting point) |
 | `milkv-duo/duo-8051` | 8051 firmware source (SDCC; L1 starting point) |

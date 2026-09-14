@@ -804,7 +804,7 @@ termios: -crtscts / ixon ixoff
 | **DT에 `uart-has-rtscts` 없음 + 포트가 `16550A`** | **하드웨어 자동 RTS 경로가 없다**(AFE 있는 `16750`/`U6_16550A`가 아니다). `rtscts: true`는 **핀 배선을 따지기 전에 드라이버에서 막힌다** → `docs/SMHUB.md` §5.5 Q5의 "배선 미검증"이 여기로 좁혀졌다 |
 | `/proc/tty/driver/serial`에 `oe:`/`bo:`가 **안 보임** | ⚠️ **"필드가 없다"가 아니라 "0이다"** — `serial_core.c:1871-1874`는 카운터가 **0이 아닐 때만** 출력한다. 즉 **하드웨어 오버런이 실제로 0**이었다 |
 
-### 6.5.2 원인 확정 — 바이트를 흘린 게 아니라 CPU에 굶었다 [측정 2026-09-08 08:06]
+### 6.5.2 당시 관측 — 바이트 드롭보다 CPU ACK 지연과 정합 [측정 2026-09-08 08:06]
 
 크래시 순간 ASH가 카운터를 통째로 찍는다. **그게 사실원이다:**
 
@@ -822,14 +822,61 @@ DATA frames: RX=837, TX=234      Last Frame: [FRAME: ID=52:"SEND_UNICAST" Seq=23
 node 78.2% CPU · smhub-services 1.6% · domoticz 0.7%
 ```
 
-→ **단일 코어 포화. 호스트의 ACK가 제때 못 나간 것이다.** 하드웨어 드롭이 아니라 **CPU 굶음**이고,
-`oe:`/`bo:`가 0인 것과 정합한다.
+→ 이 시점의 **단일 코어 포화는 호스트 ACK 지연과 정합**하고, 하드웨어 드롭보다 **CPU 굶음**을
+지지한다(`oe:`/`bo:`=0). **단, 당시 `adapter_concurrent`는 1~2였고 기본값 16과 대조하지 않았다.**
+따라서 이 스냅샷만으로 “1코어가 인터뷰 버스트에서 ASH ACK 마감을 못 지킨다”를 일반화하지 않는다.
+현재 조건의 ASH 카운터를 `adapter_concurrent: 16` 대조군과 비교해야 한다(`NEXT.md` 2026-09-14 NOW).
 
-그리고 이건 **V8 이야기와 같은 뿌리다** — [측정] 이 보드에서 V8이 스스로 잡는 old generation
-상한이 **259 MB**(`heap_size_limit`, MemTotal 488M의 53%)다. 압박이 없어 GC를 미루다가, 1코어에서
-한 번 돌 때 ASH 타이머가 밀린다.
+V8 old generation 상한 **259 MB**(`heap_size_limit`, MemTotal 488M의 53%)은 당시 함께 관측된
+조건이다. 압박이 없어 GC를 미루다가 1코어에서 한 번 돌 때 ASH 타이머가 밀린다는 설명은 가설로
+남기며, 위 대조 없이는 원인으로 승격하지 않는다.
 
-### 6.5.3 대응 — `adapter_concurrent`를 내린다 ✅ 적용됨 (⚠️ 불충분)
+### 6.5.2a 두 번째 표본 — **유휴 2대에서 같은 모양으로 죽었다** [측정 2026-09-14 15:08:52 KST]
+
+§6.5.2는 **17대 연속 페어링 중**의 크래시다. 오늘 같은 실패가 **기기 2대 · 무부하 · 페어링 없음**
+상태에서 나왔다. `log_level: info`로 올린 직후라 처음으로 카운터 전문이 남았다.
+
+```text
+ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT  →  ASH_NCP_FATAL_ERROR
+Last Frame: [FRAME: ID=52:"SEND_UNICAST" Seq=46 Len=7]
+
+Total frames : RX=94, TX=144      DATA frames : RX=86, TX=48
+Retry frames : RX=6,  TX=2        Retry dupes : RX=6
+ACK frames   : RX=0,  TX=93       ACK timeouts: RX=2
+CRC · Comm · Length(min/max) · Bad controls · Bad lengths · Bad ACK numbers
+  · Out of buffers · Out of sequence  ─── 전부 RX=0
+```
+
+**§6.5.2와 나란히 놓으면 부피만 다르고 모양이 같다:**
+
+| | 2026-09-08 (페어링, 17대) | **2026-09-14 (유휴, 2대)** |
+|---|---|---|
+| ACK frames TX | 858 | **93** |
+| DATA frames RX | 837 | **86** |
+| Retry dupes RX | 20 | **6** |
+| ACK timeouts RX | 2 | **2** |
+| 모든 오류 카운터 | 0 | **0** |
+| Last Frame | `SEND_UNICAST` Seq=232 | **`SEND_UNICAST` Seq=46** |
+
+→ **이 고장은 양에 비례하지 않는다.** 「N대를 넘기면 죽는다」는 곡선 이야기였는데, 9배 적은
+트래픽에서도 같은 자리로 갔다. `supervise-daemon`이 25초 뒤 자동 재기동했고
+`[INIT TC] Adapter network matches config` → 기기 2대 복귀, 이후 재발 없음.
+
+⚠️ **원인을 가르지 못한다 — 내가 만든 혼입이 둘이다.**
+
+| 혼입 | 시점 | 반론 |
+|---|---|---|
+| `log_level: warning → info` + `log_output` file | 크래시 **8분 21초 전** | 크래시 직전 74초간 device publish가 없었다 — 로깅 버스트 중이 아니었다 |
+| 에이전트 SSH 프로빙 (`grep -rn`을 큰 dist 파일에) | 크래시 **92초 전** | 1코어에서 실제 부하이긴 하나 종료 후 시간이 떴다 |
+
+직전 4일(`warning`, 무접촉)은 크래시 0이었다. **상관은 강하지만 n=1이고, 두 혼입 다 우리 손이다.**
+「로깅을 켜면 죽는다」로 적으면 안 된다. 가르는 법: **`info`를 유지한 채 SSH 접속을 끊고 24시간
+방치**한다 — 혼입이 하나로 준다.
+
+⚠️ **여전히 `adapter_concurrent: 1`이다.** §6.5.2의 한정이 이 표본에도 그대로 걸린다 —
+기본값 16 대조 전에는 「1코어라서」로 일반화하지 않는다.
+
+### 6.5.3 당시 완화 — `adapter_concurrent`를 내렸다 ✅ 적용됨 (⚠️ 불충분)
 
 ember 어댑터의 in-flight 기본이 **16**이다 [읽음 `zigbee-herdsman/src/adapter/ember/adapter/emberAdapter.ts:278`
 `new Queue(this.adapterOptions.concurrent || 16)`], 그리고 z2m 설정 한 줄로 내려간다
@@ -859,9 +906,10 @@ $SSH "mosquitto_sub -h 127.0.0.1 -t zigbee2mqtt/bridge/info -C 1 -W 8" \
 
 - **손으로 간격 두고 붙이는 것보다 이쪽이 낫다.** 손 회피는 페어링 국면만 막지만, 이 값은
   **정상 보고 주기에도 계속 적용된다** — §7이 묻는 게 상시 트래픽이다.
-- ⚠️ **그러나 이것만으로는 안 막힌다.** [측정 2026-09-08] 적용 후에도 페어링을 이어가자
-  `Adapter disconnected` **3 → 8회**, z2m 재시작 **9 → 13회**. in-flight를 줄여도 **CPU가
-  포화면 ACK가 밀린다**(§6.5.2). CPU 쪽 대응이 함께 필요하다.
+- ⚠️ **그러나 이것만으로는 안 막혔다.** [측정 2026-09-08] 적용 후에도 페어링을 이어가자
+  `Adapter disconnected` **3 → 8회**, z2m 재시작 **9 → 13회**. 이는 당시 1~2 동시 조건에서의
+  결과다. CPU가 포화면 ACK가 밀린다는 설명은 §6.5.2의 조건부 관측이며, 16과의 대조 전에는
+  CPU 대응을 원인 처방으로 확정하지 않는다.
 - ⚠️ **보율을 낮추지 마라(115200→57600).** NCP 보율은 플래시된 값이라 호스트만 바꾸면 안 맞고,
   맞추려면 리플래시인데 **벤더 원본 `.gbl`이 우리에게 없다**(`docs/SMHUB.md` §6-6) — 편도 문이다.
   게다가 프레임 전송시간이 늘어 `CONFIG_ACK_TIME_MAX 2400ms` 여유가 **줄어든다**;
@@ -884,19 +932,23 @@ $SSH "mosquitto_sub -h 127.0.0.1 -t zigbee2mqtt/bridge/info -C 1 -W 8" \
 
 ---
 
-## 7. 측정 ❓ — 이 레인이 실제로 답해야 하는 질문
+## 7. 역사적 부하 측정 ❓ — 닫힌 domoticz 이식성 증명의 질문
 
-기동이 확인되면 **여기가 목적지다.** `nproc`이 1이고 RAM이 488M인 기기에서:
+이 절은 2026-09-08 **보드 domoticz** 배치에서 남긴 부하 질문과 측정법이다. 2026-09-10 현재
+경로는 §2.7(보드=Z2M+mosquitto, domoticz=마스터)이므로, **새 기기에 이 절의 domoticz 설치·측정을
+현재 절차로 적용하지 마라.** 아래 수치는 닫힌 이식성 증거로만 보존한다.
+
+당시 기동 확인 뒤의 목적지는 `nproc`이 1이고 RAM이 488M인 기기에서:
 
 ```bash
 ssh ... 'top -bn2 | grep -E "domoticz|Mem"; cat /proc/$(pgrep domoticz)/status | grep VmRSS'
 ```
 
-답해야 할 값: **1코어가 세트 하나(30~40대)를 받는가.** 이게 works-nixos-zigbee 레인(x86 실증,
+당시 답하려던 값: **1코어가 세트 하나(30~40대)를 받는가.** 이게 works-nixos-zigbee 레인(x86 실증,
 4스레드를 잠정 하한으로 적었다)에 돌려줄 값이다.
 
-**같은 기기에서 둘을 나란히 재라.** z2m은 이미 돌고 있고 domoticz는 방금 올렸으니, 이 보드가
-`Zigbee 호스트 + 플랫폼` 한 세트를 받는지가 한 번에 나온다:
+**당시에는 같은 기기에서 둘을 나란히 쟀다.** z2m이 이미 돌고 domoticz를 막 올린 상태에서, 이 보드가
+`Zigbee 호스트 + 플랫폼` 한 세트를 받는지가 한 번에 나왔다:
 
 ```bash
 ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
@@ -951,7 +1003,7 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `homeassistant/` 토픽이 없다 | z2m 기본값이 `enabled: false` | §6.4.1 |
 | z2m이 `EACCES ... configuration.yaml`로 죽는다 | 설정 파일 소유자가 `root`로 바뀌었다 | §6.4.1 — `chown smlight:smlight`. **`rc-status`는 그때도 `started`** |
 | domoticz 페이지는 뜨는데 화면이 빈다 | LAN이 신뢰망에 없어 API가 401 | §6.4.2 |
-| 연속 페어링 중 z2m이 반복해서 죽는다 | `ASH_NCP_FATAL_ERROR` — **호스트 CPU가 ASH ACK를 제때 못 보낸다**(1코어). ⚠️ *"no-flow라 바이트를 흘린다"가 아니다* — `oe:`는 계속 0이다 (2026-09-09 정정) | **§6.5**. 메모리 아니다. 죽고 **재시작을 반복하면** 아래 "크래시 루프" 줄로 간다 |
+| 연속 페어링 중 z2m이 반복해서 죽는다 | `ASH_NCP_FATAL_ERROR` — 2026-09-08의 `adapter_concurrent` **1~2** 관측은 바이트 드롭(`oe: 0`)보다 호스트 ACK 지연과 정합했다. **16과 대조 전 1코어 일반화 금지** | **§6.5**. 메모리 단독 원인으로 보지 말고, 죽고 **재시작을 반복하면** 아래 "크래시 루프" 줄로 간다 |
 | 전력량 위젯은 서는데 kWh가 안 온다 | 16A `TS011F_plug_3` polling 경로 | §6.4.5 — **기종마다 확인** |
 | `json.htm`이 전부 401 | 초기 domoticz는 `Users`가 비어 있다 | §6.4.3 |
 | `reboot`를 보냈는데 안 내려간다 | ssh 세션과 함께 죽었다 | `nohup sh -c "sleep 2; reboot"` 후 **:22가 닫히는지 확인** |
@@ -959,7 +1011,7 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `setup.sh`가 commit pin에서 멈춤 | 트리 HEAD가 태그와 다름 | 출력의 `git checkout --detach` 한 줄 |
 | ipk가 다른 기기에서 안 뜬다 | device profile 불일치 | 매니페스트의 profile과 대조(§5) |
 | Radio 페이지 플래시가 `HTTP Error 404` | **벤더 인덱스가 죽은 다운로드 URL을 준다.** 기기·네트워크 잘못이 아니다 | §2.5.2의 `firmware_list`로 링크를 직접 보고, 살아 있는 경로로 받아 CLI로 굽는다 |
-| z2m이 죽고 재시작을 반복한다 (크래시 루프) | **루프가 스스로를 먹인다** — node 기동이 1코어를 태우고, 그 CPU가 ASH ACK를 늦추고, NCP가 `ACK_TIMEOUT`으로 끊는다. 그래서 부하가 0인 `GET_EUI64` 초기화 지점에서도 죽는다 | z2m을 멈추고 **완전 파워사이클**로 루프를 끊는다. 그 뒤 `adapter_concurrent`를 내려 재기동 |
+| z2m이 죽고 재시작을 반복한다 (크래시 루프) | 2026-09-09 관측에서 node 기동·CPU 부하·ASH ACK 지연이 맞물린 모양이었다. **인과는 `adapter_concurrent` 16 대조 전 가설**이다 | z2m을 멈추고 **완전 파워사이클**로 루프를 끊는다. 이후 설정 변경은 현재 관측 계획(`NEXT.md`)과 함께 판단 |
 | `ERROR_WRONG_DIRECTION` | ASH 상태 어긋남. 크래시 루프 중 재기동이 겹칠 때 나온다 | 위와 동일. 포트 동시 점유부터 배제(`sudo fuser /dev/ttyS1`) |
 | `smhub-broker`의 `bind() failed 19 hci0` 도배 | 기동 시 재시도다. UART HCI가 붙으면 멈춘다(에러 19=ENODEV) | `hciconfig`가 `UP RUNNING`이면 정상. CPU 범인 아님 |
 | Web UI 앱 화면에 Radio/로그가 없다 | `smhub-services`가 안 깔렸다 (기본 설치 아님) | §2.5.1 |

@@ -53,8 +53,9 @@ It extends the vendor `CMD_DUO_LED` / `param_ptr` pattern from the mailbox examp
 
 ## Approach
 
-- Start from the FreeRTOS tree already in the BSP base: **`duo-buildroot-sdk-v2/freertos`**
-  (develop branch), and the working **`milkv-duo/duo-examples` → `mailbox-test`** example
+- Start from the FreeRTOS tree in the pinned BSP base: **`junghan0611/duo-buildroot-sdk-v2`
+  `feat/riscv64-nodejs-pure-cross` @ `087547cf8`**, under `freertos`, and the working
+  **`milkv-duo/duo-examples` → `mailbox-test`** example
   (big-core Linux app → mailbox driver → C906 FreeRTOS toggles the LED). Docs:
   `milkv.io/docs/duo/getting-started/rtoscore.md`. Preserve their structure first.
 - The C906 side may start in **C** before any attempt to bring Zig onto the small core.
@@ -68,4 +69,4 @@ It extends the vendor `CMD_DUO_LED` / `param_ptr` pattern from the mailbox examp
 - [ ] Freeze the mailbox command set and message framing (shared with homeagentd).
 - [ ] Sketch the C906 main loop: heartbeat + watchdog + mailbox command dispatch.
 
-Hardware-gated bring-up starts when a Duo S / SMHUB board is in hand.
+Hardware-gated bring-up starts on the RISC-V C906 boot lane; the Duo S / SMHUB board is already in hand.

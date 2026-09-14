@@ -48,7 +48,7 @@ Rules (inherited from repo invariants):
 ```text
 homeagentd/
   README.md          this file
-  build.zig          (TODO) pin Zig toolchain + aarch64-linux target
+  build.zig          (TODO) pin Zig toolchain + riscv64-linux-musl target
   src/
     main.zig         (TODO) 100ms tick loop entry
     tick.zig         (TODO) timerfd/epoll cadence
@@ -60,9 +60,9 @@ homeagentd/
 
 ## Board-less prep (do now)
 
-- [ ] Pin Zig version + `aarch64-linux` cross-build target in `build.zig`.
+- [ ] Pin Zig version + `riscv64-linux-musl` cross-build target in `build.zig`.
 - [ ] Decide the cadence primitive (`timerfd` + `epoll`) and write `tick.zig` against it.
 - [ ] Define the device-state table shape and the bounded transition contract.
 - [ ] Specify the mailbox command set shared with `../../c906/rtos-agent`.
 
-Hardware-gated work (Phase 0+) starts when a Duo S / SMHUB board boots in ARM mode.
+Hardware-gated work starts on the RISC-V C906 boot lane; the board is already in hand.

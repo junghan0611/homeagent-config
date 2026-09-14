@@ -4,7 +4,7 @@
 `PRODUCT-CONFIG-MODEL` · `SMHUB-CONTROL-MAP` · `SMHUB-MANUAL-REVIEW` 를 하나로 합쳤다.
 
 - **현재 지원 프로파일: `1.0.2` (2026-09-08 실측, §4.1).** 슬롯 A 부팅, RAUC boot status `good`.
-  **표마다 날짜를 따르라** — 아래 §4·§5는 이전 프로파일의 관측이고, 현재값이 아니다.
+  **표마다 날짜를 따르라** — §4의 0.9.8 로그와 §5.4·§5.5의 beta5 관측은 현재값이 아니다. §4.1·§5.6~§5.7.2는 1.0.2 현재면 또는 그 뒤의 날짜 붙은 관측이다.
 - **분석 대상(역사)**: 출고 **0.9.8** (무변형 SSH 실측, §4) + **1.0.0.beta5** (fastboot 정적 추출 §5
   + OTA 후 라이브 실측 §5.4). beta5는 **역사 관측**이며 현재 기기 상태가 아니다.
 - **좌표/크레덴셜**은 `PRIVATE.md`, 원본 아티팩트는 `captures/`(gitignored). **이 문서엔 secret 없음.**
@@ -191,8 +191,8 @@ stale seed.** backend.db.version 은 벤더가 seed 로 박은 값일 뿐 설치
 - **beta5 OTA 후 재확인(2026-07-01, §5.4)**: `/etc/ssh/ssh_host_*_key` **여전히 0바이트(mtime Dec 11 2025 그대로)**, OpenRC sshd
   **여전히 crashed**. 즉 릴노트 "Persistent Device Identity"(EEPROM에 hostname/SSH keys)는 **OTA 업그레이드 경로엔 적용 안 됨**
   (full Type-C flash 전용으로 추정). → **EEPROM 이 SSH 결함을 자동 해소할 것이란 가설은 반증됨.**
-- **현재(세션) 접속 경로**: 이번 세션에 띄운 **`/tmp/hk` 우회 sshd**(`sshd -h /tmp/hk -o UsePAM=no …`)가 :22 로 살아있고,
-  에이전트는 `.sshkey/id_ed25519`(OTA 넘어 p7 `~smlight/.ssh/authorized_keys` 지속)로 접속. **리부트하면 소실**(tmpfs).
+- **2026-07-01 당시 세션 접속 경로**: 그 세션에 띄운 **`/tmp/hk` 우회 sshd**(`sshd -h /tmp/hk -o UsePAM=no …`)가 :22 로 살아있고,
+  에이전트는 `.sshkey/id_ed25519`(OTA 넘어 p7 `~smlight/.ssh/authorized_keys` 지속)로 접속했다. **리부트하면 소실**(tmpfs). 이후 영구 복구 결과는 아래 2026-09-07 항목과 RUNBOOK §2를 따른다.
 - **OpenRC "started" 는 진실 아님**: `rc-status` 가 sshd·smhub-buzzer-daemon 을 started 로 표시해도 프로세스
   없음(crashed). **진실원 = `pgrep -x`/`ss :22`/`sshd -t`**, rc-status 아님. (제품 검수 전반의 running≠working 축.)
 - **접근 우회**: 이전 성공 SSH는 표준 sshd가 아니라 `/tmp/hk` 우회 sshd였고, 리부트로 소실됐다. Web UI Console
@@ -347,9 +347,9 @@ crash=pwmchip0 접근 실패 추정, 비결정적 보류.) **주의**: MQTT pub/
 
 ### 4.1 라이브 플랫폼 재측정 — **1.0.2** (2026-09-07, domoticz 이관 준비)
 
-**목적**: SMHub에 domoticz를 올릴 때의 **ABI 계약**과 **패키지 조달면**을 실기에서 확정. 접근은
-SSH가 아니라 **Web UI → Console(Web Terminal)** — `:22`는 여전히 refused(§3.6 host key 결함 유지).
-beta5 측정 → 같은 날 **`1.0.2` OTA(GLG 실행)** → 재측정한 값이 아래 오른쪽 열이다.
+**목적**: SMHub에 domoticz를 올릴 때의 **ABI 계약**과 **패키지 조달면**을 실기에서 확정. 이
+2026-09-07 측정 당시 접근은 SSH가 아니라 **Web UI → Console(Web Terminal)** 였다(`:22`가 그때는
+refused; §3.6). beta5 측정 → 같은 날 **`1.0.2` OTA(GLG 실행)** → 재측정한 값이 아래 오른쪽 열이다.
 
 | 축 | **1.0.2 (현재)** | 1.0.0.beta5 (같은 날 OTA 전) | 0.9.8 |
 |---|---|---|---|
@@ -392,16 +392,20 @@ beta5 측정 → 같은 날 **`1.0.2` OTA(GLG 실행)** → 재측정한 값이 
 
 | 있다 | 없다 |
 |---|---|
-| `libcurl.so.4` · `libsqlite3.so.3.51.2` · `libssl.so.3` · **`libmosquitto.so.1`(+`libmosquittopp`)** · `libjsoncpp.so.26` · `libz.so.1.3.2` · `libpython3.14.so.1.0` · `libstdc++.so.6.0.34` · `/usr/sbin/mosquitto` | **boost · lua · minizip · fmt · cereal** |
+| `libcurl.so.4` · `libsqlite3.so.3.53.2` · `libssl.so.3` · **`libmosquitto.so.1`(+`libmosquittopp`)** · `libjsoncpp.so.26` · `libz.so.1.3.2` · `libpython3.14.so.1.0` · `libstdc++.so.6.0.34` · `/usr/sbin/mosquitto` | **boost · lua · minizip · fmt · cereal** |
 
 → **우리가 조달할 것 = domoticz 본체 + boost(atomic/date_time/system/thread) + lua 5.3 + minizip.**
 나머지는 벤더 rootfs가 이미 지불했다. 단 rootfs는 ro·A/B라 **설치면은 p7 하나**(§3.7 패턴 (a)).
 
-**ABI 계약 (결정적)**: 기기 glibc **2.42** / Python **3.14.3** / GCC **15.2.0** 은 upstream Buildroot
-**태그 `2026.02`** 의 핀과 정확히 일치한다(`glibc 2.42-51-gcbf39c2` · `python3 3.14.3` ·
-`BR2_GCC_VERSION_15_X=15.2.0`). 벤더 rev `…-18-g60430d6802` 는 upstream에 없는 **벤더 자체 18커밋**이라
-bit-identical 재현은 불가하지만, **`2026.02`가 우리 크로스빌드의 재현 가능한 base**다. 최신 master
-(glibc 2.44)로 빌드하면 **2.42 기기에서 심볼이 안 맞아 실행 불가** — 여기서 버전을 위로 올리면 안 된다.
+**ABI 계약 (결정적)**: 1.0.2 기기는 glibc **2.42** / Python **3.14.6** / GCC **15.2.0** 이다
+[측정 2026-09-14, 실기 재확인 — `ld.so (Buildroot) stable release version 2.42` ·
+`python3 -V` → `3.14.6` · `libstdc++.so.6.0.34` · `libsqlite3.so.3.53.2` ·
+`/etc/os-release VERSION=2026.02-1281-g9407f694e5`].
+upstream Buildroot **태그 `2026.02`** 의 glibc **2.42** · GCC **15.2.0** 과 맞고, Python은
+**3.14.3**이지만 soname `libpython3.14.so.1.0`이 같아 이 차이는 ABI를 바꾸지 않는다(§4.1 표).
+벤더 rev `…-1281-g9407f694e5` 는 upstream에 없는 벤더 커밋이라 bit-identical 재현은 불가하지만,
+**`2026.02`가 우리 크로스빌드의 재현 가능한 base**다. 최신 master(glibc 2.44)로 빌드하면
+**2.42 기기에서 심볼이 안 맞아 실행 불가** — 여기서 버전을 위로 올리면 안 된다.
 
 ---
 
@@ -541,8 +545,9 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
   아니다)라 **하드웨어 자동 RTS 경로 자체가 없다.** 즉 `rtscts: true`는 핀 배선을 따지기 전에
   드라이버에서 막힌다. 게다가 DT에 `dmas`도 없어(`failed to request DMA`) **UART가 PIO로 돈다** —
   1코어에서 부하가 걸리면 RX 오버런이 구조적으로 가능하다. 실제로 연속 페어링에서
-  `ASH_NCP_FATAL_ERROR`로 z2m이 죽었고, 대응은 `advanced.adapter_concurrent: 2`다
-  (`smhub/RUNBOOK.md` §6.5). **NCP가 no-flow 빌드인지 stock hw인지는 여전히 미확인**이고,
+  `ASH_NCP_FATAL_ERROR`가 관측됐고, 당시 `advanced.adapter_concurrent`는 **1~2** 범위였다
+  (`smhub/RUNBOOK.md` §6.5). 이 관측은 기본값 **16**에서의 원인을 가르는 대조가 아니며,
+  **NCP가 no-flow 빌드인지 stock hw인지는 여전히 미확인**이고,
   `.gbl`이 없어 추출도 안 된다.
   ✅ **[2026-09-09 실측 — SoC 쪽 절반만 닫혔다]** 원문이 남겨둔 *"`ttyS1` RTS/CTS 배선
   미검증"* 을 잰다. **SoC 쪽 패드는 할당돼 있다. MG24까지의 PCB 배선은 여전히 미검증이다** —
@@ -571,13 +576,14 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
   → **현재 7.4.2는 hw_flow도 sw_flow도 아닌 `no_flow` 빌드다.** 호스트 RTS로도, XON/XOFF로도
   NCP 송신을 멈출 수 없다. (엄밀히는 "RTS 패드가 MG24 CTS에 실제로 안 닿아 있다"도 같은 관측을
   낳지만, 어느 쪽이든 **호스트가 NCP를 멈춰 세울 수단이 지금 하나도 없다**는 결론은 같다.)
-  ⚠️ **이걸 `ASH_NCP_FATAL_ERROR`의 원인으로 읽으면 틀린다** (2026-09-09 자기정정). 그 크래시는
-  **바이트를 흘린 게 아니라 CPU에 굶은 것**이고, 이미 어제 측정으로 확정돼 있다 —
-  `smhub/RUNBOOK.md` §6.5.2: ASH 카운터가 `CRC/Comm/Bad length/Out of buffers 전부 RX=0`,
-  `ACK TX=858`, 그리고 `/proc/tty/driver/serial`에 `oe:`/`bo:`가 **0**(카운터는 0이 아닐 때만
-  출력된다). 같은 시각 `CPU0 100%`, `node 78.2%`. 즉 **호스트가 깨끗이 받고도 ACK를 제때 못
-  보낸 것**이다. no_flow는 이 실패의 원인이 아니라 **여유를 못 주는 조건**이고, 부하가 오르면
-  언젠가 물리 오버런으로도 갈 수 있는 열린 문일 뿐이다(현재까지 `oe=0`).
+  ⚠️ **이걸 `ASH_NCP_FATAL_ERROR`의 원인으로 읽으면 틀린다** (2026-09-09 자기정정). 당시
+  ASH 카운터는 `CRC/Comm/Bad length/Out of buffers 전부 RX=0`, `ACK TX=858`,
+  `/proc/tty/driver/serial`의 `oe:`/`bo:`도 **0**(카운터는 0이 아닐 때만 출력), 같은 시각
+  `CPU0 100%`, `node 78.2%`였다. 따라서 **그 1~2 동시 조건에서** 바이트 드롭보다 호스트 ACK
+  지연과 정합한다. 그러나 이 관측만으로 **기본값 16에서 1코어가 ACK 마감을 못 지킨다**고 일반화할
+  수는 없다 — 현재 ASH 관측을 16 조건과 대조해야 한다(`NEXT.md` 2026-09-14 NOW). no_flow는 이
+  실패의 원인이 아니라 **여유를 못 주는 조건**이고, 부하가 오르면 언젠가 물리 오버런으로도 갈 수
+  있는 열린 문일 뿐이다(현재까지 `oe=0`).
   ⛔ **그래서 stock `ncp-uart-hw`(hw_flow) 리플래시는 하면 안 된다.** hw_flow NCP는 자기 CTS
   (=호스트 RTS)로 송신을 게이팅하는데, **그 선이 MG24까지 닿는지 증명된 바 없다**(위 실측이
   정확히 그 지점에서 갈린다). 닿으면 커널이 RTS를 상시 assert하므로 지금과 **동일**하고(개선

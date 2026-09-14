@@ -929,6 +929,53 @@ NODE_OPTIONS=…  /opt/bin/node -p v8.getHeapStatistics().heap_size_limit  →  
 *"14대급에서 `info`는 그 자체가 CPU 부하라 상시로 두지 않는다."* 켜기 전에 그 줄을 안 읽었다.
 §6.5.2a의 「로깅이 혼입」 항목은 추측이 아니라 **이 리포가 이미 적어 둔 것**이다.
 
+### 6.5.2a-보정2 로깅 혼입은 **약해졌다** — 그리고 `tune.sh`가 이미 다 적어 뒀다 [측정 2026-09-14 17:05]
+
+§6.5.2a는 혼입 둘을 대등하게 놓고 로깅 쪽 메커니즘을 「그럴듯하다」고 적었다. **둘 다 틀렸다.**
+
+**(1) 메커니즘은 내 추론이 아니라 이 리포가 이미 확정해 둔 것이다.** `smhub/tune.sh:38-43`:
+
+> *"`logger.ts:192-199` skips the message lambda entirely below the level … At **info** this board
+> logged **~89 lines in the 30s before a crash**, and stdout is a regular file which Node backs with
+> **SyncWriteStream** (`is_main_thread.js:50-66`) — **a blocking write on the very loop that owes the
+> NCP an ACK.** Kept `log_output` at `[console]` **so the path does not move.**"*
+
+즉 「info 로깅이 ASH 마감을 잡아먹는다」는 소스 인용까지 붙은 **기존 판정**이다. 나는 그걸 안 읽고
+켰고, 다시 발견한 척 적었다.
+
+**(2) 그런데 오늘 크래시에는 그 조건이 없었다.** 실제로 셌다:
+
+```
+크래시(06:08:52) 직전 30초    32줄   ← 대부분 크래시 자신의 ASH 카운터 덤프(~25줄)
+평범한 30초 창(06:04:00~30)     0줄
+인스턴스 전체(502초)           77줄
+```
+
+**`tune.sh`의 89줄/30초는 17대 페어링 인터뷰 버스트에서 잰 값**이고, **2대 유휴에서는 로깅이
+사실상 0**이다. → **로깅이 이벤트루프를 굶겼다는 설명은 이 크래시에 안 맞는다.**
+§6.5.2a에서 내가 「크래시 직전 74초간 publish가 없었다」고 약하게 적은 것이, 실은 **혼입을
+거의 배제하는 쪽**이었다. 남는 혼입은 **에이전트 SSH 프로빙(92초 전)** 하나이고, 그것도 확정이 아니다.
+
+**(3) 다만 내 변경 중 한 조각은 실제로 계약을 깼다 — `log_output: file`.**
+
+```
+console 출력  → /var/log/zigbee2mqtt.log → /tmp/zigbee2mqtt.log   tmpfs (RAM)
+file 출력     → /opt/zigbee2mqtt/data/log/…                        mmcblk0p7 = eMMC
+```
+
+`tune.sh`가 *"so the path does not move"* 라고 지킨 그 path가 **tmpfs**였다. 내가 더한 `file`은
+publish마다 **eMMC로 블로킹 쓰기**를 하나 더 만든다 — 지금은 1.7건/분이라 미미하지만,
+**페어링 버스트에서는 정확히 그 89줄/30초가 eMMC로 간다.** 재페어링(2단계) 전에 반드시 뺀다.
+
+→ **그리고 `file`은 애초에 불필요했다.** 콘솔 경로가 이미 `/tmp/zigbee2mqtt.log`로 떨어지고
+카운터도 거기 남는다(4일 39 B → 지금 100 KB). `file`이 주는 건 **재부팅 생존**뿐이다.
+**권고: `log_output`을 `[console]`로 되돌리고 `log_level: info`만 남긴다.** 그러면 튜닝 기준선과의
+차이가 한 칸으로 줄고 `tune.sh`의 path 불변식이 회복된다.
+
+⚠️ 판정 이력을 남긴다: 이 절은 오늘 **세 번** 바뀌었다 — 「로깅이 원인일 수 있다」(§6.5.2a) →
+「우리 문서가 미리 경고했다」(§6.5.2c) → **「그 경고의 조건이 오늘은 없었다」(여기)**.
+매번 새로 측정해서 좁힌 것이고, 마지막이 내 쪽에 유리한 방향이라 특히 근거를 붙여 둔다.
+
 ### 6.5.2b 정상 구간 기준선 — **1시간, 오류 0** [측정 2026-09-14 16:09:24 KST]
 
 §6.5.2a의 크래시 25초 뒤 자동 재기동한 인스턴스가, 정확히 1시간 뒤 **첫 매시간 CSV 덤프**를 찍었다.

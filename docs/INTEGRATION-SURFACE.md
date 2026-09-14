@@ -3,7 +3,7 @@
 > **초안 — 리뷰 전. 채택 결정 아님.**
 
 이 문서는 `docs/ECOSYSTEM-PORTFOLIO.md`의 §1 층위 모델·§0.1 두 레인 규약·근거상태 표기를
-그대로 이어 쓴다. 대상은 `~/repos/3rd/milkv/slzb-os-scripts` README의 **Integrations 표**
+그대로 이어 쓴다. 대상은 `~/repos/3rd/smlight-smhub/slzb-os-scripts` README의 **Integrations 표**
 (총 37행, `docs/modules/*.md` 각 1개) — `Domoticz`는 제외(§5·§6에서 이미 끝남). **36개**를 다룬다.
 
 **답하는 질문**: 우리가 무엇을 발행하면 몇 개가 비용 0으로 붙고, 온박스 코드를 실제로
@@ -369,4 +369,4 @@ Buildroot로 빌드 → host `opkg-build`로 .ipk 포장 → `opkg-make-index`�
 |---|---|
 | 층위 모델·근거상태 규약·Buildroot 실사 방법론(짝 문서) | `docs/ECOSYSTEM-PORTFOLIO.md` |
 | 보드 기준(Duo S 512MB) | `docs/TARGET_DEVICE.md` |
-| 1차 사료 | `~/repos/3rd/milkv/slzb-os-scripts/README.md`, `docs/modules/*.md` |
+| 1차 사료 | `~/repos/3rd/smlight-smhub/slzb-os-scripts/README.md`, `docs/modules/*.md` |

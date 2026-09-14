@@ -244,4 +244,6 @@ This repo is a multi-board record. Active and parked lanes:
 - [`docs/THP23-LIBERATION.md`](docs/THP23-LIBERATION.md) — parked 128MB-evidence research.
 - [`VERSION.md`](VERSION.md) — stack / version / physical device matrix.
 - `bsp/` — in-repo Duo S RISC-V board configs + build / flash scripts.
-- Local clones: `~/repos/3rd/milkv/` (`duo-buildroot-sdk-v2`, milkv.io docs, SMHUB-OS release notes).
+- Local clones, two roots: `~/repos/3rd/milkv/` (`duo-buildroot-sdk-v2`, milkv.io docs) and
+  `~/repos/3rd/smlight-smhub/` (vendor SMHub/SLZB: RTOS stack, `rtos-config`, `slzb-os-scripts`,
+  `smhub-flasher`, SMHUB-OS release notes). Split 2026-09-14.

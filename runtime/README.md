@@ -232,7 +232,10 @@ C906L FreeRTOS), **then diff against the SMHUB product** to learn exactly what t
 tuned to reach mainline kernel 6.18 + mainline bootloader + Buildroot 2025.11. That diff
 is itself portfolio content: "here is what a shipped product changed over the dev SDK."
 
-Reference clones (local, `~/repos/3rd/milkv/`, not vendored into this repo):
+Reference clones (local, not vendored into this repo). **Two roots since 2026-09-14**:
+`~/repos/3rd/milkv/` for Milk-V/Buildroot, `~/repos/3rd/smlight-smhub/` for the SMHub/SLZB vendor
+side (this is where the whole `smlight-smhub` org clone lives — `framework-sg2000-rtos`,
+`platform-sg2000`, `rtos-config`, `smhub-addons`, `smhub-rtos-dev`, `open-amp`, `libmetal`, `nanopb`).
 
 | Repo | Role |
 |------|------|
@@ -240,8 +243,8 @@ Reference clones (local, `~/repos/3rd/milkv/`, not vendored into this repo):
 | `milk-v/milkv.io` | Milk-V official docs. Key pages under `docs/duo/getting-started/`: `duos.md` (ARM/RISC-V switch), `boot.md` (L0), `rtoscore.md` (C906L FreeRTOS mailbox, L2), `8051core.md` (L1), `buildroot-sdk.md` (build) |
 | `milkv-duo/duo-examples` → `mailbox-test` | concrete big-core-Linux → C906L-FreeRTOS mailbox example (L2 starting point) |
 | `milkv-duo/duo-8051` | 8051 firmware source (SDCC; L1 starting point) |
-| `smlight-tech/slzb-os-scripts` | **L4 reference only** — Berry-language on-device automation API for SLZB/SLZB-OS coordinators, *not* a build system |
-| SMHUB-OS release notes (`smhub-os-release-notes.org`) | product version/tuning evidence (the table above) |
+| `smlight-tech/slzb-os-scripts` (in `smlight-smhub/`) | **L4 reference only** — Berry-language on-device automation API for SLZB/SLZB-OS coordinators, *not* a build system |
+| SMHUB-OS release notes (`smlight-smhub/smhub-os-release-notes.org`) | product version/tuning evidence (the table above) |
 
 ## Phased plan (hardware-gated)
 

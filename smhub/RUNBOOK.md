@@ -876,6 +876,75 @@ CRC · Comm · Length(min/max) · Bad controls · Bad lengths · Bad ACK numbers
 ⚠️ **여전히 `adapter_concurrent: 1`이다.** §6.5.2의 한정이 이 표본에도 그대로 걸린다 —
 기본값 16 대조 전에는 「1코어라서」로 일반화하지 않는다.
 
+### 6.5.2b 정상 구간 기준선 — **1시간, 오류 0** [측정 2026-09-14 16:09:24 KST]
+
+§6.5.2a의 크래시 25초 뒤 자동 재기동한 인스턴스가, 정확히 1시간 뒤 **첫 매시간 CSV 덤프**를 찍었다.
+`log_level: info`로 올린 목적이 이것이다.
+
+```text
+[ASH COUNTERS] 2732,512,126,385,0,0,0,0,8131,385,384,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+```
+
+**필드 순서 27칸** [읽음 보드 `zigbee-herdsman 10.8.0` `ash.ts:1866-1891` `readAndClearCounters()` —
+`UartAshCounters` 선언 순서 그대로. works-nixos-zigbee `lab/2026-09-14-…` §5.1과 일치]:
+
+```
+ 1 txData(B)  2 txAllFrames  3 txDataFrames  4 txAckFrames  5 txNakFrames
+ 6 txReDataFrames  7 txN1Frames  8 txCancelled
+ 9 rxData(B) 10 rxAllFrames 11 rxDataFrames 12 rxAckFrames 13 rxNakFrames
+14 rxReDataFrames 15 rxN1Frames 16 rxCancelled
+17 rxCrcErrors 18 rxCommErrors 19 rxTooShort 20 rxTooLong 21 rxBadControl
+22 rxBadLength 23 rxBadAckNumber 24 rxNoBuffer 25 rxDuplicates 26 rxOutOfSequence
+27 rxAckTimeouts          ← 17번부터 끝까지가 전부 오류 카운터
+```
+
+| 항목 | 값 |
+|---|---|
+| tx | `txData 2732 B` · `txAllFrames 512` · `txDataFrames 126` · **`txAckFrames 385`** |
+| rx | `rxData 8131 B` · `rxAllFrames 385` · **`rxDataFrames 384`** · `rxAckFrames 0` |
+| **오류 17~27** | **전부 0** (합계 0) |
+
+**대조 — x86과 프레임률이 같다.** 정규화하면:
+
+```
+우리   riscv64 1코어, 2대   384 / 1h / 2대        = 192 프레임/시간/기기
+저쪽   x86 다코어, 16대     326,956 / 114h / 16대 = 179 프레임/시간/기기
+      [인계, works-nixos-zigbee 측정 — 그쪽 lab 문서 §5.2]
+```
+
+아침에 따로 잰 이벤트율(우리 0.83 vs 저쪽 0.80 건/분/기기)과 **독립적으로 같은 결론**이다.
+무부하 TS011F의 부하는 호스트 아키텍처를 안 가린다.
+
+### 🔍 `rxAckFrames = 0`은 크래시 증상이 아니다 — 이 NCP의 정상이다
+
+§6.5.2a 크래시 덤프의 `ACK frames : RX=0, TX=93`은 「호스트가 93개 보냈는데 하나도 못 받았다」로
+읽히기 쉽다. **틀린 읽기다.** 위 정상 1시간 구간도 `rxAckFrames 0` / `txAckFrames 385`다.
+
+→ 이 NCP는 **standalone ACK 프레임을 안 보내고 DATA 프레임에 piggyback한다.**
+`rxAckFrames=0`은 어느 구간에서나 나오므로 **고장의 증거로 쓸 수 없다.**
+§6.5.2(2026-09-08)의 `ACK frames : RX=0, TX=858`도 같은 이유로 재해석해야 한다 —
+거기서 의미 있는 것은 `RX=0`이 아니라 **`Retry dupes RX=20`과 `ACK timeouts RX=2`**다.
+
+⚠️ 이슈 [#11](https://github.com/junghan0611/homeagent-config/issues/11)에 이 숫자를 근거로
+넣었다면 그 줄은 근거가 못 된다. 위 두 구간 대조가 그것을 막았다.
+
+### 전조가 없다
+
+```
+15:00:31  info 전환 · 재기동
+15:08:52  💥 크래시    — 오류 카운터 전부 0, ACK timeouts RX=2
+15:09:17  자동 복구
+16:09:24  ✅ 매시간 덤프 — 오류 카운터 전부 0, ACK timeouts 0
+16:35     재기동 0회 · error 0건
+```
+
+**정상 구간은 완벽히 깨끗하고, 죽을 때만 `ACK timeouts`가 찍힌다.** 서서히 나빠지다 무너지는
+열화가 아니라 **멀쩡하다가 한 번에 가는** 모양이다. 「마감시간을 놓친다」는 진단과 방향은 맞지만,
+**확증에는 여전히 `adapter_concurrent: 16` 대조가 필요하다**(§6.5.2·§6.5.2a와 같은 한정).
+
+📌 `[NCP COUNTERS]`(42칸, `791,496,229,99,…`)도 같이 찍힌다. `EmberCounterType` enum 순서를
+아직 대조하지 않아 **디코드하지 않았다.**
+
 ### 6.5.3 당시 완화 — `adapter_concurrent`를 내렸다 ✅ 적용됨 (⚠️ 불충분)
 
 ember 어댑터의 in-flight 기본이 **16**이다 [읽음 `zigbee-herdsman/src/adapter/ember/adapter/emberAdapter.ts:278`

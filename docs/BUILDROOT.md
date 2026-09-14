@@ -31,7 +31,7 @@ carries common Buildroot package support; product configuration remains in this 
 - `bsp/board/milkv-duos-musl-riscv64-sd/defconfig` — RISC-V + musl, microSD
 - `bsp/board/milkv-duos-musl-riscv64-emmc/defconfig` — RISC-V + musl, eMMC
 - `bsp/buildroot/milkv-duos-musl-riscv64-emmc_defconfig` — Node/Z2M userspace base
-- `bsp/board/milkv-duos-glibc-arm64-emmc/defconfig` — arm64 board config, **current dev lane**
+- `bsp/board/milkv-duos-glibc-arm64-emmc/defconfig` — arm64 board config, **the Node.js detour lane** (kept working; riscv64 is the destination — `README.md` 「Current Target」)
 - `bsp/buildroot/milkv-duos-glibc-arm64-emmc_defconfig` — arm64 userspace: Bootlin GCC 13 + Node 22
 - `bsp/overlay/common/` — rootfs files baked into the image (wlan0 autostart)
 

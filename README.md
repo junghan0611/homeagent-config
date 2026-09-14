@@ -18,7 +18,11 @@ The work is not to invent a new Matter or Zigbee stack. Buildroot, Linux, Silico
 
 > boot a small hub-class board with an open image, own the onboard radio, and document a reproducible path from BSP to Matter/Zigbee services.
 
-On SG2000-class hardware the big core boots **either ISA by a physical slide switch** — a switch, not a fuse, so it is reversible. **RISC-V C906 (`riscv64-linux-musl`) remains the product ISA**, but since **2026-07-23 the development lane is arm64/glibc**, where Node 22 + Zigbee2MQTT build with no downstream patches; the RISC-V Node lane is **parked** pending upstream. As of **v2026.7.24** the arm64 image is *flash-and-go*: flash → switch → dongle brings Z2M up with no config edits, proven on a second board.
+**The board picks the ISA, not the other way round.** On SG2000-class hardware the big core boots either ISA by a physical slide switch — a switch, not a fuse, so it is reversible — and which one we run follows whichever board the work is standing on.
+
+Right now that board is the **SMHUB Nano**, because it arrives already equipped and costs far less hand-work than bringing Milk-V up ourselves. It is **riscv64**, so that is where the current work is.
+
+**Milk-V Duo S on arm64 is a road we have driven, and the reason was Node.js.** `BR2_aarch64` is a first-class architecture for Buildroot's `nodejs` package while riscv64 is not, so arm64 was how the Node/Zigbee2MQTT stack could stand up without a downstream toolchain fork. That lane produced a real result — as of **v2026.7.24** the arm64 image is *flash-and-go*: flash → switch → dongle brings Z2M up with no config edits, proven on a second board. **When building Node for riscv64 is fully worked out, Duo S moves to riscv64 too and the two boards converge.** The product ISA and runtime target were always `riscv64-linux-musl`; arm64 was the detour that kept the stack moving, not a change of destination.
 
 The runtime design — a **Zig 100ms hub state machine** on Linux plus a **C906L FreeRTOS coprocessor base** owning real-time pins over the SoC mailbox — is the public reconstruction of a hub state machine previously shipped as proprietary work: the architecture is open even though the production code is not. See [`runtime/README.md`](runtime/README.md), and [`NEXT.md`](NEXT.md) for the lane in flight.
 
@@ -31,12 +35,12 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 | Axis | Direction |
 |------|-----------|
 | Main lane | minimal hub BSP + runtime stratification |
-| Host | SOPHGO SG2000 / Milk-V Duo S class |
-| Big-core boot | **arm64/glibc = development lane** (2026-07-23~, flash-and-go since v2026.7.24); **RISC-V C906 = product ISA, parked** (upstream Node) |
+| Host | SOPHGO SG2000 (SMHUB Nano / Milk-V Duo S) |
+| **Board in hand now** | **SMHUB Nano MG24** — arrives equipped, least hand-work, **riscv64**. Vendor OS, worked as a system-application developer |
+| Full-stack board | **Milk-V Duo S** (SG2000, dual-ISA by slide switch, we own every layer) |
+| Big-core boot | **riscv64 is the destination and the product ISA** (`riscv64-linux-musl`). **arm64 on Duo S is a driven detour** taken for one reason — Buildroot's `nodejs` supports `BR2_aarch64` and not riscv64 — and it reached flash-and-go in v2026.7.24. Converges back to riscv64 once Node builds there |
 | Runtime | **Zig 100ms state machine on Linux + C906L FreeRTOS mailbox coprocessor base** |
-| Core board | **Milk-V Duo S** (SG2000, dual-ISA by slide switch, full-stack ownership) |
-| Commercial reference | **SMHUB Nano MG24** (vendor OS, system-application approach) |
-| BSP | Buildroot SDK lineage, **both ISA lanes** built in-repo (`bsp/`) |
+| BSP | Buildroot SDK lineage, **both ISA lanes** built in-repo (`bsp/`) — arm64 kept working, riscv64 is where it lands |
 | RAM target | 512MB-class for Z2M + MQTT + matter.js/Go evidence |
 | Radio | Duo S = **USB ZBDongle-E** (EmberZNet 7.4.2); SMHub = onboard EFR32MG24 → **MG26 / Series 3** trajectory ([`docs/MULTIPROTOCOL.md`](docs/MULTIPROTOCOL.md)) |
 | Protocol | Zigbee NCP **or** Thread RCP by firmware switching (single-chip concurrent = chip-timing question) |

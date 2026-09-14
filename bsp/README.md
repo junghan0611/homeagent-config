@@ -46,9 +46,11 @@ There is also no MG24 radio on this board, so Zigbee/EZSP work does not happen h
 SG2000 carries an ARM Cortex-A53 **and** a RISC-V C906 on one die and boots one or the other.
 We build **both** lanes:
 
-- **arm64 / glibc — development lane** (2026-07-23~). `BR2_aarch64` is a first-class
-  architecture for Buildroot's `nodejs` package, so the Node/Z2M stack stands up here without
-  a downstream toolchain fork. This is where we move fast right now.
+- **arm64 / glibc — the Node.js detour** (2026-07-23~). `BR2_aarch64` is a first-class
+  architecture for Buildroot's `nodejs` package and riscv64 is not, so this is where the
+  Node/Z2M stack stands up without a downstream toolchain fork. It reached flash-and-go in
+  v2026.7.24 and stays working — but it is a way around one blocker, **not the destination.**
+  **The board in hand is the SMHUB Nano (riscv64)**, so day-to-day work is not here.
 - **riscv64 / musl — product lane.** Still the product ISA and the open-ISA thesis. Parked
   while the Node 22 support question sits with upstream (`duo-buildroot-sdk-v2#74`).
 
@@ -72,7 +74,7 @@ The build log carries the same fact earlier — grep it for `BOOT_CPU=aarch64` o
 
 | Board | ISA / libc | Storage | Flash path |
 |-------|-----------|---------|------------|
-| `milkv-duos-glibc-arm64-emmc` | arm64 / glibc | eMMC | `usb_dl` in USB recovery mode (see below) — **current dev lane** |
+| `milkv-duos-glibc-arm64-emmc` | arm64 / glibc | eMMC | `usb_dl` in USB recovery mode (see below) — **the Node.js detour, flash-and-go** |
 | `milkv-duos-glibc-arm64-sd` | arm64 / glibc | microSD | `dd` the `.img` — eMMC untouched (SD-vs-eMMC boot priority unverified) |
 | `milkv-duos-musl-riscv64-sd` | riscv64 / musl | microSD | `dd` the `.img` — reversible, eMMC untouched |
 | `milkv-duos-musl-riscv64-emmc` | riscv64 / musl | eMMC | `usb_dl` in USB recovery mode — product lane, parked |
@@ -81,7 +83,7 @@ The build log carries the same fact earlier — grep it for `BOOT_CPU=aarch64` o
 
 ```bash
 ./bsp/setup.sh                                   # clone + pin SDK into bsp/sdk/
-./bsp/build.sh milkv-duos-glibc-arm64-emmc       # ARM, eMMC       (current dev lane)
+./bsp/build.sh milkv-duos-glibc-arm64-emmc       # ARM, eMMC       (Node.js detour lane)
 ./bsp/build.sh milkv-duos-musl-riscv64-sd        # RISC-V, microSD (script default)
 ./bsp/build.sh milkv-duos-musl-riscv64-emmc      # RISC-V, eMMC
 ```

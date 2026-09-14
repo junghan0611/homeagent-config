@@ -9,7 +9,9 @@ HomeAgent는 **미니멀 스펙 오픈소스 hub BSP** 리포다. 목표는 닫�
 
 RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, matter.js, Go controller, Flutter, Hailo/sLLM을 검증한 **high-spec origin lane**이다. 현재 제품 크기의 중심은 **SG2000 / SMHUB Nano / Milk-V Duo S / 512MB / onboard EFR32** 쪽이다.
 
-**런타임 중심축 (2026-07-15)**: SG2000/Duo S는 **RISC-V C906 boot lane**(제품 ISA; 런타임 타깃 `riscv64-linux-musl`, 2026-07-14 실기 부팅 확인). 그 위에 **Zig 100ms 상태머신 `homeagentd`**, 그 아래에 **C906L FreeRTOS mailbox 코프로세서**를 둔다. 공개 쇼케이스 베이스는 이 **RISC-V Linux ↔ C906L mailbox 연동**이다. arm64 빌드는 historical(제품 아님). Tuya THP23-ZB-X는 능동 작업이 아니라 **128MB 하한 증거로만 보존**한다. 상세: `runtime/README.md`.
+**런타임 중심축 (2026-07-15, ISA 서술 2026-09-14 정정)**: 런타임 타깃은 **`riscv64-linux-musl`**이고 그 위에 **Zig 100ms 상태머신 `homeagentd`**, 아래에 **C906L FreeRTOS mailbox 코프로세서**를 둔다. 공개 쇼케이스 베이스는 이 **RISC-V Linux ↔ C906L mailbox 연동**이다. Tuya THP23-ZB-X는 능동 작업이 아니라 **128MB 하한 증거로만 보존**한다. 상세: `runtime/README.md`.
+
+**ISA는 보드가 정한다 (GLG 2026-09-14).** 지금 서 있는 보드는 **SMHUB Nano**다 — 갖춰서 오기 때문에 Milk-V를 우리 손으로 세우는 것보다 품이 훨씬 덜 든다. 그 보드가 riscv64라 지금 작업이 riscv64다. **Duo S의 arm64는 「해봤다」이고 이유는 Node.js 하나였다** — Buildroot `nodejs`가 `BR2_aarch64`만 1급으로 지원한다. 그 레인은 v2026.7.24 flash-and-go라는 실물 결과를 냈으니 폄하하지 않는다. **riscv64 Node 빌드가 풀리면 Duo S도 riscv64로 넘어가 SMHub과 한 축이 된다.** 그러니 arm64는 «historical»(폐기)이 아니라 **«우회로»**이고, 목적지는 처음부터 riscv64였다.
 
 살아있는 문서 세트는 `README.md`, `AGENTS.md`, `NEXT.md`, `CHANGELOG.md`, `ROADMAP.md`다. 장비·버전·스택 상태는 `VERSION.md`로 합친다. br/beads는 폐기되었고 다시 도입하지 않는다.
 

@@ -1193,6 +1193,28 @@ HOMEAGENT_BSP_PROFILE=minimal ./bsp/build.sh milkv-duos-glibc-arm64-emmc
 
 - **보관 위치**: branch `feat/riscv64-nodejs-pure-cross` @ `087547cf8` (upstream base `ad920f839`). 전 `develop` 변이는 `stash@{0}`.
 - **재개 조건**: upstream [`milkv-duo/duo-buildroot-sdk-v2#74`](https://github.com/milkv-duo/duo-buildroot-sdk-v2/issues/74) 답변, 또는 arm 레인에서 Z2M 스택이 서서 riscv로 되돌릴 여유가 생겼을 때.
+  **ISA 방향 자체는 GLG가 2026-09-14에 정리했다** — arm64는 폐기된 역사가 아니라 **Node.js 하나 때문에 낸 우회로**이고, riscv Node가 풀리면 Duo S도 riscv로 넘어가 SMHub과 한 축이 된다(`README.md` 「Current Target」).
+- 🔍 **2026-09-14 실측 — 질문이 좁아졌다. 답이 나온 게 아니다.** SMHub이 riscv64 Node를 **실제로 돌리고 있다**:
+
+  ```
+  /opt/bin/node -p ...  →  v22.22.0 · arch=riscv64 · platform=linux
+  ICU ok (en-US) · V8 12.4.254.21-node.33 · 벤더 ipk `nodejs_22.15.1-3_riscv64.ipk`
+  ```
+
+  즉 **「riscv64 SG2000에서 Node 22가 도는가」는 닫혔다 — 돈다.** 우리 riscv 합격선 중
+  **ICU 연결**도 여기서 충족된 예를 본 셈이다. **그러나 우리 막힌 지점을 풀어 주지는 않는다**,
+  이유 셋 [측정 2026-09-14]:
+
+  | 벤더 것 | 우리 계약 |
+  |---|---|
+  | **glibc** (SMHub rootfs) | `riscv64-linux-musl` — 제품 ISA/libc |
+  | **네이티브 빌드** — `process.config.variables`의 `host_arch == target_arch == riscv64` | **pure-cross**. 우리가 막힌 자리가 정확히 크로스 링크(host generator에 target sysroot가 섞임)다 |
+  | deps **언번들** — `libuv.so.1`·`libcares.so.2`·`libnghttp2.so.14`·`libz.so.1`을 시스템 `.so`로 | 우리는 번들 |
+
+  → **「riscv64에서 Node가 되나」(닫힘) 와 「pure-cross musl로 우리가 굽나」(열림)는 다른 질문이다.**
+  벤더 방식을 그대로 베끼면 네이티브 빌드 + glibc + 언번들이 되고, 그건 우리 제품 계약을 바꾸는
+  결정이지 우회가 아니다. **다만 참고 좌표로는 값이 크다** — 같은 SoC에서 같은 메이저 버전이
+  ICU까지 붙어 도는 실물이 손 안에 있다.
 - **멈춘 지점**: Node/ICU host generator 링크에 target pkg-config의 `-L<riscv64-musl-sysroot>/usr/lib`가 섞이고, target sysroot의 8-byte musl compatibility archive가 host library를 가린다. `-lm` A안은 반증되어 폐기.
 - **유지보수 예산(양 레인 공통)**: Buildroot recipe·defconfig·overlay + 작고 검증 가능한 compatibility patch 소수까지만. Node.js/V8/libc/toolchain downstream fork와 늘어나는 patch series는 금지.
 - **riscv 합격선(재개 시 복원용)**: `GLIBC_*` 0건; `GLIBCXX <= 3.4.28`; Node ABI 127; V8 embedded blob 존재; stock C906/RVV 0.7 ISA·musl interpreter; target npm/corepack 부재; ICU 연결; QEMU·native target 실행 0.

@@ -4,8 +4,8 @@
 
 > **Scope: origin lane.** The commands here (`./run.sh android …`, `ha-deploy`,
 > Yocto/RPi5/Android tooling) target the **high-spec origin lane**, not the
-> active SG2000 minimal-hub runtime. For the main lane (ARM A53 boot + Zig +
-> C906L), see [`../runtime/README.md`](../runtime/README.md). The SG2000
+> active SG2000 minimal-hub runtime. For the main lane (**riscv64 C906** + Zig +
+> C906L coprocessor), see [`../runtime/README.md`](../runtime/README.md). The SG2000
 > Buildroot build recipe will land there as it is grounded.
 
 ---

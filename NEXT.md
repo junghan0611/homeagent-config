@@ -13,13 +13,132 @@
 - [x] **15. 이기종 허브 두 대가 한 화면에 섰다 (2026-09-10)**. 마스터 domoticz(GLG 노트북)에 x86 minipc=`gq-node-01`(16대) + SMHub=`gq-node-02`(2대) = 18기기
 - [x] **16. 보드에서 domoticz 하차 — 끝났다 (2026-09-10)**. 마스터 domoticz가 우리 브로커에 직접 붙는다. `opkg remove domoticz` 완료, MQTT 링크가 `:6144`보다 풍부하다(22개 vs 8개)
 - [ ] **17. RTOS/rpmsg 축 — 1.0.2 재확인 + 라디오 비연결 경계 (2026-09-10)**. beta5(§5.4)에서 이미 실측된 축이고, 오늘 새로 얻은 것은 **MG24가 이 축에 없다**는 경계다. `smhub-broker`는 MQTT 브로커가 아니라 코프로세서 RPC 데몬
-- [x] **18. 런타임 조이기 — available 232 → 302 MB (2026-09-10)**. domoticz 제거(+14) + `smhub-services` 정지(+81). UDS API는 켜고 끄는 것으로 남긴다
+- [x] **18. 런타임 조이기 — available 232 → 302 MB (2026-09-10)**. domoticz 제거(+14) + `smhub-services` 정지(+81). UDS API는 켜고 끄는 것으로 남긴다. ⚠️ **2026-09-14: 스위치가 「켠」 상태로 남아 있었다** — 아래 NOW 참조. 조이기 자체는 유효하다
 
-현재 좌표: 1~5·9·10·12·14·15·16·18 완료 → **17이 열린 발견 축** → 11은 z2m 초기화 + 조이기로 조건이 바뀌어 곡선 재측정 → 13 벤더 대기 → 6·7·8 보류
+현재 좌표: 1~5·9·10·12·14·15·16·18 완료 → **17이 열린 발견 축이고 그 안에서 「버전 불일치」가 닫혔다(2026-09-14, §5.7.1) → 다음 자리는 `runtime/README.md` mailbox 계약 판단** → 11은 곡선이 2대에서 멈춰 있다(기기를 더 붙여야 움직인다) → 13 벤더 대기 → 6·7·8 보류
+
+**보드 관측 상태 (2026-09-14)**: ASH 1단계 켜짐(`log_level: info` + `log_output` file). 2단계(`adapter_concurrent 16`)·`smhub-services` 정지·개명 리허설은 **GLG 판단 보류**.
 
 ---
 
-# NOW — 이어받는 자리 (2026-09-10)
+# NOW — 이어받는 자리 (2026-09-14)
+
+> **한 줄**: 보드에 **ASH 관측을 켰고**(1단계), RAIL 17의 「버전 불일치」는 **불일치가 아니었음이
+> 닫혔고**, 내가 「조이기 회귀」라고 쓴 것은 **오독이었다.** 그리고 옆 레인(works-nixos-zigbee)과
+> 왕복 다섯 번으로 서로의 「성공 응답이 나는데 틀린」 자리를 네 개 잡았다.
+
+## 1. ASH 관측 1단계 — 켰다 [측정 2026-09-14 15:00 KST]
+
+옆 레인이 물었다: 「`log_level`을 `warning`으로 내렸다는 게 사실이면 **매시간 증거를 스스로 지우고
+있는 것**이다.» 확인해 보니 사실이었고, **두 겹**이었다.
+
+```
+before:  log_level: warning · log_output: [console]      → [ASH COUNTERS] 0건
+         /var/log/zigbee2mqtt.log 39바이트, 2026-09-08 이후 안 자람
+after:   log_level: info    · log_output: [console, file]
+```
+
+`log_output`의 z2m upstream 기본은 `['console','file']`인데 **벤더가 `file`을 빼 놨다.** 되돌린 것이다.
+로그는 `/opt/zigbee2mqtt/data/log/<타임스탬프>/log.log`로 가고, 그 디렉토리는 `/mnt/user`
+(`mmcblk0p7`, 5.2G 여유)에 있다 — `/`(395M)가 아니다. `log_rotation`도 기본 on.
+
+절차는 `smhub/RUNBOOK.md` §6.4.1 그대로: `cp -a` 백업 → 제자리 `sed -i` → **소유자 확인** →
+YAML 파싱 검증 → 재기동. 되돌리기: `/opt/zigbee2mqtt/data/configuration.yaml.bak-ashlog-20260914055940`.
+
+판정 [측정]:
+
+```
+[INIT TC] Adapter network matches config.       ← 망이 그대로 붙었다 (옆 레인 판정 기준)
+기기 2대 interview:True def:True · 마스터 링크 유지 · log_level=info log_output=[console,file]
+z2m RSS  fresh 108.5M → 1분 뒤 123.3M   (재기동 전 4일 묵은 값 129.6M)
+```
+
+⏳ **첫 `[ASH COUNTERS]`는 `2026-09-14 16:00:38 KST`에 나온다.** 벽시계 정각이 아니라 **어댑터 기동
+기준**이다 — `WATCHDOG_COUNTERS_FEED_INTERVAL = 3600000`을 `initEzsp`에서 `setInterval`로 건다
+[읽음 **보드에 실린** `zigbee-herdsman 10.8.0` `dist/adapter/ember/adapter/emberAdapter.js:135,550`].
+그리고 그 두 줄은 `logger.info`라서 **`log_level: warning`에서는 존재하지 않는다** — 옆 레인 지적이
+소스로 확인된 자리다. 어댑터 기동은 `[STACK STATUS] Network up.` = `06:00:38 UTC`. 읽는 법:
+
+```sh
+find /opt/zigbee2mqtt/data/log -name log.log -exec grep -o "\[ASH COUNTERS\].*" {} \;
+```
+
+27칸 CSV이고 17번부터 끝까지가 오류 카운터다(순서는 옆 레인 `lab/2026-09-14-dual-dongle-multi-z2m.md` §5.1).
+
+⚠️ **아직 ASH 감별이 아니다.** 2단계(`adapter_concurrent: 1 → 16`)를 해야 옆 레인 기준선과 조건이
+같아지는데, **그건 이 보드를 다시 터뜨릴 수 있어 재페어링할 때 같이 올린다**(GLG 판단 보류).
+지금 켠 1단계로 닫히는 질문은 하나다 — **「정상 운전에서 1코어가 ASH 오류를 내는가」.**
+
+## 2. RAIL 18 「회귀」는 오독이었다 — 스위치가 켜져 있었다 [측정 2026-09-14]
+
+`available 302 → 236 MB`를 보고 «조이기가 4일 만에 되돌아왔다»고 읽었다. **틀렸다.**
+
+```
+   129.6M anon=81.7M  pid=2505  node zigbee2mqtt
+   100.2M anon=79.7M  pid=4245  /opt/smhub-services/venv/bin/python   ← 이것
+
+부팅            2026-09-10 17:27:13 KST
+smhub-services  2026-09-10 17:42:55 KST   ← 부팅+15분 = 자동시작이 아니라 손으로 켠 것
+rc-update show  smhub-services 없음        (boot에서 뺀 상태는 그대로 유지되고 있다)
+used 186 → 252 MB (+66)                   그 프로세스 anon만 79.7 MB
+```
+
+**누수가 아니라 「평소 stop / 개발할 때 start」 스위치가 start로 남아 있던 것이다.** 조이기는 유효하다.
+09-10 저녁 그 시점에 Web UI로 SSH를 켠 정황과 맞는다(지금 `:22`가 열려 있다 — PRIVATE.md엔
+「refused, Web UI가 유일한 셸」로 적혀 있었다).
+
+**GLG 판단: 지금은 그냥 둔다.** 끄면 `sudo rc-service smhub-services stop` 한 줄이고 ~315 MB로 간다.
+
+📌 **여기서 배운 것은 「한 점 측정은 누수를 못 잡는다」가 아니다.** 302와 240 사이에 **그 순간의
+프로세스 목록이 없었다**는 것이다. 값 하나만 찍으면 원인을 영영 못 가른다 → 앞으로 조이기 수치를
+적을 때 **RSS 상위 몇 줄을 같이 남긴다.**
+
+## 3. 옆 레인 왕복 — 우리가 준 것 / 받은 것 / 우리가 물린 것
+
+`works-nixos-zigbee`가 미니PC 한 대에 동글 N개를 이고 **노드 domoticz를 빼고 마스터 직결**로 간다
+(GLG 결정 2026-09-14). **그 직결이 우리가 09-10에 증명한 구조**라 그쪽이 우리를 선례로 인용했고,
+[인계, 미확인]이던 문장들을 우리가 [측정]으로 올렸다.
+
+**우리가 준 것**
+
+| | |
+|---|---|
+| 리스너 하나(`0.0.0.0:1883`) + 계정 둘이 우리 실물 | 그쪽이 리스너 **둘**로 짰다가 되돌렸다 — 같은 포트 wildcard+specific은 `Address already in use`로 **mosquitto가 아예 안 뜬다** [측정, `nix shell nixpkgs#mosquitto` 2.1.2 재현] |
+| `include_dir` 함정은 벤더 conf 사정, NixOS엔 없다 | 그쪽 LEDGER 12에 경계로 박혔다 |
+| 「키를 명시하면 `FORM_BACKUP` 노출이 바뀐다」는 틀렸다 | 우리 보드가 반례(키·panID·extPanID 전부 비기본값인데 성질 동일) → 그쪽이 retract |
+| `gq-master seed`가 `Name`을 유일 키로 쓴다 | 이름 규약 변경이 **INSERT → 중복 행 → prune 시 이력 삭제**로 간다 [읽음 `gq-master:224,228,272,301-323`] → 그쪽이 `rename` 서브커맨드 신설 |
+| `cp -a "$DB"`가 WAL을 안 가져간다 | 백업이 **성공했다고 찍고** 2분 34초를 안 담았다 [측정]. 그쪽이 라이브에서 다시 재니 **행 자체가 4개 빠졌다** → `.backup`으로 교체 + 복구 경로 검증까지 닫힘 |
+| 1코어 z2m 고정비 RSS 129.6 / HWM 131.2 MiB (2대) | 그쪽 x86 값과 나란히 → **인스턴스 고정비 130~155 MiB 자릿수** |
+| 이벤트율 **0.83건/분/기기** (2대, 3d21h 평균) | 그쪽 x86 15대 **0.80**과 거의 같다 → 400대 외삽이 기계와 무관하다는 방증 |
+
+**우리가 물린 것 (중요)**
+
+- ⚠️ **「우리가 ASH 대조군이다」가 성립 안 한다.** 우리 보드는 `adapter_concurrent: 1`이고, 크래시
+  관측 자체가 2→1 구간에서 만들어졌다(`smhub/RUNBOOK.md` §6.5.3 «적용됨 (⚠️불충분)»).
+  그쪽 기준선은 **16**이다. **「1코어가 인터뷰 버스트의 ASH ACK 마감을 못 지킨다」는 아직 조건이
+  안 갈린 문장**이고 [이슈 #11](https://github.com/junghan0611/homeagent-config/issues/11)도 같은
+  한계를 진다. 그쪽이 자기 숫자에 건 경계를 우리 숫자에도 똑같이 걸어야 한다.
+- ⚠️ **내가 틀린 근거를 넘겼다가 회수했다.** 「정상 운전이 시간을 먹으며 는다(302→240)」를 근거로
+  줬는데 위 2번대로 원인이 달랐다. 그쪽 `z2m-footprint.sh` 숙제의 급함이 내려간다고 정정해 보냈다.
+
+**마스터 상태**: 2026-09-14 14:47:32에 켜졌다(GLG 요청, 옆 레인이 실행). 3일 21시간 공백 뒤
+**개입 없이 양쪽 링크가 자동 재접속**했고, 누적 kWh는 절대값으로 다시 들어왔다.
+`gq-node-02` → `gq-node-02-r1` 개명 리허설은 **GLG 판단 대기**(마스터 정지가 선행).
+
+## 4. 다음 한 걸음
+
+```
+1. ~16:00 KST — 첫 [ASH COUNTERS] 확인. 오류 카운터가 0이 아닌 덤프가 있는가
+2. RAIL 17 다음걸음 3 — runtime/README.md 의 mailbox 계약을 고칠지 판단 (§5.7 닫혔으니 이제 여기)
+3. RAIL 11 — 곡선이 2대에서 멈춰 있다. 기기를 더 붙이지 않으면 이 축은 안 움직인다
+4. (보류) ASH 2단계 concurrent 16 · smhub-services stop · 개명 리허설 — 전부 GLG 판단
+```
+
+⛔ OTA 금지 · ⛔ RTOS 정지/재기록 금지 — 그대로.
+
+---
+
+# NOW(직전) — 이어받는 자리 (2026-09-10)
 
 > **한 줄**: 이기종 허브 두 대가 마스터 domoticz 한 화면에 섰다. 그리고 그 성공 위에서
 > GLG가 방향을 뒤집었다 — **보드의 domoticz를 내린다.** 허브는 라디오와 프로토콜만
@@ -238,7 +357,7 @@ mailbox" 로 적어놨다. 벤더가 실제로 한 것은 **remoteproc/rpmsg + o
 | `docs/INTEGRATION-SURFACE.md:89` | *"ESPHome — HTTP(`web_server` 필요), **네이티브 API 미지원**"* | ⚠️ **이건 SLZB 통합 표 관점이고, 오늘 native API 로 응답을 받았다.** 문장을 손볼지 판단 필요 |
 | `docs/INTEGRATION-SURFACE.md:171` | *"ESPHome ❌ — Python + 컴파일 툴체인 전체, 헤드리스 허브가 짊어질 대상 아님"* | **여전히 맞다.** 그건 *호스트에 ESPHome 을 올리는* 비용이고, 오늘 건 *이미 코어에 있는 것에 붙는* 이야기다. 섞지 마라 |
 | `docs/SMHUB.md` §5.6 | 오늘 쓴 1.0.2 현재면 | 이 발견을 여기에 추가할 자리 |
-| `~/repos/3rd/milkv/slzb-esphome` | 벤더 ESPHome 컴포넌트 (GPL-3.0, `components/` `devices/` `hw_defs/` `packages/`) | ⚠️ [측정] **SG2000/nano/rpmsg 참조가 0건** — ESP32 계열 보드 yaml 뿐이다. `nano-esphome.yaml` 은 별도 리포(`github://smlight-smhub/rtos-config`, §5.4 B3) |
+| `~/repos/3rd/smlight-smhub/slzb-esphome` | 벤더 ESPHome 컴포넌트 (GPL-3.0, `components/` `devices/` `hw_defs/` `packages/`) | ⚠️ [측정] **SG2000/nano/rpmsg 참조가 0건** — ESP32 계열 보드 yaml 뿐이다. `nano-esphome.yaml` 은 별도 리포(`github://smlight-smhub/rtos-config`, §5.4 B3) |
 | `edgeagent-config` | 형제 리포 = ESP32 엣지 노드 레인 | ESPHome 경험이 그쪽에 있을 수 있다 |
 
 ### 다음 세션 첫 걸음 (순서대로)
@@ -254,10 +373,17 @@ mailbox" 로 적어놨다. 벤더가 실제로 한 것은 **remoteproc/rpmsg + o
    `smlight-smhub/esphome`(포크)에 `sg2000`/`sg2000_adc`/`sg2000_pwm`/`sg2000_ws2812`/`smhub_time`
    커스텀 컴포넌트가 공개돼 있다. §6 항목 2(Buildroot 본체)는 여기까지 뒤져도 **여전히 없다** —
    갭은 유지, 위치만 좁혀졌다.
-2. 벤더 공개 릴노트(`smhub-os-release-notes`) 대조 — beta3(06-14) 공지문이 RAIL 17 발견을 벤더
-   쪽에서도 확인해준다. ⚠️ 새로 걸린 것: 공개 최신 stable은 `v1.0.0`(07-10)인데 우리 실측은
-   `1.0.2` — **버전 불일치, 미해결**(`docs/SMHUB.md` §5.7 끝부분).
+2. ~~벤더 공개 릴노트 대조 / 버전 불일치~~ → **2026-09-14 닫혔다. 불일치가 아니었다**
+   (`docs/SMHUB.md` §5.7.1). 축이 셋이고 우리가 둘을 겹쳐 읽고 있었다:
+   **릴리스 라인(게이트) `1.0.0`** = 피드 ipk 전부의 `Required-OS-Version`, 공개 릴노트가 세는 축 ·
+   **OS 베이스 `1.0.2`** = `/etc/os-release` = opkg `smhub-os-base`, 그 라인 안의 패치 ·
+   **RAUC 번들 `0.2.1`** = 커널/rootfs 독립 버전.
+   결정타: **`smhub-os-base`는 피드에 없다** — 설치 가능한 패키지가 아니라 rootfs가 심는
+   `Provides:` 마커다. 그래서 `1.0.2 ≥ 1.0.0`으로 게이트만 충족하면 되고, **패치가 올라도 앱 의존이
+   안 바뀌므로 벤더가 공지할 것이 없다.** 남는 건 «불일치»가 아니라 «1.0.1/1.0.2에 뭐가 바뀌었나
+   미공개»이고 §6 정보 벽으로 옮겼다.
 3. 그 다음에야 `runtime/README.md` 의 mailbox 계약을 고칠지 판단한다. **문서를 먼저 고치지 마라.**
+   ← **이제 여기가 RAIL 17의 다음 자리다.**
 
 ⛔ **아직 OTA 를 쓰지 마라.** 벤더 펌웨어를 덮으면 되돌리는 경로가 `.factory-seed`(p7) 뿐이고
 [읽음 `docs/SMHUB.md:283`], 그 전에 현재 ELF 를 로컬에 보존해야 한다.

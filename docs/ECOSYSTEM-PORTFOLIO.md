@@ -139,6 +139,22 @@ fetch 직전에 찍어둔 파일 크기와 대조했다.)
 
 ---
 
+## 3.1 벤더 피드에 계측 스택은 없다 (2026-09-10 조사, 2026-09-16 재확인)
+
+벤더 opkg 피드 전수 [측정 — 조회 절차는 `.claude/skills/smhub/SKILL.md` §2.1]:
+
+```
+nodejs · python3 · zigbee2mqtt · nodered · domoticz · esphome-bin
+matterbridge(+hass/shelly/z2m) · zwavejsui · openthread · picoclaw · tailscale
+smhub-{os-base,services,ui,web,broker}
+```
+
+**Grafana · InfluxDB · Telegraf는 없다.** 얹으면 우리가 소유하는 런타임이고 §1의 등급 비용이다.
+
+그래서 판정: **계측 축은 보드가 아니라 마스터 쪽 선택**이라 우리 등급에 안 걸린다.
+지금은 마스터 domoticz가 받는다. 참고로 `nodered`는 **설치돼 있으나 서비스로 안 뜬다**
+[측정 2026-09-10 `rc-status`, 2026-09-16 RSS 상위 목록에도 없음] — 설치 비용과 실행 비용은 다르다.
+
 ## 4. Zigbee 호스트 — 선택지 넷 (여기가 진짜 풋프린트 싸움)
 
 | 경로 | Zigbee 호스트 | 런타임 | 온박스 비용 | 우리가 짜나 |

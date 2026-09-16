@@ -616,7 +616,7 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
 | C4 | `smhub-reset-daemon` | **공장초기화 버튼 감시** — 라디오 리셋과 무관 | §3.6 재확인 |
 | C5 | `smhub-arbitration` | `/dev/mem` 상태조회 CLI. 상시 프로세스 아님 | 새 확인 |
 | C6 | rpmsg 소유자 | **`smhub-broker` 단독**(RSS 6.4MB). `/proc/<pid>/fd` 에 `/dev/rpmsg0`·`1` | 단일 오너 = 두 번째 open 위험 |
-| C7 | `smhub-services` | **RTOS와 무관.** rpmsg 안 열고 sqlite + io_uring 쓰는 Python venv Web UI REST 백엔드. RSS 101.2MB (RssAnon 80.9MB) | beta5 1.0.4-1 → **1.1.0-1**, 기본 미설치 앱 |
+| C7 | `smhub-services` | **RTOS와 무관.** rpmsg 안 열고 sqlite + io_uring 쓰는 Python venv Web UI REST 백엔드. RSS 101.2MB (RssAnon 80.9MB) | beta5 1.0.4-1 → **1.1.0-1**. 이미지 베이스가 아닌 선택 백엔드이나 **공장 시드(§`.factory-seed`)에는 들어 있고, 이 기준 기기에서는 installed + running**(2026-09-16). ⚠️ Web UI Apps는 이걸 「미설치」로 표기한다 — §5.8 |
 | C8 | RTOS 면 총비용 | `smhub-broker` + `rtos-logger` = **약 9MB** | 조일 값은 RTOS가 아니라 Python 쪽 |
 | C9 | 채널 프로토콜 모양 | `esphome-rpc` = ESPHome native API(protobuf/nanopb) on rpmsg · `smhub-rpc` = 벤더 nanopb GPIO RPC(`smhub_hal_rpc_GpioConfigReq`/`GpioEdgeEvent`) | 정적분석. **프레임을 직접 읽지는 않았다** |
 
@@ -764,6 +764,60 @@ esphome-bin 2026.5.3-5 (설치됨) · nodejs 22.22.0-2 (설치됨)
 «벤더는 이미 소프트웨어 쪽을 준비해 두고 하드웨어를 기다린다»는 읽을거리다. **설치하지 않았다.**
 그리고 `esphome-bin 2026.5.3-5`가 설치돼 있는 것이 §5.7 `nano-esphome.yaml`의 `min_version:
 2026.5.3`과 맞물린다 — 코프로세서 펌웨어도 이 피드에서 온다.
+
+### 5.8 호스트에서 읽은 벤더 선언 + 43시간 관측 (2026-09-16 실측)
+
+기존 0.9.8 / beta5 표는 **역사로 그대로 둔다.** 이 절은 그날의 현재면이다.
+
+**(a) 보드에 안 붙고 벤더 선언을 읽는 경로가 열렸다.** opkg 피드 인덱스
+(`https://pkg.smlight.tech/v1/Packages`, 14,282 B, basic auth는 `PRIVATE.md`)와 ipk archive를
+호스트에서 직접 받는다. `control.tar.gz` 안에 `control`·`postinst`·`prerm`·`postrm`·**`openrc`**
+(OpenRC init 스크립트 원본)가 들어 있어 `depend()`까지 오프라인으로 읽힌다. 절차는
+`.claude/skills/smhub/SKILL.md` §2. ⚠️ 여기서 얻는 것은 **선언**이지 현재 상태가 아니다.
+
+**(b) 피드가 선언한 의존 (발췌)** [측정, 피드 원문]:
+
+```
+smhub-broker   1.0.4-1   Depends: esphome-bin (>= 2026.5.3-5)      ← broker → RTOS 펌웨어
+smhub-ui       1.0.6-1   Depends: smhub-services (>= 1.0.5)
+smhub-web      0.3.1-1   Depends: smhub-services                    (버전 하한은 0.3.2-1부터)
+smhub-services 1.1.0-1   Depends: nodejs (>= 22.15.1-2), python3-abi-3.14
+matterbridge-z2m 3.1.0-1 Depends: nodejs, matterbridge (>= 3.5.0)   ← z2m 의존은 없다(MQTT로 만난다)
+esphome-bin    2026.5.3-5  Depends: 없음
+tailscale · picoclaw-core · openthread 2026.7.0-3 : Depends 없음
+```
+
+`smhub-broker`의 `openrc`: `depend() { need localmount remoteproc; before status-login-ready }`,
+`start_pre`가 `/opt/firmware/bluetooth_proxy_mode`를 읽어 `--ble-mode=`를 주입한다 [측정, ipk].
+
+**(c) `esphome-bin`은 C906L 코프로세서 펌웨어다.** `postinst`가 패키지 안의 ELF를
+`/opt/firmware/smhub-rtos.elf`로 복사하고, **`.ota-deployed` 표지가 없으면** `rtos-notify restart`를
+부른다 [측정, ipk]. 라이브 확인: `remoteproc0/state = running`, `firmware = smhub-rtos.elf`,
+`/opt/firmware/smhub-rtos.elf` 422,792 B.
+⚠️ **remove 경로는 미확인** — 그 버전 archive에 `prerm`이 없다. install/update와 remove를 한
+문장으로 묶지 않는다. (대조: `smhub-broker`는 `prerm`·`postrm`이 있고 서비스를 정지시킨다.)
+
+**(d) 설치 9개 · 실행 · 자원** [측정, 읽기 전용 ssh]:
+
+```
+opkg installed : esphome-bin 2026.5.3-5 · nodejs 22.22.0-2 · nodered 4.1.5-1 ·
+                 smhub-broker 1.0.4-1 · smhub-os-base 1.0.2 · smhub-services 1.1.0-1 ·
+                 smhub-ui 1.0.6-1 · smhub-web 0.3.1-1 · zigbee2mqtt 2.13.0-1
+RSS  node(z2m) 133.6 MB · smhub-services 100.4 MB · smhub-broker 14.1 MB · mosquitto 7.7 MB
+Mem  total 488 · used 258 · available 230 · uptime 5d19h (부팅 09-10 17:27 KST)
+```
+
+🔴 **Web UI Apps 화면은 `esphome-bin`·`smhub-services`를 「미설치」로 표기했고,
+`smhub-os-base`·`smhub-web`은 아예 보여주지 않았다.** §3의 4층(카탈로그 / opkg installed /
+backend.db enabled / OpenRC running) 어디와도 일치하지 않는 **다섯 번째 표기면**이다.
+그 predicate가 무엇인지는 **아직 소스로 확인하지 않았다 — `?`**.
+
+**(e) ASH 43시간 15분 무접촉 관측.** 덤프 46개 중 오류(17~27번) 비영 1개뿐이고, 그것도
+`rxCrcErrors=1 → txNak=1 → rxReData=1` = ASH 정상 복구다. `rxAckTimeouts` 전부 0.
+그리고 **09-14의 두 크래시는 둘 다 재기동 직후**(+8분14초 `SEND_UNICAST`, +18초 `GET_EUI64`)이고
+그 사이·이후 정상 구간은 깨끗하다 → 고장 축이 「부하·대수」가 아니라 **「어댑터 (재)초기화」**일
+수 있다. ⚠️ n=2, 그리고 `adapter_concurrent: 1` 조건이라 「1코어라서」는 채택도 기각도 못 한다.
+원본 `.agent-reports/2026-09-16-ash-harvest-raw.txt`, 정리 `2026-09-16-board-harvest.md`.
 
 ## 6. 정보 벽 = 재현 공백 (없는 것 확실히) + SMLIGHT 연락 후보
 

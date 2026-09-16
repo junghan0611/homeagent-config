@@ -157,7 +157,7 @@ ssh -i .sshkey/id_ed25519 smlight@<기기> 'ls -l /mnt/user/ssh/'
 SSH가 열리면 셸은 생기지만 **기기가 스스로 무엇을 하는지는 여전히 안 보인다.** 벤더 백엔드가
 가진 것을 우리가 볼 수 있게 만드는 게 이 절이고, 이걸 먼저 하면 뒤의 삽질이 몇 시간 줄어든다.
 
-### 2.5.1 ⚠️ `smhub-services`는 기본 설치가 아니다 — Web UI에서 설치하는 앱이다
+### 2.5.1 ⚠️ `smhub-services` — 있는지부터 `opkg`로 확인해라 (Apps 화면 말고)
 
 [측정 2026-09-09] `opkg list-installed`가 베이스와 앱을 나란히 보여준다:
 
@@ -169,8 +169,19 @@ smhub-web      - 0.3.1-1   ·  smhub-ui - 1.0.6-1
 domoticz · nodered · zigbee2mqtt · esphome-bin · nodejs · python3
 ```
 
-**이걸 깔아야 정보면이 열린다.** 안 깔면 Radio 페이지도, 앱별 실시간 로그 스트림도, 아래
-UDS API도 없다. 새 유닛을 받으면 **SSH(§2) 바로 다음에 이걸 설치한다.**
+**이게 설치되고 *돌아야* 정보면이 열린다.** 없거나 멈춰 있으면 Radio 페이지도, 앱별 실시간
+로그 스트림도, 아래 UDS API도 없다 — **설치와 실행은 다른 축**이니 둘 다 본다.
+
+🔴 **판정은 `opkg`로 해라. Web UI Apps 화면으로 하지 마라.** [측정 2026-09-16] 그 화면은
+`smhub-services`와 `esphome-bin`을 **「미설치」로 보여주는데 `opkg list-installed`엔 둘 다 있었다.**
+Apps 표기는 `docs/SMHUB.md:143-152`의 4층 어디와도 일치하지 않는 **다섯 번째 면**이다.
+
+```sh
+opkg list-installed | grep smhub-services      # 여기 없을 때만 설치한다
+pgrep -f smhub-services                        # 설치돼 있어도 안 돌 수 있다
+```
+
+새 유닛을 받으면 SSH(§2) 다음에 **먼저 확인하고, 정말 없을 때만** Web UI에서 설치한다.
 
 ### 2.5.2 정보면 여섯 개 — 무엇을 어디서 보나
 
@@ -921,9 +932,11 @@ NODE_OPTIONS=…  /opt/bin/node -p v8.getHeapStatistics().heap_size_limit  →  
    되돌려도 **`log_output`은 안 건드린다** — 반쯤 되돌아간 상태가 된다.
    (`--revert`는 `log_level: info`로 가므로 «현재 상태 복원»이 아니라 «미튜닝 복원»이다.)
 
-**남은 일**: `tune.sh`에 ASH 관측 모드(`log_level: info` + `log_output` file 한 쌍)를 넣어 소유권을
-되돌린다. 지금은 손편집 상태이고 되돌리기는
-`/opt/zigbee2mqtt/data/configuration.yaml.bak-ashlog-20260914055940`이다.
+**✅ 닫혔다 (2026-09-14)**: `tune.sh`가 `--ash-on` / `--ash-off`를 갖는다. 그 두 모드가
+**`log_level` 한 칸과 `log_output` path 불변식**을 소유한다 — `--ash-on` = `log_level: info` +
+`log_output: [console]`이고, 누가 `file`을 넣어 놨으면 **지운다**. 콘솔은 tmpfs(`/tmp`)로 가고
+`file`은 eMMC로 가기 때문이다. ⛔ **2단계(재페어링) 전에 `--ash-off`** — 페어링 버스트에서
+`info`는 진짜 부하다. 손으로 `configuration.yaml`을 고치지 마라.
 
 📌 그리고 **이 리포는 혼입을 미리 경고하고 있었다** — `NEXT.md`의 튜닝 문단:
 *"14대급에서 `info`는 그 자체가 CPU 부하라 상시로 두지 않는다."* 켜기 전에 그 줄을 안 읽었다.
@@ -1180,10 +1193,11 @@ ssh ... 'for p in $(pgrep -d" " -f "domoticz|zigbee2mqtt"); do
 | `setup.sh`가 commit pin에서 멈춤 | 트리 HEAD가 태그와 다름 | 출력의 `git checkout --detach` 한 줄 |
 | ipk가 다른 기기에서 안 뜬다 | device profile 불일치 | 매니페스트의 profile과 대조(§5) |
 | Radio 페이지 플래시가 `HTTP Error 404` | **벤더 인덱스가 죽은 다운로드 URL을 준다.** 기기·네트워크 잘못이 아니다 | §2.5.2의 `firmware_list`로 링크를 직접 보고, 살아 있는 경로로 받아 CLI로 굽는다 |
-| z2m이 죽고 재시작을 반복한다 (크래시 루프) | 2026-09-09 관측에서 node 기동·CPU 부하·ASH ACK 지연이 맞물린 모양이었다. **인과는 `adapter_concurrent` 16 대조 전 가설**이다 | z2m을 멈추고 **완전 파워사이클**로 루프를 끊는다. 이후 설정 변경은 현재 관측 계획(`NEXT.md`)과 함께 판단 |
+| z2m이 죽고 재시작을 반복한다 (**진짜 루프**) | 2026-09-09 관측에서 node 기동·CPU 부하·ASH ACK 지연이 맞물린 모양이었다. **인과는 `adapter_concurrent` 16 대조 전 가설**이다 | z2m을 멈추고 **완전 파워사이클**로 루프를 끊는다. 이후 설정 변경은 현재 관측 계획(`NEXT.md`)과 함께 판단 |
+| 크래시가 **한 번** 났고 자동 복구됐다 | 루프가 아니다. [측정 2026-09-16] 09-14의 두 표본은 **둘 다 재기동 직후**였고(+8분14초, +18초) 무접촉 43시간은 완전히 깨끗했다 | ⛔ **진단 목적으로 재기동·파워사이클 하지 마라.** 그 행위 자체가 트리거 용의선상이고, 콘솔 로그가 tmpfs라 증거도 날아간다. 붙어서 읽기만 한다 |
 | `ERROR_WRONG_DIRECTION` | ASH 상태 어긋남. 크래시 루프 중 재기동이 겹칠 때 나온다 | 위와 동일. 포트 동시 점유부터 배제(`sudo fuser /dev/ttyS1`) |
 | `smhub-broker`의 `bind() failed 19 hci0` 도배 | 기동 시 재시도다. UART HCI가 붙으면 멈춘다(에러 19=ENODEV) | `hciconfig`가 `UP RUNNING`이면 정상. CPU 범인 아님 |
-| Web UI 앱 화면에 Radio/로그가 없다 | `smhub-services`가 안 깔렸다 (기본 설치 아님) | §2.5.1 |
+| Web UI 앱 화면에 Radio/로그가 없다 | `smhub-services`가 없거나 **멈춰 있다**. ⚠️ Apps 화면의 「미설치」는 근거가 못 된다 | §2.5.1 — `opkg`와 `pgrep`으로 가른다 |
 
 ---
 

@@ -17,7 +17,9 @@
 
 현재 좌표: 1~5·9·10·12·14·15·16·18 완료 → **17이 열린 발견 축이고 그 안에서 「버전 불일치」가 닫혔다(2026-09-14, §5.7.1) → 다음 자리는 `runtime/README.md` mailbox 계약 판단** → 11은 곡선이 2대에서 멈춰 있다(기기를 더 붙여야 움직인다) → 13 벤더 대기 → 6·7·8 보류
 
-**보드 관측 상태 (2026-09-14)**: ASH 1단계 켜짐(`log_level: info` + `log_output` file). 2단계(`adapter_concurrent 16`)·`smhub-services` 정지·개명 리허설은 **GLG 판단 보류**.
+**보드 관측 상태 (2026-09-16)**: `log_level: info` · `log_output: [console]` · `adapter_concurrent: 1`
+= `tune.sh --ash-on` 결과와 일치. **43시간 창 수확 완료(§3.9).** 개명은 `gq-smhub-01`로 확정,
+실행은 옆 레인 대기(§3). 2단계(`adapter_concurrent 16`)·`smhub-services` 정지는 **GLG 판단 보류**.
 
 ---
 
@@ -140,7 +142,41 @@ Hardware(3) gq-node-02-r1  192.168.0.124:1883  homeassistant      22개   ← �
 
 **마스터 상태**: 2026-09-14 14:47:32에 켜졌다(GLG 요청, 옆 레인이 실행). 3일 21시간 공백 뒤
 **개입 없이 양쪽 링크가 자동 재접속**했고, 누적 kWh는 절대값으로 다시 들어왔다.
-`gq-node-02` → `gq-node-02-r1` 개명 리허설은 **GLG 판단 대기**(마스터 정지가 선행).
+
+### 🔴 다시 바뀐다 — `gq-node-02-r1` → **`gq-smhub-01`** (GLG 지시 2026-09-16)
+
+**이름 공간을 나눈다.** `gq-node-*` 시리즈는 **`works-nixos-zigbee` 레인이 통째로 가져간다**
+(그쪽이 한 기계에 동글 N개를 이는 레인이라 `-rN` 축이 실제로 필요하다). 우리 보드는 자기 접두사
+`gq-smhub-`로 나간다.
+
+**`-r1`은 붙이지 않는다 (GLG 2026-09-16).** 그 접미사는 «세는 단위는 기계가 아니라 라디오다»라는
+옆 레인 규약인데, **우리는 온보드 EFR32 하나뿐이고 동글을 여러 개 붙이지 않는다.** 규약을 어기는
+게 아니라 **그 축이 우리에게 없다.**
+
+**우리가 할 일은 이 문서 갱신뿐이다** [측정 2026-09-16, `smhub/`·`docs/` 전수 grep]:
+보드 설정 어디에도 노드 이름이 없다. `configuration.yaml`·`tune.sh`·mosquitto 어느 쪽도
+자기 이름을 모른다 — 이름은 **마스터 DB `Hardware.Name`과 `master/nodes.json` 두 곳에만 산다.**
+`discoveryPrefix`는 `homeassistant` 그대로다(브로커가 달라 개명과 무관하다).
+**⛔ 보드 무접촉 유지** — ASH 관측 창이 아직 돌고 있다(§4-1).
+
+**옆 레인이 밟을 순서** (GLG가 전달, 마스터 정지가 선행)
+[읽음 `works-nixos-zigbee:master/bin/gq-master:304-323, 308-352`]:
+
+```sh
+gq-master rename gq-node-02-r1 gq-smhub-01   # ← 옛 이름은 -r1 까지다. 틀리면 "Hardware 가 없다"로 멈춘다
+# nodes.json 의 name 을 gq-smhub-01 로
+gq-master seed                                # "추가"가 아니라 "갱신"이 찍혀야 맞다
+gq-master status                              # 확인한 뒤에야 seed-prune
+```
+
+`rename`은 **`HardwareID=3`을 보존한 채 `Name`만 UPDATE**하므로 22개 기기와 이력이 그대로
+따라온다 — `DeviceStatus`가 이름이 아니라 `HardwareID`에 매달려 있기 때문이다. DB 백업도
+스스로 뜬다(`domoticz.db.bak-rename-<ts>`). 이 서브커맨드 자체가 **09-14에 우리가 「`seed`가
+`Name`을 유일 키로 써서 개명이 INSERT→중복행→prune 시 이력 삭제로 간다」고 지적해서 생긴 것**이라,
+이번 개명이 그 손의 첫 실전이다.
+
+⚠️ 이 문서의 09-10·09-14 기록에 남은 `gq-node-02` / `gq-node-02-r1`은 **그 시점의 이름**이라
+고치지 않는다. 지금 이름은 이 절이 정본이다.
 
 ## 3.5 🔴 크래시가 재현됐다 — 유휴 2대에서 [측정 2026-09-14 15:08:52 KST]
 
@@ -220,17 +256,85 @@ SSH 프로빙(92초 전). 직전 4일은 무접촉·`warning`·크래시 0이었
 **완화 셋을 다 넣고도 같은 모양으로 죽었다** — 이 고장은 대수·부하·V8 구성을 다 건너뛴다.
 상세 `RUNBOOK.md` §6.5.2a-보정.
 
+## 3.9 ✅ ASH 창을 수확했다 — 43시간 무크래시, 그리고 새 패턴 [측정 2026-09-16 12:32 KST]
+
+§4-1의 「SSH 끊고 24h 방치」가 **43시간 15분**으로 채워졌고 읽어왔다. 전문·원본 덤프는
+`.agent-reports/2026-09-16-board-harvest.md` + `2026-09-16-ash-harvest-raw.txt` (gitignored).
+
+**무접촉 steady state 43시간에서 재발 0.** `log_level: info` 유지 · 크래시 0회.
+⚠️ 이것이 닫는 것은 **「`info` 로깅이 켜진 정상 운전이 크래시를 만드는가」 하나**다 —
+그건 아니다. 로깅·SSH가 **재기동 구간에서** 무엇을 했는지는 이 구간이 답하지 못한다
+(그 두 표본은 아래 n=2이고, 거기엔 세 요인이 여전히 같이 있다).
+
+```
+덤프 46개 · 오류(17~27번) 비영 덤프 1개 · rxAckTimeouts(27) 46덤프 전부 0
+유일한 비영: rxCrcErrors=1 → txNak=1 → rxReData=1   ← 고장이 아니라 ASH가 제 일을 한 기록
+```
+
+옆 레인 x86 기준선(114덤프 오류 0)과 **등급이 같다.** 「정상 운전에서 1코어가 ASH 오류를
+내는가」 → **43시간에 CRC 1건.** ⚠️ 여전히 `adapter_concurrent: 1`이라 「1코어라서」는
+채택도 기각도 못 한다 — 2단계 대조가 있어야 한다.
+
+### 🔴 두 크래시 모두 재기동 직후였다
+
+|  | Network up → 크래시 | Last Frame | 그때 우리가 한 일 |
+|---|---|---|---|
+| #1 | **8분 14초** | `SEND_UNICAST` | ASH 관측 켠 재기동 (09-14 15:00 KST) |
+| #2 | **18초** | `GET_EUI64` ← 초기화 질의 | `log_output` 되돌린 재기동 (09-14 17:13 KST) |
+| 이후 | **43시간 15분, 0회** | — | 무접촉 |
+
+정상 운전이 완전히 깨끗한데 **재기동 직후에만 두 번 죽었다.** 고장의 축이
+「부하/대수」가 아니라 **「어댑터 (재)초기화 구간」**일 수 있다. §6.5.2a의 「양에 비례하지
+않는다」에 이어 RAIL 11 전제를 흔드는 **세 번째 관측**이다. ⚠️ n=2다.
+
+⛔ **그래서 지금 z2m을 함부로 재기동하지 않는다** — 깨끗한 43시간이 가장 값비싼 증거이고,
+재기동 자체가 트리거 용의선상에 있다.
+
+## 3.10 🔴 «미설치»는 사실이 아니었다 — Apps 표기가 다섯 번째 면이다 [측정 2026-09-16]
+
+`opkg list-installed`에 **`esphome-bin 2026.5.3-5`도 `smhub-services 1.1.0-1`도 둘 다 있다.**
+Web UI Apps 화면에 아예 없는 `smhub-os-base 1.0.2`·`smhub-web 0.3.1-1`도 설치돼 있다.
+
+**모순이 아니라 평면 차이다 (GLG 프레이밍 2026-09-16).** 이 리포의 정본은
+`docs/SMHUB.md:143-152`의 **4층**(카탈로그 / opkg installed / backend.db enabled / OpenRC running,
+2026-07-01 확정)이고 그건 그대로 둔다. 오늘 드러난 것은 **Web UI Apps의 표기가 그 넷 중
+어느 것과도 일치하지 않는 다섯 번째 면**이라는 사실이다 — opkg installed와 Apps 표기가 갈렸다.
+
+시스템이 소유한 것(코프로세서 펌웨어 · OS 베이스 · 웹 · 백엔드)이 그 목록에 안 뜨는 것으로
+**보인다**. ⚠️ 다만 Apps의 실제 predicate가 `enabled` DB인지 별도 레지스트리인지는
+**소스로 확인하지 않았다** — 「사용자 토글 평면」은 관측에서 온 읽기이지 구현 판정이 아니다.
+
+> GLG: *«모순이라고 말하기 보단 의존성이라. 하나씩 검증하면서 의존성 걸려있는 부분은 닫고,
+> 다른 것을 켜고 하면서 의존성 자체가 탐구 대상이야. 어떤 시나리오에는 어떤 서비스와 데몬을
+> 활용할 것인가도 재미있는 부분이니까.»*
+
+**RTOS 코어는 살아 있다**: `remoteproc0/state = running` · `firmware = smhub-rtos.elf` ·
+`/opt/firmware/smhub-rtos.elf` 422,792 B (Sep 7 = 1.0.2). → **«`esphome-bin` = C906L 코프로세서
+펌웨어»** 가 라이브로 확인됐다. 피드도 `smhub-broker 1.0.4-1 Depends: esphome-bin (>= 2026.5.3-5)`
+로 그 사슬을 선언한다 [측정, 피드 원문].
+
+⚠️ **install과 remove를 한 문장으로 묶지 마라.** [측정, ipk `postinst`] `.ota-deployed` 표지가
+**없을 때** install/configure가 ELF를 복사하고 `rtos-notify restart`를 부른다. **remove가 target
+ELF와 remoteproc을 어떻게 남기는지는 모른다** — 그 버전 archive에 `prerm`이 없다.
+둘 다 금지이지만 위험의 메커니즘이 다르다. (대조: `smhub-broker`는 `prerm`·`postrm`이 있다.)
+상세 `.agent-reports/2026-09-16-smhub-dependency-scenarios-terra.md`.
+
+```
+RSS  133.6 MB  node (z2m)         100.4 MB  smhub-services   ← RAIL 18의 그 스위치, 여전히 켜짐
+      14.1 MB  smhub-broker        7.7 MB  mosquitto
+Mem: total 488 · used 258 · available 230 · uptime 5d19h (부팅 09-10 17:27 KST, 무재부팅)
+```
+
 ## 4. 다음 한 걸음
 
 **보드는 지금 관측 상태로 서 있다** — `log_level: info` · `log_output: [console]` ·
 `adapter_concurrent: 1`. 이 상태가 `tune.sh --ash-on`이 만드는 것과 같다.
 
 ```
-1. ★ 크래시 혼입 가르기 — SSH 끊고 24h 방치            ← GLG 판단, 지금 가장 싸다
-      변수가 log_level 하나로 깨끗해졌다(file sink 제거 완료).
-      내일 한 번만 붙어 `grep -o "\[ASH COUNTERS\].*" /var/log/zigbee2mqtt.log` 로
-      덤프 ~24개를 한꺼번에 읽는다. 그동안 보드 무접촉.
-      ⚠️ 콘솔 로그는 /tmp(tmpfs)라 **재부팅하면 사라진다.** 읽기 전에 재부팅 금지.
+1. ✅ 크래시 혼입 가르기 — 끝났다 (§3.9). 43시간 무크래시 · 오류 카운터 사실상 0.
+      남은 축: 「재기동 직후에만 죽는다」(n=2) 와 ASH 2단계 `adapter_concurrent 16` 대조.
+   ★ 지금 열린 것: **시나리오별 서비스·데몬 구성과 의존성 그래프** (§3.10 프레이밍).
+      소넷·terra 진행 중 → `.agent-reports/2026-09-16-*.md`
 2. RAIL 17 다음걸음 3 — `runtime/README.md` mailbox 계약을 고칠지 판단.
       §5.7 이 닫혔으니 여기가 RAIL 17 의 다음 칸이다. **설계 판단이라 새 세션이 낫다.**
 3. RAIL 11 — 곡선이 2대에서 멈춰 있다. 기기를 더 붙여야 움직인다.
@@ -241,7 +345,7 @@ SSH 프로빙(92초 전). 직전 4일은 무접촉·`warning`·크래시 0이었
 5. `[NCP COUNTERS]` 42칸 디코드 — `EmberCounterType` enum 대조만 하면 된다. 미착수
 6. (보류, GLG 판단) ASH 2단계 `adapter_concurrent 1 → 16` — 재페어링 때 같이.
       `smhub-services` stop(+80MB) — 지금은 그냥 둔다(GLG).
-      `gq-node-02-r1` 개명 리허설 — 이미 옆 레인이 밟았고 우리 행은 무사하다.
+      개명 `gq-node-02-r1` → `gq-smhub-01` — GLG 지시(09-16), 실행은 옆 레인. 우리 몫은 문서뿐(§3).
 ```
 
 ⛔ OTA 금지 · ⛔ RTOS 정지/재기록 금지 — 그대로.

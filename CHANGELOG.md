@@ -4,6 +4,113 @@
 
 - Nothing yet.
 
+## v2026.9.16 — SMHUB Nano: a vendor board worked as a system application, and the coprocessor under it
+
+The headline: a shipping SMHUB Nano (SG2000, riscv64, 1 core, 488MB, onboard EFR32MG24) was
+brought up as a working Zigbee node without owning its image — cross-built packages, a real
+Zigbee network, a heterogeneous two-hub view, and finally the discovery that the board has been
+running a **RISC-V coprocessor with ESPHome firmware** all along. The Duo S arm64 lane closed
+cleanly before this one opened.
+
+### SMHub Nano — system-application lane
+
+- **Worked the vendor OS as a system-application developer** rather than replacing it. Version
+  coordinates pinned before the OTA (`1.0.2`, glibc unmoved, so the base pin settled), the ipk
+  bundle list derived **from the device rather than from a document**, and `smhub/pack-ipk.sh`
+  built to produce a payload, not an image.
+- **Cross-built domoticz to riscv64, installed it by ipk, and it survived a reboot** — a
+  portability proof, closed. A cross build has no target interpreter, so a pin that only reads
+  glibc is not a pin; that was fixed rather than worked around.
+- **Paired real Zigbee devices and found the bottleneck.** Not RAM (`available` 212–259MB, zero
+  OOM traces) and not dropped serial bytes — the ASH link **starved for CPU** on one core.
+  `smhub/tune.sh` was written so that runtime tuning is reproducible instead of hand-typed.
+- **The radio was never broken.** What looked like a dead MG24 was a chip sitting in its
+  bootloader at 7.4.2 the whole time. Four names fell off the crash report in the process.
+- **`smhub/RUNBOOK.md`** written for someone who arrives with no context — the procedure for
+  taking one new unit from unboxing to Zigbee data leaving the board.
+
+### Architecture — the board keeps the radio, the master keeps the view
+
+- **Reversed the node design after it worked.** domoticz ran on the product board and was then
+  taken off it: the hub owns radio and protocol, while view, history and control move to a master
+  domoticz that attaches directly to our broker. The MQTT link carries more than the domoticz
+  share port did (22 entities vs 8), and a 1-core board gets its CPU back.
+- **Two heterogeneous hubs stood in one view** — an x86 mini-PC and the SMHub Nano on one master,
+  18 devices. That direct-attach structure was then cited as precedent by the neighbouring
+  `works-nixos-zigbee` lane.
+- **Zigbee host decided: Z2M.** Z4D not adopted; domoticz kept but relocated to the master.
+
+### The coprocessor — RISC-V C906L, and it was already on the network
+
+- **Found the vendor already running a RISC-V coprocessor**, reachable as an ESPHome device, and
+  located the public sources an org search does not surface
+  ([#11](https://github.com/junghan0611/homeagent-config/issues/11)).
+- **Established that `esphome-bin` is not an app but the C906L firmware itself.** The vendor's
+  ESPHome fork builds `rtos-smhub` by default against `platform-sg2000`
+  (`core:c906l`, `framework:freertos`, `upload.protocol:custom`), the package `postinst` copies
+  its ELF to `/opt/firmware/smhub-rtos.elf` and calls `rtos-notify restart`, and the feed declares
+  `smhub-broker Depends: esphome-bin`. Confirmed live: `remoteproc0` running that firmware.
+  Install/update and **remove** are kept as separate risk questions — the archive carries no
+  `prerm`, so removal behaviour is not known and was not assumed.
+- That coprocessor owns **LEDs, the factory-reset button, and the HA Bluetooth proxy** — not
+  Zigbee. The idea of offloading z2m onto it does not hold for this product.
+
+### The crash, and what the counters actually said
+
+- **Turned on hourly ASH counter observation** and gave `smhub/tune.sh` the `--ash-on` /
+  `--ash-off` modes that own the `log_level` step and the `log_output` path invariant (console
+  stays on tmpfs; a file sink would move pairing-burst writes onto eMMC).
+- **43 hours untouched produced zero crashes.** Of 46 hourly dumps exactly one carried a non-zero
+  error field, and that one was ASH working correctly (one CRC error, one NAK, one retransmit).
+  `rxAckTimeouts` was zero throughout — the same grade as the neighbouring x86 baseline.
+- **Both recorded crashes followed a restart** (+8m14s, and +18s with `GET_EUI64` as the last
+  frame), with clean steady-state either side. The failure axis may be adapter
+  *re-initialisation* rather than device count or load — the third observation to unsettle that
+  premise. n=2.
+- **Corrected our own reading**: `rxAckFrames=0` is not a crash symptom (this NCP piggybacks ACKs
+  and reads zero when healthy), and a memory "regression" was a service left switched on, not a
+  leak. Tightening figures now carry the top RSS lines, because a single number cannot separate
+  the two.
+
+### Dependency, not contradiction
+
+- **Established that "installed" means four different things** on this board — opkg package
+  state, running process, the OpenRC boot graph, and the Web UI Apps toggle. Items the system
+  owns (coprocessor firmware, OS base, web, backend) never appear as "installed" in the app list.
+  Two apparent contradictions dissolved into this distinction.
+- **Opened a path to read the vendor's declarations without touching the board**: the opkg feed
+  index and the ipk archives, which carry `Depends`, `postinst`/`prerm`, and the **OpenRC init
+  scripts** themselves — so `depend()` can be read offline.
+- Mapped the resulting service graph and scenario combinations for the vendor app catalogue
+  (matterbridge, OTBR, tailscale, picoclaw, zwavejsui), including which are exclusive with the
+  live Zigbee network and which are merely resource variables.
+
+### Duo S arm64 lane — closed out
+
+- **Split the image into profiles** that build with or without the Node/Z2M layer, and made a
+  profile switch **refuse a stale target tree** instead of silently producing a mixed image.
+- **Reproduced the build on a second host** (`gpu1i`) to prove the lane is not machine-shaped.
+- Added hostapd, serial `by-id`, and a stable MAC to the arm64 image.
+- Corrected the `cdc_acm` step in the flash docs, which had told the reader to do the opposite of
+  what works, and recorded why no Duo S onboard button can drive a factory reset.
+
+### Landscape and documents
+
+- **`docs/ECOSYSTEM-PORTFOLIO.md`** — what a 512MB hub can host and what it should only talk to,
+  with the measured finding that the host itself costs ~35M and the Zigbee host costs the rest.
+- **`docs/INTEGRATION-SURFACE.md`** — the 36-integration survey underneath it.
+- **`docs/TARGET_DEVICE.md`** — opened the 256MB board lane that dropping Node would unlock, and
+  filed the vendor memmap's 148M of multimedia reservations as a located debt rather than a loss.
+- **README/AGENTS realigned on ISA**: the board picks the ISA, and arm64 on Duo S was a detour
+  taken for one reason — Buildroot's `nodejs` supports `BR2_aarch64` and not riscv64. riscv64 was
+  always the destination.
+- **Vendor clones split out of `milkv/`** into `~/repos/3rd/smlight-smhub/`, and every document
+  naming the old path moved with them.
+- **`.claude/skills/smhub/`** — a skill covering the whole SMHub surface: vendor repo updates,
+  update-point discovery, research, the four planes, and the boundaries. Flash is one section of
+  it. `duo-s-flash` stays separate.
+- Topic notes moved to issues; `AGENTS.md` wired into Claude Code sessions via `CLAUDE.md`.
+
 ## v2026.7.24 — Duo S arm64 hub: Node 22 + Zigbee2MQTT, reproducible flash-and-go
 
 The headline: a Milk-V Duo S comes up as a working Zigbee hub from a single flash. Flash the

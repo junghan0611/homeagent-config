@@ -151,7 +151,7 @@ For each minimal hub target:
 - [ ] RSS/process evidence for MQTT, Z2M, matter.js, Go
 - [ ] Power-cycle recovery notes
 
-Until SMHUB Nano / Milk-V hardware arrives, SDK and document preparation are not blocked.
+Hardware is in hand — an SMHUB Nano is the board this work currently stands on, so nothing here is hardware-blocked.
 
 ---
 

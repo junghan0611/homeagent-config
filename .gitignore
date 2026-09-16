@@ -118,6 +118,10 @@ yocto/sources/meta-rockchip.jeffycn/
 
 PRIVATE.md
 
+# 살아 있는 크레덴셜 — 절대 커밋하지 않는다. PRIVATE.md 는 키 이름만 적고 값은 여기 둔다.
+.env.smhub
+.env.local
+
 # buildroot SDK working tree (cloned by bsp/setup.sh, pinned, not committed)
 bsp/sdk/
 bsp/out/

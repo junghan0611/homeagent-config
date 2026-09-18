@@ -155,6 +155,38 @@ smhub-{os-base,services,ui,web,broker}
 지금은 마스터 domoticz가 받는다. 참고로 `nodered`는 **설치돼 있으나 서비스로 안 뜬다**
 [측정 2026-09-10 `rc-status`, 2026-09-16 RSS 상위 목록에도 없음] — 설치 비용과 실행 비용은 다르다.
 
+### 3.1a 그 판정이 실행됐다 — 마스터 소비자가 domoticz → telegraf로 간다 (2026-09-18)
+
+**이 절의 「없다」는 기각이 아니라 «보드에 안 얹는다»였다.** 그 미뤄둔 마스터 쪽 선택이
+정해졌다: **옆 레인이 다음 ISO 세대에서 domoticz를 걷어내고 telegraf + influxdb3 + grafana로
+간다** [물려받음 — `works-nixos-zigbee` 담당자 통보 2026-09-18, 커밋 `da0156e`. 우리 측정 아님].
+
+```
+[SMHub Nano / 임베디드]   라디오 → z2m → mosquitto(LAN)      ← 변화 없음
+[미들 서버 / x86 미니PC]   telegraf → influxdb3 → grafana     ← 여기가 바뀐다
+                              └──────────────────→ 외부 데이터서버 (outputs.http)
+```
+
+**GLG 2026-09-18: «SMHub은 서버가 아니다. grafana가 들어갈 이유가 없다. 미들 서버에서
+그렇게 하자는 것이고, 임베디드는 z2m 하나 들어가는 것에서 다를 게 없다.»**
+→ 그러므로 위 스택에 §1의 등급 비용을 대입하지 마라. **그 축은 보드에만 쓴다.**
+`InfluxDB` Buildroot 0건(`docs/INTEGRATION-SURFACE.md:170`)도 이제 «막힘»이 아니라
+**경계 확인**이다 — 애초에 보드에 올릴 물건이 아니다.
+
+**우리 쪽에 남는 사실 하나** (§3.1 판정과 별개, 보드 절차에 걸린다): z2m의
+`homeassistant: enabled: true`는 **domoticz가 소비자였기 때문에** 켠 것이다
+[읽음 `smhub/RUNBOOK.md:676-679`]. telegraf `mqtt_consumer`는 `zigbee2mqtt/#`를 보므로
+**소비자가 telegraf면 그 설정과 그것에 기댄 판정 둘이 죽는다** → `smhub/RUNBOOK.md` §2.7.4 · §6.4.1.
+
+**미측정 — 옆 레인 몫이지만 우리도 인용할 때 붙여라**: telegraf 기본
+`buffer_strategy = "memory"`라 프로세스가 죽으면 버퍼가 유실되고, `"disk"` WAL은 스펙이
+스스로 *"not a guarantee against data loss in crashes"*라 적었다
+[읽음 docs.influxdata.com `/telegraf/v1/concepts/data-pipeline/` · `docs/specs/tsd-005-output-buffer-strategy.md`,
+downtime flush 열린 이슈 `influxdata/telegraf#16615` 2025-03-11].
+논리 그룹핑은 **`processors.lookup`**(정적 JSON/CSV → 태그)으로 **선언만으로 된다**
+[읽음 `influxdata/telegraf` `v1.38.4/plugins/processors/lookup/README.md`] — 단 그 파일은
+*"static and only used at startup"*이다.
+
 ## 4. Zigbee 호스트 — 선택지 넷 (여기가 진짜 풋프린트 싸움)
 
 | 경로 | Zigbee 호스트 | 런타임 | 온박스 비용 | 우리가 짜나 |

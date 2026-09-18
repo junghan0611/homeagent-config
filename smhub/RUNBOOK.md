@@ -375,6 +375,14 @@ mosquitto_sub -h localhost -u <계정> -P <pw> -t 'homeassistant/#' -v -W 12 | w
 
 **discovery가 0이면 마스터에 붙여도 화면이 빈다.** 기기를 페어링해야 z2m이 발행한다.
 
+> ⚠️ **마지막 줄은 «마스터가 domoticz일 때만» 판정이다 (2026-09-18).** 옆 레인이 다음 ISO
+> 세대에서 소비자를 **telegraf**로 바꾼다 [물려받음 — `works-nixos-zigbee` 통보 2026-09-18,
+> 커밋 `da0156e`. 우리 측정 아님]. telegraf `mqtt_consumer`는 **`zigbee2mqtt/#`를 구독하지
+> `homeassistant/#`를 안 본다** [읽음 docs.influxdata.com `/telegraf/v1/input-plugins/mqtt_consumer/`].
+> → 그 소비자에 대해 이 줄은 **거짓 음성·거짓 양성을 둘 다 낸다**: discovery가 0이어도
+> telegraf는 받고, discovery가 흘러도 telegraf 파이프는 아무것도 증명되지 않는다.
+> **소비자를 먼저 확인하고 판정 줄을 고른다.** 나머지 세 줄(리스너·인증·익명 차단)은 그대로 유효하다.
+
 ### 2.7.5 마스터 쪽 (참고 — 우리 리포 밖)
 
 MQTT-AD 하드웨어를 추가한다: 주소·포트·계정, discovery prefix `homeassistant`.
@@ -674,6 +682,15 @@ RAIL 10이 고른 경로다. domoticz는 라디오를 안 물고 **MQTT로 받�
 > ([#8](https://github.com/junghan0611/homeagent-config/issues/8) 축). 지금은 손으로 넣은 상태임을 알고 쓴다.
 
 ### 6.4.1 z2m — HA discovery를 켠다 ⚠️ 기본이 꺼져 있다
+
+> ⛔ **먼저 소비자를 확인해라 (2026-09-18). 소비자가 telegraf면 이 절을 통째로 건너뛴다.**
+> 이 설정은 **domoticz(MQTT-AD)가 소비자였기 때문에** 켜는 것이다. telegraf `mqtt_consumer`는
+> `zigbee2mqtt/#`를 구독하므로 `homeassistant/`가 없어도 데이터를 받는다
+> [읽음 docs.influxdata.com `/telegraf/v1/input-plugins/mqtt_consumer/`].
+> 옆 레인이 다음 ISO 세대에서 소비자를 telegraf로 바꾼다
+> [물려받음 — `works-nixos-zigbee` 통보 2026-09-18, 커밋 `da0156e`. 우리 측정 아님].
+> **건너뛰는 쪽이 순이득이다** — 아래는 z2m이 소유한 파일을 제자리 편집하는 절차이고,
+> 소유자가 어긋나면 z2m이 `EACCES`로 죽는다(실제로 밟았다). **안 밟는 위험이 제일 싸다.**
 
 [측정 2026-09-08] 벤더 기본값은 **`homeassistant: enabled: false`**다. 이대로면 `homeassistant/`
 토픽이 **하나도 안 나오고**, domoticz는 붙어도 **아무것도 못 본다**.

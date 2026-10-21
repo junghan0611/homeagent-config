@@ -31,21 +31,32 @@ knowledge and application versions. **libc differs by design** — our product i
 Milk-V SDK's native `musl`; SMHub measures `glibc` (`docs/SMHUB.md`). The images are not
 interchangeable (Duo S = linux 5.10 + CVITEK `rtos_cmdqu`; SMHub = kernel 6.18 + standard
 remoteproc/rpmsg + open-amp). SMHub proves the service stack and informs versions; it does not
-dictate our libc or distribution model.
+dictate our libc or distribution model **for the Duo S image**. On the SMHub lane itself the
+vendor's base and its opkg + RAUC distribution are what we build on (next section).
 
 ---
 
-## North star — a custom Buildroot productization framework
+## North star — one packaging principle, two executions (2026-10-21)
 
-The goal this lane builds toward: **our own customizable Buildroot** that packages a
-**sample hub + app + server as one image**, boots on SG2000/RISC-V, and demonstrates the
-functions all work — a public, reproducible reference for **productizing an open hub**. We
-reference SMHub for *what* a shipped hub sets up (versions + surfaces recorded in
-[`docs/SMHUB.md`](docs/SMHUB.md)), but we **own our Buildroot** rather than depend on a
-vendor image whose setup is partly closed. **No business logic** — the deliverable is
-"it's all wired, open, and reproducible."
+Reproducibility comes from packaging, not from the stack (`AGENTS.md` Invariants). GLG
+re-stated the repo's identity on 2026-10-21 as two executions of that one principle.
+**No business logic** in either.
 
-What a productization framework has to pre-bake (reusable pre-work carried from prior
+**Own-image lane (Duo S; RPi5/Yocto origin preserved).** On Duo S the goal is **our own customizable Buildroot**.
+It packages a **sample hub + app + server as one image**, boots on SG2000/RISC-V, and shows that
+every function works — a public, reproducible reference for **productizing an open hub**. In
+this lane we reference SMHub for *what* a shipped hub sets up (versions + surfaces recorded in
+[`docs/SMHUB.md`](docs/SMHUB.md)), but we **own our Buildroot** rather than depend on a vendor
+image whose setup is partly closed. The deliverable is "it's all wired, open, and reproducible."
+
+**SMHub lane.** We do not build an image — the vendor's Buildroot is not public. The vendor's
+OS, RTOS coprocessor firmware, radio firmware and opkg feed are the base. The work is to
+package the product on top of that base: service combination, configuration, deployment,
+observation, backup and recovery, and update verification. A component the vendor ships is not
+thereby validated to any stated extent; what we can rely on is what our own verification
+records. Open questions and the facts under them live in [`docs/SMHUB.md`](docs/SMHUB.md) §9.
+
+What the own-image productization framework has to pre-bake (reusable pre-work carried from prior
 embedded-hub productization on a vendor OpenWrt image):
 
 - **Device network** — DHCP/static, Wi-Fi + Ethernet, hostname / mDNS / provisioning.
@@ -116,7 +127,7 @@ deferred). Architecture center: [`runtime/README.md`](runtime/README.md).
 | 4 | Board minimization | Reclaim camera/codec ION memory, trim `cvi_*` vision modules | gate after Node, before Z2M |
 | 5 | Runtime on RISC-V | Measure Zig 100ms `homeagentd` + C906 mailbox base on silicon (musl baseline) | parallel |
 | 6 | Radio via USB dongle | ZBDongle-E Zigbee NCP / Thread RCP on Duo S, z2m / matter proof | planned |
-| 7 | SMHub reference diff | System-app review of the vendor product, port lessons to Duo S | ongoing |
+| 7 | SMHub lane | Product packaging on the vendor base (dependency dossier, configuration, verification — `docs/SMHUB.md` §9); system-app review whose lessons also feed Duo S | ongoing |
 | 8 | Productization stack | native-musl Node in Buildroot rootfs (**current, `NEXT.md` N0**) → Mosquitto → Z2M → sample set | **current** |
 | 9 | Sample hub + app + server | end-to-end open demo — all functions working, reproducibly | goal |
 

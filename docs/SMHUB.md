@@ -913,8 +913,17 @@ backend.db enabled / OpenRC running) 어디와도 일치하지 않는 **다섯 �
 
 아직 코드/번들을 만들지 않는다. 먼저 아래를 정한다.
 
-- **재현 기판**: (A) 벤더 beta5 이미지 오프라인 커스터마이즈(p7/rootfs 주입 후 repack) vs (B) 우리 buildroot
-  이미지(flake.nix, repo 코어)에 처음부터 포함.
+- **재현 기판 — (B)는 이 레인에서 닫혔다 (GLG 2026-10-21).** *「smhub로 갈경우에는 어짜피 buildroot
+  코드 비공개라 빌드 못하거든. 즉, smhub가지고 할때는 기반을 충분히 활용하겠다는거야.」*
+  - SMHub 레인은 우리 이미지를 빌드하지 않는다. 벤더 OS·RTOS·라디오 펌웨어·피드를 기반으로 쓴다.
+  - 우리 몫은 그 위의 서비스 조합·설정·배포·관측·백업/복구·업데이트 검증이다(`AGENTS.md` 북극성).
+  - (B) 「우리 buildroot 이미지(flake.nix, repo 코어)」는 Duo S 자체 이미지 레인의 몫으로 남는다.
+  - **아직 정하지 않은 것**: (A) 벤더 이미지 오프라인 커스터마이즈(p7/rootfs 주입 후 repack)를 쓸지,
+    아니면 기반을 그대로 두고 그 위 층만 얹을지.
+  - ⚠️ 벤더가 배포했다는 것은 검수됐다는 증거가 아니다. 반례가 둘 있다.
+    - §6 항목 6: 라벨이 「Factory coordinator firmware」인 이미지를 구웠더니 EZSP를 말하지 않았다.
+    - `firmware/smhub-mg24/README.md`: 펌웨어 인덱스가 404 링크를 배포했다.
+    - 어디까지 믿을지는 이 문서의 실측이 정한다.
 - **상태 원본**: (a) 손 선언 vs (b) 보드를 원하는 상태로 만든 뒤 **golden 스냅샷**(backend.db + /etc overlay
   + p7 앱-data + 패키지 집합)을 이미지 seed 로. 후자가 adapter=zstack 류 손선언 실수를 막는다.
 - **backend.db 취급**: 벤더 alembic DB 보존하고 enabled/start_at_boot/usersettings 만 손대는 게 안전.

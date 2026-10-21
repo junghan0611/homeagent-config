@@ -5,7 +5,7 @@
 
 ## 방향 — 1주일 뒤에도 변하지 않을 기준
 
-HomeAgent는 **미니멀 스펙 오픈소스 hub BSP** 리포다. 목표는 닫힌 상용 허브를 공개 Buildroot/Linux 이미지, 온보드 EFR32 라디오, Matter/Zigbee 서비스로 재현 가능하게 여는 것이다.
+HomeAgent는 **미니멀 스펙 오픈소스 hub BSP** 리포다. 목표는 허브를 **재현 가능하게 패키징**하는 것이고, 실행이 둘이다. 하나는 닫힌 상용 허브를 공개 Buildroot/Linux 이미지로 여는 **자체 이미지 레인**이다. 다른 하나는 벤더가 내준 기반 위에서 제품 수준으로 묶는 **SMHub 레인**이다(아래 북극성). 두 레인은 EFR32 라디오와 Matter/Zigbee 서비스를 다루며, 라디오 연결 방식은 보드에 따른다.
 
 RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, matter.js, Go controller, Flutter, Hailo/sLLM을 검증한 **high-spec origin lane**이다. 현재 제품 크기의 중심은 **SG2000 / SMHUB Nano / Milk-V Duo S / 512MB / onboard EFR32** 쪽이다.
 
@@ -17,10 +17,21 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 
 ---
 
-## 현재 방향 & 연결고리 (2026-07-15)
+## 현재 방향 & 연결고리 (2026-07-15, 북극성 2026-10-21)
 
-**북극성**: 커스텀 Buildroot로 **샘플 허브 + 앱 + 서버를 통으로 패키징**해 전 기능 동작을 공개 증명하는
-**제품화 틀**. SMHub는 참고(버전/설치면)일 뿐, 우리 Buildroot를 소유한다. **비즈니스 로직 없음.**
+**북극성은 원리 하나, 실행 둘이다 (GLG 2026-10-21 — 「이 리포의 정체성 변경」).** 원리는 아래
+Invariants의 *재현성은 스택이 아니라 패키징에서 나온다*이다. **비즈니스 로직 없음.**
+
+- **자체 이미지 레인 (Milk-V Duo S; RPi5/Yocto origin 경험 보존)** — Duo S에서는 커스텀 Buildroot로
+  **샘플 허브 + 앱 + 서버를 통으로 패키징**해 전 기능 동작을 공개 증명하는 **제품화 틀**이다.
+  자체 이미지의 부트체인부터 우리가 소유한다. *「리포 자체는 원래 yocto buildroot 다 해보고 기억하는게 맞아.」*
+- **SMHub 레인 (SMHUB Nano)** — 이미지를 만들지 않는다. 벤더 OS·RTOS 코프로세서 펌웨어·라디오
+  펌웨어·opkg 피드를 기반으로 쓴다. 그 위의 서비스 조합·설정·배포·관측·백업/복구·업데이트 검증을 제품
+  수준으로 묶는 것이 우리 몫이다. *「되도록이면 밑바닥은 smhub가 만들고 검수한 것을 사용할거야 …
+  그 위에서 제품수준으로 끌어올릴 방향을 잡는것이거든.」* · *「smhub로 갈경우에는 어짜피 buildroot
+  코드 비공개라 빌드 못하거든. 즉, smhub가지고 할때는 기반을 충분히 활용하겠다는거야.」*
+  ⚠️ 벤더가 배포한다는 사실은 그것이 어디까지 검수됐는지의 증거가 아니다. 어디까지 믿을지는 우리
+  검증이 정한다(`docs/SMHUB.md` §6 · §9).
 
 | 무엇을 보나 | 어디 |
 |---|---|
@@ -29,7 +40,7 @@ RPi5 + Yocto + Hailo 작업은 삭제하지 않는다. 그것은 Matter/Thread, 
 | Buildroot 경험·전략 / 운영 how-to | `docs/BUILDROOT.md` / `bsp/README.md` |
 | **새 SMHub 기기를 받았다 — 무엇을 어떤 순서로** | **`smhub/RUNBOOK.md`** (절차) ← `smhub/README.md`(왜) ← `docs/SMHUB.md`(기기 사실) |
 | **밖의 스택을 얹을까 말을 걸까** (랜드스케이프 + 통합 실사) | `docs/ECOSYSTEM-PORTFOLIO.md` → `docs/INTEGRATION-SURFACE.md` |
-| SMHub 실측 버전·설치면 (참고 근거, 벤더 비공개분 포함 좌표) | `docs/SMHUB.md` |
+| SMHub 레인의 기반 — 실측 버전·설치면·통제 경계·제품화 질문 (벤더 비공개분 포함 좌표) | `docs/SMHUB.md` |
 | Duo S 라디오 펌웨어 (보드 정렬 7.4.2) | `firmware/zbdonglee/` |
 | 런타임 아키텍처 (Zig `homeagentd` + C906L 메일박스) | `runtime/README.md` |
 | 라이브 좌표 / 계정 / 키 | `PRIVATE.md` (공개 파일엔 금지) |
@@ -66,7 +77,7 @@ Keep this repo focused on the hub: Linux host, onboard radio, protocol bridge, r
 | `docs/ECOSYSTEM-PORTFOLIO.md` | 홈오토메이션 스택 랜드스케이프 — **512MB에 무엇을 얹고 무엇에 말만 거나**. 층위 A⁰/A/A′/B/C, Buildroot 실사, Zigbee 호스트 선택지, 벤더 두 곳의 어댑터/앱-레지스트리 모델. `docs/HUBS.md`(하드웨어)의 소프트웨어 짝 |
 | `docs/INTEGRATION-SURFACE.md` | 위 문서의 **하위 실사** — SLZB Integrations 36개 전수. 전송축 수렴, 온박스 비용, 오프라인 판정 (초안) |
 | `docs/BUILDROOT.md` / `bsp/README.md` | 커스텀 Buildroot 코어 레인 — 경험·전략 / 운영 how-to (제품화 틀의 실제 빌드면) |
-| `docs/SMHUB.md` | SMHub Nano 실측 SSOT — HW/라디오/설치면/버전 (제품이 뭘 깔아주나의 참고 근거) |
+| `docs/SMHUB.md` | SMHub Nano 실측 SSOT — HW/라디오/설치면/버전. **SMHub 레인의 기반**이다: 벤더가 무엇을 깔아주고, 우리가 그 위에 무엇을 얹나 |
 | `docs/TARGET_DEVICE.md` | board/radio strategy details |
 | `docs/HUBS.md` | 인증 Zigbee/Matter 허브 랜드스케이프 (조사 자료 — 우리 방향 아님), SoC/라디오 비교, 지원 제품군 |
 | `docs/MULTIPROTOCOL.md` | 단일 라디오 Zigbee+Thread 동시 — 전략·시점 (MG21/24/26 → Series 3). "언제 단일칩으로 가나" |

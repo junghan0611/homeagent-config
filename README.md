@@ -18,6 +18,8 @@ The work is not to invent a new Matter or Zigbee stack. Buildroot, Linux, Silico
 
 > boot a small hub-class board with an open image, own the onboard radio, and document a reproducible path from BSP to Matter/Zigbee services.
 
+**One principle, two executions (2026-10-21).** Reproducibility comes from packaging, not from the stack. On the boards we own end to end — Milk-V Duo S, and the RPi5/Yocto origin lane — that packaging starts from our own image, and this repo keeps what it learned building with Yocto and Buildroot. On the **SMHUB Nano** we do not build an image: the vendor's Buildroot is not public. The vendor's OS, RTOS coprocessor firmware, radio firmware and package feed are the base. The work there is packaging the product on top of that base: service combination, configuration, deployment, observation, backup and recovery, and update verification. That a vendor ships a component is not evidence of how far it was validated; our verification is what records that ([`docs/SMHUB.md`](docs/SMHUB.md) §9).
+
 **The board picks the ISA, not the other way round.** On SG2000-class hardware the big core boots either ISA by a physical slide switch — a switch, not a fuse, so it is reversible — and which one we run follows whichever board the work is standing on.
 
 Right now that board is the **SMHUB Nano**, because it arrives already equipped and costs far less hand-work than bringing Milk-V up ourselves. It is **riscv64**, so that is where the current work is.
@@ -200,12 +202,12 @@ homeagent-config/
 - Privacy by default.
 - Reproducible over impressive.
 - Commodity parts named honestly.
-- Own the boot path, rootfs, radio, and service lifecycle.
+- Own the boot path, rootfs, radio, and service lifecycle where we build the image; where the vendor owns the base (SMHub), keep every layer inspectable and own what sits on top.
 - Keep platform divergence explicit.
 - **No display in the hub.** If a screen is needed, send a message to the web and let it draw (A2UI). Connectivity is the spec — not 4K, not a GPU.
 - **Heavy inference is an API call.** The device declares "I am a hub" and turns a state machine, turn by turn.
 - **A banner is not evidence.** Verify by filesystem UUID, not by "100% complete".
-- **Nothing gets pushed in over ssh to make a product.** If it is not in the image, it is not in the product.
+- **Nothing gets pushed in over ssh to make a product.** If it is not in the image — or, on a vendor base, in the declared package set and configuration — it is not in the product.
 
 Full statement (한글): [#7](https://github.com/junghan0611/homeagent-config/issues/7) — *경계가 투명하지 않으면 재현성이 사라지고, 재현성이 사라지면 인간의 하루가 훌러덩 사라진다.*
 

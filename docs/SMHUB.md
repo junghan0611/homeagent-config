@@ -594,10 +594,35 @@ L2 코프로세서 아키텍처(C906L FreeRTOS + ESPHome, open-amp/RPMsg 2채널
   `zbdonglee_zigbee_ncp_7.4.2.0_hw_flow_115200.gbl`, sha256 `42fcf8a2…` 바이트 동일),
   버전을 올리려면 **sw_flow 빌드를 우리가 만들어야 한다**. 레시피는
   `Nerivec/silabs-firmware-builder`의 `manifests/smlight/smlight_slzb07Mg24_zigbee_ncp.yaml`
-  (우리 칩 `EFR32MG24A020F1024IM40`)에 `manifests/sonoff/sonoff_dongle-pmg24_zigbee_ncp.yaml`의
+  (~~우리 칩 `EFR32MG24A020F1024IM40`~~ — 아래 정정)에 `manifests/sonoff/sonoff_dongle-pmg24_zigbee_ncp.yaml`의
   `SL_IOSTREAM_EUSART_UART_FLOW_CTRL_SOFT` + CTS/RTS port·pin `0` + `baudrate 115200`을
   이식하는 4줄 diff다. ⚠️ 미결: 같은 MG24라도 07↔06 매니페스트에서 **TX/RX가 뒤바뀐다**
   (07 TX=PA6/RX=PA5, 06 TX=PA5/RX=PA6) → SMHub Nano가 어느 쪽인지 확정 필요.
+  > **정정 (2026-10-21) — 「우리 칩 IM40」은 측정이 아니었다.** 그 괄호는 SLZB-07MG24 매니페스트의
+  > `device:` 값을 옮겨 적은 것이다. Nano의 부품번호 영수증은 이 문서 어디에도 없다.
+  > - **매니페스트가 바뀌었다** [읽음 `Nerivec/silabs-firmware-builder` `4694b2751`, 2026-09-20 「fix: chip
+  >   variant for smlight mg24」]. SMLIGHT MG24 매니페스트 18개(SLZB-06MG24 · -06MG24U · -07MG24 · -MR3U ·
+  >   -MR5U)의 `device`가 **한 커밋에** `EFR32MG24A020F1024IM40 → …IM48`로 바뀌었다.
+  >   - 사유·PR·이슈는 없다.
+  >   - 직전 PR #118(09-12)은 「done from the specs given by smlight」이라고 적었다.
+  >   - 한 제품의 리비전이 아니라 제품군 전체를 한 번에 바꾼 모양이라, **빌더 쪽 지정 정정으로 읽힌다** [추정].
+  >   - 반면 z2m 문서(`Koenkk/zigbee2mqtt.io` `docs/guide/adapters/emberznet.md`)는 지금도
+  >     SLZB-07mg24 = IM40이다. 외부 출처끼리 엇갈린다.
+  > - **두 부품의 차이는 패키지와 GPIO뿐이다** [읽음 `SiliconLabs/simplicity_sdk` `efr32mg24a020f1024im40/48.slcc`·`.h`;
+  >   Silicon Labs 제품 페이지]. IM40 = QFN40 · GPIO 26(PA0–8 · PB0–4 · PC0–7 · PD0–3).
+  >   IM48 = QFN48 · GPIO 32(+PA9 · PB5 · PC8–9 · PD4–5). 플래시 1 MB · RAM 128 kB · Cortex-M33 · 무선 기능 목록은 같다.
+  >   매니페스트의 UART/흐름제어 핀(PA5 · PA6 · PB0 · PB1)은 두 패키지 모두에 있다.
+  >   IM48로 지정해 빌드한 이미지가 QFN40 실물에서 도는지는 **확인하지 않았다**.
+  > - **`115200`은 빌더 기본값이 아니라 이식할 목표값이다.** 그 매니페스트는 `6f7d5a745`(2025-11-22
+  >   「increase baud on SLZB-07MG24 to 460800」)부터 **460800 · hw_flow**다. 그 전에는 115200이었다가
+  >   한 번 올렸다 되돌린 이력이 있다(전 이력 29커밋 [읽음 GitHub API]).
+  >   `115200`은 이 보드의 라이브 호스트 프로파일(`rtscts: false` @115200, 위 실측)이고, 벤더가 이 유닛에
+  >   내주는 이미지도 115200이다(`firmware/smhub-mg24/fwlist-device67.json`). 레시피를 쓸 때는 빌더 기본값이 아니라 이쪽을 따른다.
+  > - **보드 무접촉으로 가를 수 있는 것은 없다.** 벤더가 Nano(device 67)에 SLZB-07MG24 이미지를 내준다는 것은
+  >   이미지 호환을 말할 뿐, 패키지는 말하지 않는다. 벤더 매뉴얼에도 Nano의 MG24 부품번호가 없다.
+  >   가르는 길은 둘이다. (1) 실물 칩 마킹·패키지(QFN40 5×5 mm vs QFN48 6×6 mm [읽음 EFR32MG24 데이터시트]).
+  >   (2) 칩의 `DEVINFO->PKGINFO` `PINCOUNT`/`PKGTYPE` 레지스터 — SWD나 그걸 노출하는 펌웨어가 필요하다.
+  >   어느 쪽도 하지 않았고, **현재 보드 리비전은 단정하지 않는다.**
   ⚠️ **원문 (2026-07-03 기록)**: 라이브 동작 정본 = z2m **`rtscts: false`(no-flow)** @115200. 그런데 stock `ncp-uart-hw`는 기본 **RTS/CTS on**(`SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE=usartHwFlowControlCtsAndRts`, `EMBER_SERIAL1_RTSCTS`). → 벤더 flashed 이미지는 **no-flow 빌드**이거나 그렇게 구동 중이며, **stock hw판을 그대로 리플래시 후 no-flow 호스트로 몰면 부하 시 바이트 드롭 가능**. Phase 2 직접구동 전 flow-control 정합(NCP를 no-flow로 빌드 vs 양단 RTS/CTS — `ttyS1` RTS/CTS 배선 미검증) **재조정 항목**. (§6.1 재플래시 경로.)
 
 **derisk 종합**: Q1·Q2 🟢 = **Phase 1(쉘) 실착수 막는 board blocker 없음**. Q3 확인사살 통과, Q4·Q5는 Phase 2 경계 명확.
@@ -924,6 +949,23 @@ backend.db enabled / OpenRC running) 어디와도 일치하지 않는 **다섯 �
     - §6 항목 6: 라벨이 「Factory coordinator firmware」인 이미지를 구웠더니 EZSP를 말하지 않았다.
     - `firmware/smhub-mg24/README.md`: 펌웨어 인덱스가 404 링크를 배포했다.
     - 어디까지 믿을지는 이 문서의 실측이 정한다.
+- **출고 구성 — 현재 좌표 (GLG 2026-10-21 「응 smhub의 이 측면을 좌표로 잡자」).** 목표는 벤더 기반 위 우리
+  앱·서비스를 벤더 패키지 규약으로 묶어, 전원 인가 → 망·시각 준비 → 장비별 프로비저닝 → 우리 허브 서비스
+  실행까지 부팅만으로 제품으로 동작하게 하는 것이다. 클라우드 IoT 연동은 이 수준을 설명한 예시이지 채택 결정이 아니다.
+  - 벤더가 연 이음매 [보드 읽기 전용, 2026-10-21]:
+    - **앱 패키지 규약**: control 안의 `openrc` · `schema.json`(`system.data_dir`가 벤더 백업 범위를 정한다) ·
+      `postinst`(`/usr/lib/smhub/service-helpers.sh`의 `pkg_openrc_install` → default 런레벨). 선택적으로
+      `<pkg>.autostart`를 두면 `firstboot-upgrade`가 업그레이드 후 첫 부팅에 켠다. `Required-OS-Version`은 opkg가 검사한다.
+    - **장비별 근원**: EEPROM(uuid·model, TLV는 hostname·SSH 공개키 두 종류뿐 — `firstboot-production`이 1회 적용) ·
+      SD 카드 `smhub.json`(hostname · eth0/wlan0 · authorized_keys).
+    - **공장초기화**: `/mnt/user/.factory-seed/`의 ipk를 오프라인으로 재설치한 뒤 firstboot를 다시 돈다.
+    - **OS 번들**: RAUC는 벤더 서명 번들만 받는다.
+  - `smhub/pack-ipk.sh`(domoticz)가 증명한 것은 크로스빌드 이식성까지다. 벤더 규약(maintainer script ·
+    control의 `openrc` · `schema.json` · autostart)과 업그레이드·초기화 생존은 아직 우리 패키지로 보지 않았다.
+  - 검증 질문: 공통 패키지·설정 vs 장비별 자격증명·상태 · 망/시각 게이트(비정상 종료 뒤엔 swclock이 마지막
+    정상 종료 시각으로 부팅한다 — 2026-10-21 실측) · 재부팅 멱등성 · 자동시작 · 업그레이드·OTA·공장초기화·복원 생존.
+  - **미결 — 사실·정책 아님**: seed 적재 경로(작성 주체 미확인) · (A) repack / 벤더 커스텀 이미지 ·
+    장비별 자격증명을 둘 자리 · 특정 클라우드 채택.
 - **상태 원본**: (a) 손 선언 vs (b) 보드를 원하는 상태로 만든 뒤 **golden 스냅샷**(backend.db + /etc overlay
   + p7 앱-data + 패키지 집합)을 이미지 seed 로. 후자가 adapter=zstack 류 손선언 실수를 막는다.
 - **backend.db 취급**: 벤더 alembic DB 보존하고 enabled/start_at_boot/usersettings 만 손대는 게 안전.

@@ -4,7 +4,7 @@
 - [x] **2. 스택 랜드스케이프 — 512MB에 무엇을 얹고 무엇에 말만 거나** (2026-09-01)
 - [x] **3. SMHub Nano 브링업 — 크로스빌드 → ipk → Zigbee 실물 → 이기종 2허브 한 화면** (~2026-09-10)
 - [x] **4. 코프로세서 발견 + ASH 관측 — `esphome-bin` = C906L 펌웨어, 43시간 창 수확** (2026-09-16, `v2026.9.16`)
-- [ ] **5. 벤더 기반·앱 카탈로그를 의존성으로 검증 — SMHub 레인 제품 패키징의 바닥** ← CURRENT: ipk dossier부터 (보드 무접촉)
+- [ ] **5. 출고 제품 패키징 — 벤더 규약으로 우리 서비스를 묶어, 부팅하면 제품으로 동작** ← CURRENT: 최소 자체 서비스 패키지 명세/검증표 (구현·설치 아님)
 - [ ] **6. 런타임 축 — `runtime/README.md` mailbox 계약 판단** ← PAUSED: 설계 판단이라 새 세션이 낫다
 - [ ] **7. 부하 등급 판정 (RAIL 11)** ← PAUSED: 곡선이 2대에서 멈춰 있다, 기기를 더 붙여야 움직인다
 - [ ] **8. 펌웨어 버전업 (RAIL 13)** ← PAUSED: 벤더 공개 이미지가 전부 hw_flow, 인덱스가 404를 배포 중
@@ -13,27 +13,35 @@
 
 ---
 
-# NOW — 이어받는 자리 (2026-09-16, 2026-10-21 보정)
+# NOW — 출고 제품 패키징 (2026-10-21)
 
-> **한 줄**: SMHub 레인은 벤더 기반 위의 제품 패키징이다. 다음 한 수는 **보드에 안 붙고**
-> ipk를 더 읽어 기반·앱 조합의 `?`를 줄이는 것이다.
+> **Stem** (GLG 2026-10-21 «응 smhub의 이 측면을 좌표로 잡자»): 벤더 기반 위 우리 앱·서비스를
+> 벤더 패키지 규약으로 묶어, **전원 인가 → 망·시각 준비 → 장비별 프로비저닝 → 우리 허브 서비스
+> 실행**까지 부팅만으로 출고 제품처럼 동작하게 한다. 클라우드 IoT 연동은 그 수준을 설명한
+> 예시이지 채택 결정이 아니다. ipk 해부(옛 RAIL 5 dossier)는 독립 목적이 아니라 이 stem의
+> **기반 계약 조사**다.
 
-- **Current**: `v2026.10.21` 정체성·문서 체크포인트. 북극성은 원리 하나, 실행 둘이다
-  (`CHANGELOG.md` 해당 태그). 43시간 관측 증거는 **2026-09-16 당시 기록**이다
-  (`log_level: info` · `log_output: [console]` · `adapter_concurrent: 1`, 당시 uptime 6일).
-  현재 보드 상태는 2026-10-21 기준 미확인이다.
-- **Next**: (1) `matterbridge` · `matterbridge-z2m` · `picoclaw-core` · `tailscale` · `openthread`의
-  ipk를 `smhub` 스킬 §2.2 절차로 받아 `control`/`openrc`/`postinst`를 읽는다 →
-  (2) 각각의 OpenRC 서비스·실행 방식·기본 설정·포트를 표로 만든다 →
-  (3) `.agent-reports/2026-09-16-smhub-dependency-scenarios-terra.md`의 `?` 중 무엇이 닫혔는지 판정.
-- **Verify**: 「이 시나리오는 어떤 데몬이 뜨고, 무엇과 배타이고, 되돌리는 법이 무엇인가」에
-  **추정 없이** 답할 수 있으면 통과. RSS만은 여전히 실행 전 미지수다 — 그건 `?`로 남겨라.
-- **Blocker**: 없음. 보드도 네트워크도 필요 없다(피드 인증만).
-- **Read**: `.claude/skills/smhub/SKILL.md` §2 → `docs/SMHUB.md` §5.8 → 위 terra 보고서.
+- **Current**: 2026-10-21 보드 읽기 전용 실측 — OS 1.0.2, opkg 11개 버전 9/16과 같음.
+  연결 기기 0대는 **의도된 상태**다(연결 테스트 자리가 아니다, GLG). `smhub-services` off는
+  **2026-09-10 정책 그대로**다(평상시 stop·자동시작 해제, `docs/SMHUB.md` §5.6). 벤더 출고 이음매
+  지도는 `docs/SMHUB.md` §9 「출고 구성」에 요약했다. Core/Home의 역할과 미실행 공동 검증안은
+  `README.md` 「Hub, Edge and Core」에 정리했다. 이번에는 코드 없이 문서 정렬로 닫는다.
+- **Next**: (1) 기존 ipk 증명(`smhub/pack-ipk.sh`, `smhub/RUNBOOK.md` §5·§6)과 벤더 규약
+  (control의 `openrc`·`schema.json`·`postinst`+`/usr/lib/smhub/service-helpers.sh`·`<pkg>.autostart`)의
+  차이표 → (2) **「최소 자체 서비스 패키지」 명세/검증표**를 쓴다 — 구현·빌드·설치가 아니다 →
+  (3) 검증항목마다 「무엇을 보면 통과인가」를 적는다:
+  공통 패키지·설정 vs 장비별 자격증명·상태 · 망/시각 게이트 · 재부팅 멱등성 · 자동시작 ·
+  업그레이드·OTA·공장초기화·복원 생존.
+- **Verify**: 표의 행마다 `[read]`/`[측정]` 근거가 붙어 있고, 검증항목마다 통과 판정이 관측
+  가능한 사실(파일·프로세스·로그)로 적혀 있으면 통과.
+- **미결 — 사실·정책으로 적지 마라**: seed 적재 경로(`.factory-seed` 작성 주체 미확인) ·
+  (A) 벤더 이미지 repack / 벤더 커스텀 이미지 · 장비별 자격증명을 둘 자리 · 특정 클라우드 채택.
+- **Blocker**: 없음. 이번 한 수는 문서·명세라 보드가 필요 없다.
+- **Read**: `docs/SMHUB.md` §9 → `smhub/RUNBOOK.md` §5·§6 → `.claude/skills/smhub/SKILL.md` §2.
 - **Do not touch**:
-  - ⛔ **z2m 재기동·보드 재부팅** — 43시간 무크래시 구간이 지금 가장 비싼 증거이고,
-    콘솔 로그가 `/tmp`(tmpfs)라 재부팅하면 사라진다. 재기동 자체가 크래시 용의선상이다
-    (`smhub/RUNBOOK.md` §6.5.0).
+  - ⛔ **구현·빌드·보드 설치** — 명세가 먼저다. `smhub-services` 기동도 GLG go가 있을 때만.
+  - ⛔ **z2m 재기동·보드 재부팅** — 기록된 크래시 둘은 모두 재기동 직후다(n=2,
+    `smhub/RUNBOOK.md` §6.5.0). 43시간 로그는 9/16에 수확했고, 그 tmpfs는 이후 전원 차단으로 이미 없다.
   - ⛔ **RTOS 코어 정지/재기록** (`esphome-bin` 설치·제거 포함) — 원복 경로 미문서화.
   - ⛔ **OTA** · ⛔ **MG24 재플래시** (Zigbee 망 전체를 잃고 재페어링 = 이력 소실).
   - ⛔ 보드 `.164`(gecko) · 보드 91 · `bsp/sdk/out/quarantine/`(오염 이미지).
@@ -42,10 +50,11 @@
 
 | 무엇 | 지금 상태 |
 |---|---|
-| **1순위 시나리오** — Node-RED 갱신(싸다) vs Matter 브릿지(축이 크다) | GLG가 «Matter로 바로 안 간다, raw부터»라 했으므로 5번 dossier가 선행 |
+| **출고 구성 미결** — seed 적재 경로 · (A) repack / 벤더 커스텀 이미지 · 장비별 자격증명 자리 · 클라우드 채택 | 5번 명세/검증표가 선행. 그 전엔 어느 것도 사실·정책으로 적지 않는다 |
+| **1순위 시나리오** — Node-RED 갱신(싸다) vs Matter 브릿지(축이 크다) | GLG가 «Matter로 바로 안 간다, raw부터»라 했으므로 5번 명세가 선행 |
 | **ASH 2단계** `adapter_concurrent 1 → 16` | 재페어링 때 같이. 그 전에 `tune.sh --ash-off` |
-| **`smhub-services` 정지** (+80MB 회수) | 지금은 그냥 둔다(GLG 2026-09-14). ⚠️ 끄면 Apps 화면에서 **설치가 막힌다** — 필요한 설치를 끝낸 뒤에만 |
-| **이슈 본문 둘** | [#10](https://github.com/junghan0611/homeagent-config/issues/10) 본문이 닫힌 「보드에 domoticz」를 열린 과제로 지시 · [#11](https://github.com/junghan0611/homeagent-config/issues/11)이 현재 근거보다 강하고 `rxAckFrames` 논거가 빠졌다 |
+| **`smhub-services` 기동** | 평상시 stop·자동시작 해제가 정책이다(GLG 2026-09-10). 2026-10-21 실측 off. 켜야 Apps 설치·UDS 정보면이 열린다 — 켤 때마다 GLG go |
+| **현재 이슈판** | [#8](https://github.com/junghan0611/homeagent-config/issues/8) 제품 패키징 현재 · [#6](https://github.com/junghan0611/homeagent-config/issues/6) 자체 이미지 보류 · [#12](https://github.com/junghan0611/homeagent-config/issues/12) ROS 독립 검수. #10은 결과 갈무리, #11은 진단 보정 후 연구 보관 종료 |
 
 ## 옆 레인에 넘어가 있는 것
 
@@ -61,9 +70,12 @@
 
 # RECENT
 
+- **[2026-10-21]** 좌표 재설정 — RAIL 5 = 출고 제품 패키징(GLG). 보드 읽기 전용 실측, `smhub-services`
+  1.1.0-1 해부, 벤더 출고 이음매 지도. 9/16의 Apps 「미설치」 predicate `?`는 닫혔다 — 벤더 파서가
+  opkg status의 `Recommends:`에서 해석을 멈춘다(`smhub-services`·`esphome-bin`만 해당).
 - **[2026-10-21]** 정체성 정리는 `CHANGELOG.md` `v2026.10.21`로 갈무리했다.
   다음은 RAIL 5. 미결: 벤더 이미지 repack 여부. 스킬·클론 목록·MG24 정정의 로컬 변경은
-  이번 태그 밖에 보존했으며, 다음 작업에서 별도 검토·커밋한다.
+  해당 태그에는 포함되지 않았으며, 후속 문서 정리 커밋에서 함께 반영한다.
 - **[2026-09-16]** `v2026.9.16` 컷 — 52커밋, SMHub 레인 전체. `.claude/skills/smhub/` 신설
   (피드·ipk를 보드 없이 읽는 절차가 핵심). terra 정합성 검토 반영.
 - **[2026-09-16]** ASH 43시간 15분 수확: 덤프 46개 중 오류 비영 1개(그것도 CRC 정상 복구),
@@ -94,6 +106,7 @@
 | Duo S 열린 빚 (ION 148M 회수 · defconfig 주석 · corepack · Z2M 키 백업) | `bsp/README.md` §Open debts |
 | 온박스에 무엇을 얹나 · 피드에 계측 스택 없음 | `docs/ECOSYSTEM-PORTFOLIO.md` §3.1, §1 |
 | 시나리오 조합표·의존성 그래프 (초안) | `.agent-reports/2026-09-16-*.md` (gitignored) |
+| 출고 경로 지도·`smhub-services` 해부·보드 실측 원본 (로컬 전용) | `.agent-reports/2026-10-21-smhub-*.md` (gitignored) — 공개 요약은 `docs/SMHUB.md` §9 |
 | 이 세션들의 작업기 | llmlog `20260701T123010` §6 |
 | 방향·페이즈 | `ROADMAP.md` |
 

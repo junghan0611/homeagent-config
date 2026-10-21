@@ -1,6 +1,6 @@
 ---
 name: smhub
-description: "SMHUB Nano(SG2000 riscv64, 온보드 EFR32MG24) 총체 작업면 — 벤더 리포 12개 갱신, 업데이트 포인트 파악, 리서치, 그리고 그 끝에 있는 플래시. 핵심은 «보드에 안 붙고 얼마나 아는가»다: 벤더 opkg 피드를 호스트에서 인증 조회하고 ipk를 해부하면 Depends·OpenRC depend()·postinst/prerm을 전부 읽을 수 있다. 「설치됨」이 다섯 가지 다른 뜻을 갖는 평면 구분, 무엇이 RTOS 코프로세서 사슬이고 무엇이 아닌지, 그리고 절대 건드리면 안 되는 셋을 담는다. 트리거: 'smhub', 'smhub 업데이트', '벤더 리포 갱신', 'smlight', '피드 조회', 'opkg', 'ipk', 'Packages', 'esphome-bin', 'smhub-broker', 'remoteproc', 'C906L', 'RTOS 코어', 'matterbridge', 'picoclaw', 'Apps 화면', '앱 카탈로그', '무엇을 깔까', '의존성', 'ASH', 'MG24', 'Nano'."
+description: "SMHUB Nano(SG2000 riscv64, 온보드 EFR32MG24) 총체 작업면 — 벤더 리포 15개 갱신, 업데이트 포인트 파악, 리서치, 그리고 그 끝에 있는 플래시. 핵심은 «보드에 안 붙고 얼마나 아는가»다: 벤더 opkg 피드를 호스트에서 인증 조회하고 ipk를 해부하면 Depends·OpenRC depend()·postinst/prerm을 전부 읽을 수 있다. 「설치됨」이 다섯 가지 다른 뜻을 갖는 평면 구분, 무엇이 RTOS 코프로세서 사슬이고 무엇이 아닌지, 그리고 절대 건드리면 안 되는 셋을 담는다. 트리거: 'smhub', 'smhub 업데이트', '벤더 리포 갱신', 'smlight', '피드 조회', 'opkg', 'ipk', 'Packages', 'esphome-bin', 'smhub-broker', 'remoteproc', 'C906L', 'RTOS 코어', 'matterbridge', 'picoclaw', 'Apps 화면', '앱 카탈로그', '무엇을 깔까', '의존성', 'ASH', 'MG24', 'Nano'."
 user_invocable: true
 ---
 
@@ -21,12 +21,24 @@ Repo: `~/repos/gh/homeagent-config`. 벤더 클론: `~/repos/3rd/smlight-smhub/`
 ## 0. 시퀀스 — 「smhub 업데이트하고 리서치하자」가 오면
 
 ```bash
-# 1. 벤더 클론 12개가 움직였나 (몇 분)
+# 1. 벤더 클론 15개가 움직였나 (몇 분)
 cd ~/repos/3rd/smlight-smhub
-for d in */; do [ -d "$d/.git" ] && { git -C "$d" fetch -q;
+for d in */; do [ -d "$d/.git" ] && { git -C "$d" fetch -q --tags;
   echo "$d $(git -C "$d" rev-list --left-right --count HEAD...@{u} 2>/dev/null)"; }; done
 # 출력 "0 0" = 제자리. 뒤 숫자가 있으면 upstream이 움직였다.
 # 로컬 변경이 있으면 fast-forward 하지 말고 보고만 한다.
+
+# 1b. 추적 안 하는 브랜치까지 — 위 루프는 한 브랜치만 본다
+for d in */; do [ -d "$d/.git" ] && echo "$d $(git -C "$d" config --get-all remote.origin.fetch | tr '\n' ' ')"; done
+# refspec이 +refs/heads/<하나>:… 인 클론은 fetch가 다른 브랜치를 영영 안 가져온다
+# (2026-10-21: 그 전 클론 12개 중 9개가 이랬다). 그런 클론은 원격 전체를 따로 본다:
+git -C <repo> ls-remote --heads --tags origin
+# 날짜가 필요하면 그 브랜치만 FETCH_HEAD로 받는다 — refspec·config는 건드리지 않는다:
+git -C <repo> fetch -q origin <branch> && git -C <repo> log -1 --format='%h %ad %s' --date=short FETCH_HEAD
+
+# 1c. 조직에 새 리포가 생겼나 — 클론 목록 밖은 위 두 단계로 안 보인다
+gh api 'orgs/smlight-smhub/repos?per_page=100' -q '.[] | "\(.pushed_at[0:10]) \(.name)"' | sort -r
+# pushed_at은 dependabot 브랜치 push로도 움직인다. 기본 브랜치 날짜와 따로 봐라.
 
 # 2. 벤더 피드가 움직였나 (초 단위, 보드 무접촉) — §2.1
 # 3. 궁금한 패키지를 해부 (초 단위, 보드 무접촉) — §2.2
@@ -37,21 +49,32 @@ for d in */; do [ -d "$d/.git" ] && { git -C "$d" fetch -q;
 
 ---
 
-## 1. 나무가 하나가 아니다 — 리포 12개의 정체
+## 1. 나무가 하나가 아니다 — 리포 15개의 정체
 
-`~/repos/3rd/smlight-smhub/` 아래 12개가 **세 갈래**다. 이걸 섞으면 엉뚱한 리포를 읽는다.
+`~/repos/3rd/smlight-smhub/` 아래 15개가 **세 갈래**다. 이걸 섞으면 엉뚱한 리포를 읽는다.
+`smlight-smhub` org의 공개 리포 12개는 **전부** 클론돼 있다 [측정 2026-10-21, `gh api orgs/smlight-smhub/repos`].
 
-### (a) C906L RTOS 빌드체인 — 8개 (`smlight-smhub` org)
+### (a) C906L RTOS 빌드체인 — 11개 (`smlight-smhub` org)
+
+묶는 관계는 서브모듈이 정본이다 — 이 목록이 아니라 `.gitmodules`를 믿어라.
 
 ```
-esphome               벤더 ESPHome 포크. platformio.ini:7 default_envs = rtos-smhub
-platform-sg2000       PlatformIO 플랫폼. boards/smhub.json = core:c906l, framework:freertos
-framework-sg2000-rtos C906L 베어메탈 SDK
-rtos-config           nano-esphome.yaml — 코어에 실제로 컴파일되는 선언
-open-amp · libmetal   rpmsg/remoteproc 기반 (업스트림 미러)
-nanopb                protobuf — GPIO RPC가 쓴다
-smhub-rtos-dev        위 7개를 묶는 개발 메타리포
+smhub-rtos-dev        개발 메타리포. 서브모듈 6개 ↓
+├─ esphome            벤더 ESPHome 포크. platformio.ini:7 default_envs = rtos-smhub
+├─ platform-sg2000    PlatformIO 플랫폼. boards/smhub.json = core:c906l, framework:freertos
+├─ framework-sg2000-rtos  C906L 베어메탈 SDK. 서브모듈 4개 ↓
+│  ├─ open-amp · libmetal   rpmsg/remoteproc 기반 (업스트림 미러)
+│  ├─ FreeRTOS-Kernel       업스트림 미러 + PlatformIO library.json 한 줄 (V11.3.0)
+│  ├─ nanopb                protobuf — GPIO RPC가 쓴다
+│  └─ lib/smhub-hal         ⚠️ gitlink만 있고 .gitmodules 항목도 공개 리포도 없다 (404) — 못 본다
+├─ rtos-config        nano-esphome.yaml — 코어에 실제로 컴파일되는 선언
+├─ device-builder           업스트림 esphome/device-builder 재배치본 + sg2000 보드 정의 2줄
+└─ device-builder-frontend  그 웹 UI + 위저드에 sg2000 한 줄
 ```
+
+device-builder 둘은 **개발 PC·HA add-on 쪽 대시보드**다(`smhub-addons/esphome-smhub/Dockerfile`이
+`pip install`한다). 보드 위에서 도는 것이 아니다. 서브모듈 핀과 클론 HEAD가 같은지는
+`git -C smhub-rtos-dev ls-tree HEAD src/` · `git -C framework-sg2000-rtos ls-tree HEAD lib/`로 본다.
 
 ### (b) SLZB 제품군 — 우리 보드가 아니다 (`smlight-tech` org)
 
@@ -60,6 +83,10 @@ slzb-esphome      ESP32 계열 SLZB용 ESPHome 컴포넌트. SG2000/nano/rpmsg �
                   [인계, `PRIVATE.md` §클론 표 — 이 스킬에서 직접 재검색하지 않았다]
 slzb-os-scripts   SLZB-class OS 스크립트. Berry 언어 온디바이스 자동화 API — L4 참고자료
 ```
+
+`smlight-tech` org에는 리포가 더 있지만 일부러 안 받는다 — `slzb-os-apps`(SLZB-OS 앱 카탈로그),
+`pysmlight`(SLZB-06 라이브러리), `slzb-os-zigbee-hub`, `smlight-cc-flasher` 등은 SLZB-OS·CC 계열이고
+SMHub 펌웨어·패키지 경로에 닿지 않는다. 받을 이유가 생기면 그때 이 표에 올린다.
 
 ### (c) 도구·애드온
 
@@ -80,10 +107,24 @@ smhub-addons    ⚠️ 이름에 속지 마라 — Home Assistant Supervisor add
 ### 2.1 피드 인덱스 조회
 
 ```bash
-AUTH=$(sed -n 's/.*option http_auth \([^`]*\)`.*/\1/p' ~/repos/gh/homeagent-config/PRIVATE.md | head -1)
-curl --fail --silent --show-error -u "$AUTH" https://pkg.smlight.tech/v1/Packages -o /tmp/smpkgs.txt
-wc -c /tmp/smpkgs.txt    # 2026-09-16 기준 14,282 B
+AUTH=$(sed -n 's/^SMHUB_FEED_AUTH=//p' ~/repos/gh/homeagent-config/.env.smhub | head -1)
+if [ -z "$AUTH" ]; then
+  printf '%s\n' 'SMHUB_FEED_AUTH 비었음 — .env.smhub를 확인하라 (값은 출력하지 마라)' >&2
+else
+curl --fail --silent --show-error -u "$AUTH" -D /tmp/smpkgs.hdr https://pkg.smlight.tech/v1/Packages -o /tmp/smpkgs.txt
+wc -c /tmp/smpkgs.txt    # 2026-09-16·2026-10-21 둘 다 14,282 B
+fi
 ```
+
+⚠️ **인증값은 `PRIVATE.md`에 없다 — `.env.smhub`의 `SMHUB_FEED_AUTH`다**(`PRIVATE.md` §피드 표가 그렇게
+가리킨다). 2026-10-21까지 이 자리는 `PRIVATE.md`에서 `option http_auth`를 sed로 뽑았는데, 그 줄이 없어서
+**빈 값이 조용히 나왔다**. 위 조건문은 빈 인증값을 알리고 요청을 보내지 않는다. 값을 echo·로그·문서에 남기지 마라.
+
+⚠️ **인덱스의 `Last-Modified`가 움직였다고 패키지가 바뀐 것은 아니다.** 2026-10-21 인덱스는 10-11에
+다시 쓰였지만 크기는 같았고, 가장 새 ipk는 08-28이었다. 새 패키지를 판정하려면 ipk마다 `curl -I`로
+`Last-Modified`를 읽어라. 다음 대조를 위해 받은 인덱스는 `.agent-reports/feed/Packages.<YYYYMMDD>`로
+남겨 둬라(gitignored) — 9/16 사본이 없어서 10-21엔 「내용 동일」까지는 증명하지 못했다. 첫 사본은
+`Packages.20261021`이다. 다음엔 `diff`로 가른다.
 
 ⚠️ **경로는 `v1/Packages` 하나다.** `v1/riscv64/Packages`·`v1/smhub_core/Packages` 전부 404다
 (arch 하위 디렉토리 구조가 아니다). 그리고 `curl -s`만 쓰면 **401 HTML 179 B를 성공으로 저장한다** —
@@ -290,6 +331,15 @@ Zigbee는 이 축에 **없다** — 「z2m 부담을 코프로세서로 넘긴�
 Nano는 **MG24 한 개**라 Zigbee와 Thread가 **배타**다(동시 아님, 순차 재플래시).
 Zigbee로 되돌리는 경로는 있지만 **재페어링이 필요하다** = 기기 이력이 남지 않는다.
 `docs/MULTIPROTOCOL.md`가 「언제 단일칩 동시로 가나」의 SSOT다.
+
+### Nano의 MG24 부품번호는 아직 모른다
+
+남의 매니페스트에서 칩을 빌려 쓰지 마라. `Nerivec/silabs-firmware-builder` `4694b2751`(2026-09-20)이
+SMLIGHT MG24 매니페스트 18개(SLZB-06MG24/-06MG24U/-07MG24/-MR3U/-MR5U)를 **한 커밋에** `IM40 → IM48`로
+바꿨다. 사유는 적혀 있지 않다. z2m 문서는 지금도 SLZB-07mg24를 IM40이라고 쓴다. 그리고 **그 매니페스트는 Nano용이 아니다.**
+둘 사이의 차이(Silicon Labs SDK 디바이스 파일 기준)는 패키지와 GPIO뿐이다: QFN40 26개 ↔ QFN48 32개.
+IM48에만 PA9 · PB5 · PC8–9 · PD4–5가 있다. 플래시 1 MB · RAM 128 kB · 코어 · 무선은 같다.
+가르는 법과 남은 미확인은 `docs/SMHUB.md` §5.5 Q5 정정 블록에 있다.
 
 Milk-V Duo S eMMC 굽기는 **별개 스킬** `duo-s-flash`다. 섞지 마라.
 

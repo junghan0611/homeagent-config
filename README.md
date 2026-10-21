@@ -32,6 +32,29 @@ RPi5 + Yocto + Hailo remains the **high-spec origin lane**: it proved matter.js,
 
 ---
 
+## Hub, Edge and Core — connection first
+
+The shared direction is **a small authenticated connection structure, not a full IoT cloud**. A person can run the server for a home or SOHO; a small business can operate the same minimal contract. Features can grow above it without making automation, AI, a consumer app or a device catalogue prerequisites.
+
+| Repository | Intended responsibility |
+|---|---|
+| [`coreagent-config`](https://github.com/junghan0611/coreagent-config) | Server-side authentication, registration, ownership and authorization, connection lifecycle, and reproducible server packaging |
+| **`homeagent-config`** | Hub BSP/vendor base, radio and protocol services, and packaging our connection client and services across boot, network/time readiness, provisioning, update and recovery; not a separate authority for server accounts or ownership |
+| [`edgeagent-config`](https://github.com/junghan0611/edgeagent-config) | Small-node state, self-description and message contracts, governed by that repository's own documents |
+
+```text
+Edge ── Hub ── Core server
+  └─────────── Core server (direct connection remains an option)
+```
+
+This is a possible topology, not a mandated routing design. **A NodeCard is self-description, not proof of identity.** An authenticated Hub does not by itself prove the independent identity of every Edge behind it. The server's promised identity scope, initial credential issuer, registration/claim authority, ownership transfer and revocation scope remain decisions to make together. Transport, broker and certificate tooling are not selected yet.
+
+**First joint verification proposal — not implemented:** use one host-side fake Hub to observe authentication → registration/authorization → message exchange → disconnect/reconnect → credential revocation, including rejection of continued use of the revoked session and subsequent reconnects. Unregistered principals and principals without permission to the target must also be denied access. Define the credential and authorization rules before running it. This proves only the Hub–server boundary, not downstream Edge authentication.
+
+The Home/Core coordinators aligned this documentation boundary on 2026-10-21; it does not constitute Edge maintainer approval, a completed implementation, or permission to modify a board. The hub-side resume point is [#8](https://github.com/junghan0611/homeagent-config/issues/8) and `NEXT.md`. ROS integration remains an independent verification axis in [#12](https://github.com/junghan0611/homeagent-config/issues/12).
+
+---
+
 ## Current Target
 
 | Axis | Direction |

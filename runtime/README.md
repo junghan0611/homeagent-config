@@ -235,8 +235,9 @@ is itself portfolio content: "here is what a shipped product changed over the de
 
 Reference clones (local, not vendored into this repo). **Two roots since 2026-09-14**:
 `~/repos/3rd/milkv/` for Milk-V/Buildroot, `~/repos/3rd/smlight-smhub/` for the SMHub/SLZB vendor
-side (this is where the whole `smlight-smhub` org clone lives — `framework-sg2000-rtos`,
-`platform-sg2000`, `rtos-config`, `smhub-addons`, `smhub-rtos-dev`, `open-amp`, `libmetal`, `nanopb`).
+side (this is where the whole `smlight-smhub` org clone lives — all 12 public repos as of 2026-10-21:
+`esphome`, `framework-sg2000-rtos`, `platform-sg2000`, `rtos-config`, `smhub-addons`, `smhub-rtos-dev`,
+`open-amp`, `libmetal`, `nanopb`, `FreeRTOS-Kernel`, `device-builder`, `device-builder-frontend`).
 
 | Repo | Role |
 |------|------|

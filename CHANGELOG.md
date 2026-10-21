@@ -4,6 +4,41 @@
 
 - Nothing yet.
 
+## v2026.10.21 — Reproducible packaging, two execution lanes
+
+### Identity and north star
+
+- **Made SMHub product packaging an independent lane**, not merely a reference for the
+  Duo S image. The shared principle is reproducible packaging, with two executions:
+  own the image where we build it, and package the product on the vendor base on SMHub.
+- **Preserved the Yocto and Buildroot work.** RPi5/Yocto remains the origin lane; Duo S
+  keeps the own-image Buildroot path. SMHub uses the vendor OS, RTOS and radio firmware,
+  and opkg feed because the vendor Buildroot tree is not public.
+- **Defined what we own above the SMHub base:** service combinations, configuration,
+  deployment, observation, backup and recovery, and update verification. Vendor distribution
+  is not itself evidence of validation. Image repacking remains an open decision.
+- Aligned `AGENTS.md`, `README.md`, `ROADMAP.md` and `docs/SMHUB.md` around that boundary.
+  `NEXT.md` was reduced to a handoff and now places the dependency dossier under SMHub
+  product packaging. The 43-hour ASH window remains September evidence, not a current
+  board-health claim.
+
+### Operating documentation since v2026.9.16
+
+- **Recorded the middle-server metering direction:** Telegraf, InfluxDB3 and Grafana belong
+  on the middle server, not the Nano. The hub's Z2M/MQTT role stayed unchanged. Updated
+  the runbook's consumer-dependent discovery checks; this was documentation, not a deployment.
+- **Completed the Web UI credential procedure:** persist credentials outside `/tmp`,
+  keep values in gitignored `.env.smhub`, and document SQLite quoting and post-reboot
+  backend/socket startup traps.
+
+### Scope and resume coordinate
+
+- This is a documentation and identity checkpoint, not a firmware or package upgrade.
+  No board operation was performed for this cut.
+- Resume at **RAIL 5: read vendor ipk declarations without touching the board**. Runtime,
+  load grading and radio firmware work remain paused. Skill maintenance, clone-list
+  updates and the MG24 package correction prepared locally are not included in this tag.
+
 ## v2026.9.16 — SMHUB Nano: a vendor board worked as a system application, and the coprocessor under it
 
 The headline: a shipping SMHUB Nano (SG2000, riscv64, 1 core, 488MB, onboard EFR32MG24) was
